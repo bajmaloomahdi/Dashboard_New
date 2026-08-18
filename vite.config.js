@@ -20,9 +20,17 @@ export default defineConfig({
             port: 5173,
         },
         watch: {
-            usePolling: true,   // ← تشخیص تغییرات فایل در داکر روی ویندوز
-            interval: 300,      // هر ۳۰۰ میلی‌ثانیه چک می‌کند
-            ignored: ['**/vendor/**', '**/storage/**', '**/node_modules/**'],
+            usePolling: true,
+            interval: 1000,
+            binaryInterval: 3000,
+            ignored: [
+                '**/vendor/**',
+                '**/storage/**',
+                '**/node_modules/**',
+                '**/.git/**',
+                '**/public/build/**',
+                '**/bootstrap/cache/**',
+            ],
         },
     },
 });

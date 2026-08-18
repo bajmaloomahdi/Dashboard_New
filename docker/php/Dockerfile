@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
         bcmath \
         gd \
         zip \
+        opcache \
     && rm -rf /var/lib/apt/lists/*
 
 # Microsoft ODBC Driver 18 for SQL Server
@@ -34,6 +35,28 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc \
 # PHP SQL Server extensions
 RUN pecl install sqlsrv pdo_sqlsrv \
     && docker-php-ext-enable sqlsrv pdo_sqlsrv
+
+# PHP Upload Settings
+RUN { \
+        echo 'upload_max_filesize = 50M'; \
+        echo 'post_max_size = 100M'; \
+        echo 'memory_limit = 256M'; \
+        echo 'max_execution_time = 300'; \
+        echo 'max_input_time = 300'; \
+        echo 'max_file_uploads = 20'; \
+    } > /usr/local/etc/php/conf.d/uploads.ini
+
+# OPcache
+RUN { \
+        echo 'opcache.enable=1'; \
+        echo 'opcache.enable_cli=0'; \
+        echo 'opcache.memory_consumption=192'; \
+        echo 'opcache.interned_strings_buffer=16'; \
+        echo 'opcache.max_accelerated_files=20000'; \
+        echo 'opcache.validate_timestamps=1'; \
+        echo 'opcache.revalidate_freq=2'; \
+        echo 'opcache.fast_shutdown=1'; \
+    } > /usr/local/etc/php/conf.d/opcache.ini
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -51,10 +74,11 @@ WORKDIR /var/www/html
 COPY . .
 
 # Composer dependencies
+# --no-dev intentionally removed because this is a development environment
+# and laravel/pail is required.
 RUN composer install \
     --no-interaction \
     --prefer-dist \
-    --no-dev \
     --optimize-autoloader
 
 # Node dependencies

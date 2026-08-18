@@ -24,6 +24,7 @@ import {
     CopyOutlined,
     UploadOutlined,
     PaperClipOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -35,6 +36,14 @@ const { Title, Text } = Typography;
 interface MessageType {
     MessageTypeID: number;
     MessageTypeName: string;
+}
+
+interface MsgPriority {
+    msgPriorityID: number;
+    Code: number;
+    Name: string;
+    Description: string | null;
+    SortOrder: number;
 }
 
 interface TargetUser {
@@ -53,8 +62,18 @@ interface TaskUnit {
     ManagerName: string | null;
 }
 
+/** رنگ تگ اولویت بر اساس ترتیب نمایش (هرچه بالاتر، پررنگ‌تر) */
+const priorityColor = (sortOrder: number, total: number): string => {
+    if (total <= 1) return 'blue';
+    const ratio = (sortOrder - 1) / (total - 1);
+    if (ratio >= 0.75) return 'red';
+    if (ratio >= 0.5) return 'orange';
+    if (ratio >= 0.25) return 'gold';
+    return 'green';
+};
+
 export default function MessageCreate() {
-    const { messageTypes, targets, taskUnits, flash } = usePage().props as any;
+    const { messageTypes, priorities, targets, taskUnits, flash } = usePage().props as any;
 
     const [form] = Form.useForm();
     const [fileList, setFileList] = useState<any[]>([]);
@@ -67,6 +86,7 @@ export default function MessageCreate() {
 
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         MessageTypeID: null as number | null,
+        msgPriorityID: null as number | null,
         Subject: '',
         MessageText: '',
         RecipientType: 1,
@@ -93,6 +113,21 @@ export default function MessageCreate() {
         (t: MessageType) => t.MessageTypeID === data.MessageTypeID
     );
     const isTask = selectedType?.MessageTypeName === 'وظیفه';
+
+    /* ---------------- اولویت‌ها ---------------- */
+    const priorityList: MsgPriority[] = priorities || [];
+    const maxSortOrder = Math.max(1, ...priorityList.map((p) => p.SortOrder));
+
+    const priorityOptions = priorityList.map((p: MsgPriority) => ({
+        value: p.msgPriorityID,
+        label: p.Name,
+        title: p.Description || p.Name,
+        __sortOrder: p.SortOrder,
+    }));
+
+    const selectedPriority = priorityList.find(
+        (p: MsgPriority) => p.msgPriorityID === data.msgPriorityID
+    );
 
     const userOptions = (targets || []).map((t: TargetUser) => ({
         value: t.UserID,
@@ -150,6 +185,7 @@ export default function MessageCreate() {
                 onSuccess: () => {
                     setFileList([]);
                     reset();
+                    form.resetFields();
                 },
             });
         });
@@ -183,11 +219,13 @@ export default function MessageCreate() {
             <Card style={STYLES.card}>
                 <Form form={form} layout="vertical" requiredMark>
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={8}>
                             <Form.Item
                                 label="نوع پیام"
                                 name="MessageTypeID"
                                 rules={[{ required: true, message: 'انتخاب نوع پیام الزامی است' }]}
+                                validateStatus={errors.MessageTypeID ? 'error' : ''}
+                                help={errors.MessageTypeID}
                             >
                                 <Select
                                     size="large"
@@ -202,8 +240,54 @@ export default function MessageCreate() {
                             </Form.Item>
                         </Col>
 
+                        {/* ---------- اولویت پیام ---------- */}
+                        <Col xs={24} md={8}>
+                            <Form.Item
+                                label={
+                                    <Space size={6}>
+                                        <ThunderboltOutlined style={{ color: THEME.primary }} />
+                                        <span>اولویت پیام</span>
+                                    </Space>
+                                }
+                                name="msgPriorityID"
+                                rules={[{ required: true, message: 'انتخاب اولویت الزامی است' }]}
+                                validateStatus={errors.msgPriorityID ? 'error' : ''}
+                                help={errors.msgPriorityID}
+                                extra={
+                                    selectedPriority?.Description ? (
+                                        <Text type="secondary" style={{ fontSize: 11 }}>
+                                            {selectedPriority.Description}
+                                        </Text>
+                                    ) : null
+                                }
+                            >
+                                <Select
+                                    size="large"
+                                    placeholder="انتخاب اولویت"
+                                    value={data.msgPriorityID ?? undefined}
+                                    onChange={(value: number) => setData('msgPriorityID', value)}
+                                    options={priorityOptions}
+                                    optionFilterProp="label"
+                                    showSearch
+                                    optionRender={(option) => (
+                                        <Space>
+                                            <Tag
+                                                color={priorityColor(
+                                                    (option.data as any).__sortOrder,
+                                                    maxSortOrder
+                                                )}
+                                                style={{ borderRadius: 6, marginInlineEnd: 0 }}
+                                            >
+                                                {option.label}
+                                            </Tag>
+                                        </Space>
+                                    )}
+                                />
+                            </Form.Item>
+                        </Col>
+
                         {isTask ? (
-                            <Col span={12}>
+                            <Col xs={24} md={8}>
                                 <Form.Item
                                     label="واحد (مدیر آن به‌صورت خودکار انتخاب می‌شود)"
                                     name="TaskUnitID"
@@ -226,7 +310,7 @@ export default function MessageCreate() {
                                 ) : null}
                             </Col>
                         ) : (
-                            <Col span={12}>
+                            <Col xs={24} md={8}>
                                 <Form.Item label="گیرنده‌ها" required>
                                     <Radio.Group
                                         value={data.RecipientType}

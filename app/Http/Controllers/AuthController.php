@@ -18,7 +18,13 @@ class AuthController extends Controller
         if (Auth::check()) {
             return redirect()->route('dashboard');
         }
-        return Inertia::render('Auth/Login');
+
+        $company = DB::select('EXEC sp_GetCompany');
+        $company = $company[0] ?? null;
+
+        return Inertia::render('Auth/Login', [
+            'company' => $company ? (array) $company : null,
+        ]);
     }
 
     /**

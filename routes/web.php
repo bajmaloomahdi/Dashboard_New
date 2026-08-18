@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-
+use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\MsgPriorityController;
 
 /*
 |--------------------------------------------------------------------------
@@ -145,6 +146,19 @@ Route::middleware('auth')->group(function () {
     Route::post('messages/{id}/copy', [MessageController::class, 'addCopy'])->name('messages.copy');
 
 
+    // اولویت‌های پیام
+    Route::get('msg-priorities', [MsgPriorityController::class, 'index'])->name('msg-priorities.index');
+    Route::post('msg-priorities', [MsgPriorityController::class, 'store'])->name('msg-priorities.store');
+    Route::put('msg-priorities/{id}', [MsgPriorityController::class, 'update'])->name('msg-priorities.update');
+    Route::post('msg-priorities/{id}/toggle', [MsgPriorityController::class, 'toggleActive'])->name('msg-priorities.toggle');
+
+
+    // تنظیمات شرکت
+    Route::get('company', [CompanyController::class, 'index'])->name('company.index');
+    Route::post('company', [CompanyController::class, 'store'])->name('company.store');
+
+
+
 
     // پروفایل
     Route::get('/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password');
@@ -152,7 +166,11 @@ Route::middleware('auth')->group(function () {
 
     // خروج
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    
 });
+
+    Route::get('company/logo', [CompanyController::class, 'logo'])->name('company.logo');
+    Route::get('company/favicon', [CompanyController::class, 'favicon'])->name('company.favicon');
 
 // مسیر اصلی → لاگین
 Route::get('/', function () {

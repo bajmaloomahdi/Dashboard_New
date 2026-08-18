@@ -55,10 +55,21 @@ class HandleInertiaRequests extends Middleware
                     return 0;
                 }
                 $result = DB::select('EXEC sp_GetUnreadNotificationsCount @UserID = ?', [auth()->id()]);
-                return (int) ($result[0]->UnreadCount ?? 0);
+                return (int) ($result[0]->UnreadCount ?? 0);    
+            },
+
+                        'company' => function () {
+                if (!auth()->check()) {
+                    return null;
+                }
+                $company = DB::select('EXEC sp_GetCompany');
+                return $company[0] ?? null;
             },
         ];
     }
+     
+    
+
 
     /**
      * دریافت منوهای کاربر با استفاده از Stored Procedure

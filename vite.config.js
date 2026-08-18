@@ -10,4 +10,19 @@ export default defineConfig({
         }),
         react(),
     ],
+
+    server: {
+        host: '0.0.0.0',
+        port: 5173,
+        strictPort: true,
+        hmr: {
+            host: 'localhost',
+            port: 5173,
+        },
+        watch: {
+            usePolling: true,   // ← تشخیص تغییرات فایل در داکر روی ویندوز
+            interval: 300,      // هر ۳۰۰ میلی‌ثانیه چک می‌کند
+            ignored: ['**/vendor/**', '**/storage/**', '**/node_modules/**'],
+        },
+    },
 });

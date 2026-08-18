@@ -31,6 +31,7 @@ import {
     CommentOutlined,
     UserAddOutlined,
     PictureOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -55,6 +56,10 @@ interface MessageHeader {
     Subject: string;
     MessageText: string | null;
     MessageTypeName: string;
+    msgPriorityID: number | null;
+    PriorityName: string | null;
+    PrioritySortOrder: number | null;
+    PriorityDescription?: string | null;
     SenderName: string;
     CreateDate: string;
 }
@@ -70,6 +75,7 @@ interface MessageDetail {
 
 interface CopyItem {
     MessageCopyID: number;
+    UserID: number;
     FullName: string;
     CreateDate: string;
     CreateUserName: string | null;
@@ -106,8 +112,27 @@ interface UserItem {
     IsManager: boolean | number;
 }
 
+interface PriorityItem {
+    msgPriorityID: number;
+    Name: string;
+    SortOrder: number;
+}
+
 export default function MessageShow() {
-    const { message, details, copies, attachments, statuses, users, comments, isLastRecipient, isTask, canComment, flash } = usePage().props as any;
+    const {
+        message,
+        details,
+        copies,
+        attachments,
+        statuses,
+        users,
+        comments,
+        priorities,
+        isLastRecipient,
+        isTask,
+        canComment,
+        flash,
+    } = usePage().props as any;
 
     const msg: MessageHeader = message;
     const detailList: MessageDetail[] = details || [];
@@ -116,6 +141,7 @@ export default function MessageShow() {
     const statusList: StatusItem[] = statuses || [];
     const userList: UserItem[] = users || [];
     const commentList: CommentItem[] = comments || [];
+    const priorityList: PriorityItem[] = priorities || [];
 
     // فیلتر ضمیمه‌های عکس
     const imageAttachments = attachmentList.filter((a: Attachment) => {
@@ -277,6 +303,18 @@ export default function MessageShow() {
         }
     };
 
+    /* رنگ اولویت بر اساس ترتیب نمایش */
+    const maxPrioritySort = Math.max(1, ...priorityList.map((p) => p.SortOrder));
+
+    const priorityColor = (sortOrder: number | null): string => {
+        if (!sortOrder || maxPrioritySort <= 1) return 'blue';
+        const ratio = (sortOrder - 1) / (maxPrioritySort - 1);
+        if (ratio >= 0.75) return 'red';
+        if (ratio >= 0.5) return 'orange';
+        if (ratio >= 0.25) return 'gold';
+        return 'green';
+    };
+
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -304,9 +342,20 @@ export default function MessageShow() {
                     </Space>
                 </Col>
                 <Col>
-                    <Tag color={typeColor(msg.MessageTypeName)} style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}>
-                        {msg.MessageTypeName}
-                    </Tag>
+                    <Space>
+                        {msg.PriorityName ? (
+                            <Tag
+                                icon={<ThunderboltOutlined />}
+                                color={priorityColor(msg.PrioritySortOrder)}
+                                style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}
+                            >
+                                {msg.PriorityName}
+                            </Tag>
+                        ) : null}
+                        <Tag color={typeColor(msg.MessageTypeName)} style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}>
+                            {msg.MessageTypeName}
+                        </Tag>
+                    </Space>
                 </Col>
             </Row>
 
@@ -341,6 +390,11 @@ export default function MessageShow() {
                             <Text style={{ color: 'rgba(255,255,255,0.95)' }}>
                                 <ClockCircleOutlined /> {new Date(msg.CreateDate).toLocaleString('fa-IR')}
                             </Text>
+                            {msg.PriorityName ? (
+                                <Text style={{ color: 'rgba(255,255,255,0.95)' }}>
+                                    <ThunderboltOutlined /> اولویت: {msg.PriorityName}
+                                </Text>
+                            ) : null}
                         </Space>
                     </Col>
                 </Row>

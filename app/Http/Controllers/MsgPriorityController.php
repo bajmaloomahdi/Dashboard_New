@@ -7,23 +7,23 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
-class MessageStatusController extends Controller
+class MsgPriorityController extends Controller
 {
     public function index(Request $request)
     {
         $searchText = $request->input('search');
         $isActive = $request->input('is_active');
 
-        $messageStatuses = DB::select(
-            'EXEC sp_GetMessageStatuses @SearchText = ?, @IsActive = ?',
+        $priorities = DB::select(
+            'EXEC sp_GetMsgPriorities @SearchText = ?, @IsActive = ?',
             [
                 $searchText ?: null,
                 $isActive !== null && $isActive !== '' ? (int) $isActive : null,
             ]
         );
 
-        return Inertia::render('MessageStatuses/Index', [
-            'messageStatuses' => $messageStatuses,
+        return Inertia::render('MsgPriorities/Index', [
+            'priorities' => $priorities,
             'filters' => [
                 'search' => $searchText,
                 'is_active' => $isActive,
@@ -34,14 +34,14 @@ class MessageStatusController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'MessageStatusName' => 'required|string|max:100',
+            'Name' => 'required|string|max:100',
             'Description' => 'nullable|string|max:500',
         ]);
 
         $result = DB::select(
-            'EXEC sp_InsertMessageStatus @MessageStatusName = ?, @Description = ?, @CreateUser = ?',
+            'EXEC sp_InsertMsgPriority @Name = ?, @Description = ?, @CreateUser = ?',
             [
-                $validated['MessageStatusName'],
+                $validated['Name'],
                 $validated['Description'] ?? null,
                 Auth::id(),
             ]
@@ -51,28 +51,30 @@ class MessageStatusController extends Controller
 
         if (empty($response['Success'])) {
             return back()->withErrors([
-                'MessageStatusName' => $response['Message'] ?? 'خطا در ایجاد وضعیت',
+                'Name' => $response['Message'] ?? 'خطا در ایجاد اولویت',
             ]);
         }
 
-        return redirect()->route('message-statuses.index')
+        return redirect()->route('msg-priorities.index')
             ->with('success', $response['Message']);
     }
 
     public function update(Request $request, int $id)
     {
         $validated = $request->validate([
-            'MessageStatusName' => 'required|string|max:100',
+            'Name' => 'required|string|max:100',
             'Description' => 'nullable|string|max:500',
+            'SortOrder' => 'required|integer',
         ]);
 
         $result = DB::select(
-            'EXEC sp_UpdateMessageStatus
-                @MessageStatusID = ?, @MessageStatusName = ?, @Description = ?, @ModifyUser = ?',
+            'EXEC sp_UpdateMsgPriority
+                @PriorityID = ?, @Name = ?, @Description = ?, @SortOrder = ?, @ModifyUser = ?',
             [
                 $id,
-                $validated['MessageStatusName'],
+                $validated['Name'],
                 $validated['Description'] ?? null,
+                $validated['SortOrder'],
                 Auth::id(),
             ]
         );
@@ -81,18 +83,18 @@ class MessageStatusController extends Controller
 
         if (empty($response['Success'])) {
             return back()->withErrors([
-                'MessageStatusName' => $response['Message'] ?? 'خطا در ویرایش وضعیت',
+                'Name' => $response['Message'] ?? 'خطا در ویرایش اولویت',
             ]);
         }
 
-        return redirect()->route('message-statuses.index')
+        return redirect()->route('msg-priorities.index')
             ->with('success', $response['Message']);
     }
 
     public function toggleActive(int $id)
     {
         $result = DB::select(
-            'EXEC sp_ToggleMessageStatusActive @MessageStatusID = ?, @ModifyUser = ?',
+            'EXEC sp_ToggleMsgPriorityActive @PriorityID = ?, @ModifyUser = ?',
             [$id, Auth::id()]
         );
 
@@ -102,7 +104,7 @@ class MessageStatusController extends Controller
             return back()->with('error', $response['Message'] ?? 'خطا در تغییر وضعیت');
         }
 
-        return redirect()->route('message-statuses.index')
+        return redirect()->route('msg-priorities.index')
             ->with('success', $response['Message']);
     }
 }

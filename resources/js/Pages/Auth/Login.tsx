@@ -7,6 +7,13 @@ const { Title, Text } = Typography;
 
 interface PageProps {
     errors: Record<string, string>;
+    company?: {
+        Code?: string;
+        Name?: string;
+        Description?: string | null;
+        LogoMimeType?: string | null;
+        FaviconMimeType?: string | null;
+    } | null;
     [key: string]: any;
 }
 
@@ -25,7 +32,7 @@ const isValidInput = (text: string): boolean => {
 };
 
 export default function Login() {
-    const { errors } = usePage<PageProps>().props;
+    const { errors, company } = usePage<PageProps>().props;
     const { data, setData, post, processing, reset, clearErrors } = useForm({
         UserName: '',
         Password: '',
@@ -324,7 +331,7 @@ export default function Login() {
                     </div>
                 </div>
 
-                {/* ستون راست - برندینگ */}
+                {/* ستون راست - برندینگ با لوگوی شرکت */}
                 <div style={{
                     flex: 1,
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -354,14 +361,44 @@ export default function Login() {
                         borderRadius: '50%',
                     }} />
                     <div style={{ textAlign: 'center', color: '#fff', zIndex: 1, maxWidth: 400 }}>
-                        <div style={{ fontSize: 80, marginBottom: 20 }}>🎯</div>
-                        <Title level={1} style={{ color: '#fff', marginBottom: 16 }}>
-                            داشبورد مدیریت
+                        {/* لوگوی شرکت */}
+                        {company?.LogoMimeType ? (
+                            <img
+                                src={`/company/logo?t=${Date.now()}`}
+                                alt="لوگوی شرکت"
+                                style={{
+                                    width: 120,
+                                    height: 120,
+                                    objectFit: 'contain',
+                                    marginBottom: 20,
+                                    background: 'rgba(255,255,255,0.9)',
+                                    borderRadius: 24,
+                                    padding: 8,
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                                }}
+                            />
+                        ) : (
+                            <div style={{ fontSize: 80, marginBottom: 20 }}>🏢</div>
+                        )}
+
+                        {/* نام شرکت */}
+                        <Title
+                            level={1}
+                            style={{
+                                color: '#fff',
+                                marginBottom: 16,
+                                wordBreak: 'break-word',      // اسم بلند بشکنه و بیاد پایین
+                                lineHeight: 1.4,              // فاصله خطوط بیشتر
+                                fontSize: 'clamp(28px, 4vw, 44px)',  // سایز واکنشگرا
+                                maxWidth: '100%',
+                            }}
+                        >
+                            {company?.Name || 'داشبورد مدیریت'}
                         </Title>
+
+                        {/* توضیحات شرکت */}
                         <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, lineHeight: 1.8 }}>
-                            سیستم یکپارچه مدیریت کسب‌وکار شما
-                            <br />
-                            ساده، سریع و امن
+                            {company?.Description || 'سیستم یکپارچه مدیریت کسب‌وکار شما'}
                         </Text>
                     </div>
                 </div>

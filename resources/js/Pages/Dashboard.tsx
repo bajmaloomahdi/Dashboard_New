@@ -114,7 +114,7 @@ const recentActivities = [
 // کامپوننت اصلی
 // ============================================
 export default function Dashboard() {
-    const { auth } = usePage().props as any;
+    const { auth, company } = usePage().props as any;
 
     return (
         <MainLayout>
@@ -153,7 +153,24 @@ export default function Dashboard() {
                         </Space>
                     </Col>
                     <Col>
-                        <div style={{ fontSize: 60 }}>📊</div>
+                        {/* لوگوی شرکت به‌جای ایکون نمودار */}
+                        {company?.LogoMimeType ? (
+                            <img
+                                src={`/company/logo?t=${Date.now()}`}
+                                alt="لوگوی شرکت"
+                                style={{
+                                    width: 80,
+                                    height: 80,
+                                    objectFit: 'contain',
+                                    background: 'rgba(255,255,255,0.9)',
+                                    borderRadius: 16,
+                                    padding: 6,
+                                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                                }}
+                            />
+                        ) : (
+                            <div style={{ fontSize: 60 }}>📊</div>
+                        )}
                     </Col>
                 </Row>
             </Card>
@@ -354,7 +371,6 @@ export default function Dashboard() {
                                 padding: '12px 0',
                                 borderBottom: index < topVisitors.length - 1 ? '1px solid #F3F4F6' : 'none',
                             }}>
-                                {/* رتبه */}
                                 <div style={{
                                     width: 32,
                                     height: 32,
@@ -369,13 +385,9 @@ export default function Dashboard() {
                                 }}>
                                     {index + 1}
                                 </div>
-
-                                {/* آواتار */}
                                 <Avatar style={{ background: THEME.primaryGradient }}>
                                     {visitor.avatar}
                                 </Avatar>
-
-                                {/* نام */}
                                 <div style={{ flex: 1 }}>
                                     <Text strong>{visitor.name}</Text>
                                     <div>
@@ -384,8 +396,6 @@ export default function Dashboard() {
                                         </Text>
                                     </div>
                                 </div>
-
-                                {/* مبلغ */}
                                 <div style={{ textAlign: 'left' }}>
                                     <Text strong style={{ color: THEME.success, fontFamily: 'monospace' }}>
                                         {columnHelpers.formatNumber(visitor.sales)}

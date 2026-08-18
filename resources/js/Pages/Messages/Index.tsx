@@ -21,6 +21,7 @@ import {
     CopyOutlined,
     LoadingOutlined,
     EyeOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -38,6 +39,9 @@ interface Message {
     MessageText: string | null;
     MessageTypeID: number;
     MessageTypeName: string;
+    msgPriorityID: number | null;
+    PriorityName: string | null;
+    PrioritySortOrder: number | null;
     SenderUserID: number;
     SenderName: string;
     CreateDate: string;
@@ -56,13 +60,20 @@ interface StatusItem {
     MessageStatusName: string;
 }
 
+interface PriorityItem {
+    msgPriorityID: number;
+    Name: string;
+    SortOrder: number;
+}
+
 export default function MessagesIndex() {
-    const { messages, mode, messageTypes, messageStatuses, filters, flash } = usePage().props as any;
+    const { messages, mode, messageTypes, messageStatuses, priorities, filters, flash } = usePage().props as any;
 
     const [activeMode, setActiveMode] = useState<string>(mode === 'sent' ? 'sent' : 'inbox');
     const [searchText, setSearchText] = useState(filters?.search || '');
     const [typeFilter, setTypeFilter] = useState<string | null>(filters?.message_type_id || null);
     const [statusFilter, setStatusFilter] = useState<string | null>(filters?.message_status_id || null);
+    const [priorityFilter, setPriorityFilter] = useState<string | null>(filters?.msg_priority_id || null);
     const [searching, setSearching] = useState(false);
 
     const [notification, setNotification] = useState<{
@@ -106,6 +117,7 @@ export default function MessagesIndex() {
                 search: searchText || undefined,
                 message_type_id: typeFilter !== null && typeFilter !== '' ? typeFilter : undefined,
                 message_status_id: statusFilter !== null && statusFilter !== '' ? statusFilter : undefined,
+                msg_priority_id: priorityFilter !== null && priorityFilter !== '' ? priorityFilter : undefined,
             }, {
                 preserveState: true,
                 preserveScroll: true,
@@ -118,7 +130,7 @@ export default function MessagesIndex() {
                 clearTimeout(searchTimeoutRef.current);
             }
         };
-    }, [searchText, typeFilter, statusFilter]);
+    }, [searchText, typeFilter, statusFilter, priorityFilter]);
 
     const showNotification = (type: NotificationType, message: string) => {
         setNotification({ open: true, type, message });
@@ -132,6 +144,7 @@ export default function MessagesIndex() {
         setSearchText('');
         setTypeFilter(null);
         setStatusFilter(null);
+        setPriorityFilter(null);
     };
 
     const typeColor = (typeName: string) =>
@@ -147,6 +160,21 @@ export default function MessagesIndex() {
             case 'انجام نخواهد شد': return 'error';
             default: return 'default';
         }
+    };
+
+    /* رنگ اولویت بر اساس ترتیب نمایش — هرچه بالاتر، پررنگ‌تر */
+    const maxPrioritySort = Math.max(
+        1,
+        ...(priorities || []).map((p: PriorityItem) => p.SortOrder)
+    );
+
+    const priorityColor = (sortOrder: number | null): string => {
+        if (!sortOrder || maxPrioritySort <= 1) return 'blue';
+        const ratio = (sortOrder - 1) / (maxPrioritySort - 1);
+        if (ratio >= 0.75) return 'red';
+        if (ratio >= 0.5) return 'orange';
+        if (ratio >= 0.25) return 'gold';
+        return 'green';
     };
 
     const customColumns: ColumnsType<Message> = [
@@ -170,6 +198,27 @@ export default function MessagesIndex() {
                     {name}
                 </Tag>
             ),
+        },
+        {
+            title: 'اولویت',
+            dataIndex: 'PriorityName',
+            key: 'PriorityName',
+            width: 110,
+            align: 'center',
+            sorter: (a: Message, b: Message) =>
+                (b.PrioritySortOrder || 0) - (a.PrioritySortOrder || 0),
+            render: (name: string | null, record: Message) =>
+                name ? (
+                    <Tag
+                        icon={<ThunderboltOutlined />}
+                        color={priorityColor(record.PrioritySortOrder)}
+                        style={{ borderRadius: 6 }}
+                    >
+                        {name}
+                    </Tag>
+                ) : (
+                    <Text type="secondary">—</Text>
+                ),
         },
         {
             title: 'موضوع',
@@ -304,7 +353,7 @@ export default function MessagesIndex() {
                 />
 
                 <Row gutter={[16, 16]} align="middle" style={{ marginTop: 8 }}>
-                    <Col xs={24} sm={12} md={8}>
+                    <Col xs={24} sm={12} md={7}>
                         <Input
                             placeholder="جستجو در موضوع یا شماره..."
                             prefix={
@@ -318,7 +367,7 @@ export default function MessagesIndex() {
                             size="large"
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={6}>
+                    <Col xs={24} sm={12} md={5}>
                         <Select
                             placeholder="نوع پیام"
                             style={{ width: '100%' }}
@@ -332,7 +381,21 @@ export default function MessagesIndex() {
                             }))}
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={6}>
+                    <Col xs={24} sm={12} md={4}>
+                        <Select
+                            placeholder="اولویت"
+                            style={{ width: '100%' }}
+                            size="large"
+                            value={priorityFilter}
+                            onChange={(value) => setPriorityFilter(value)}
+                            allowClear
+                            options={(priorities || []).map((p: PriorityItem) => ({
+                                value: String(p.msgPriorityID),
+                                label: p.Name,
+                            }))}
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={5}>
                         <Select
                             placeholder="وضعیت"
                             style={{ width: '100%' }}
@@ -346,7 +409,7 @@ export default function MessagesIndex() {
                             }))}
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={4}>
+                    <Col xs={24} sm={12} md={3}>
                         <Button icon={<ReloadOutlined />} onClick={handleReset} size="large" block>
                             بازنشانی
                         </Button>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Card,
     Button,
@@ -27,6 +27,7 @@ import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
+import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -162,20 +163,11 @@ export default function MessagesIndex() {
         }
     };
 
-    /* رنگ اولویت بر اساس ترتیب نمایش — هرچه بالاتر، پررنگ‌تر */
-    const maxPrioritySort = Math.max(
-        1,
-        ...(priorities || []).map((p: PriorityItem) => p.SortOrder)
+    /** بیشترین ترتیب نمایش اولویت — برای محاسبه رنگ نسبی */
+    const maxPrioritySort = useMemo(
+        () => Math.max(1, ...(priorities || []).map((p: PriorityItem) => p.SortOrder || 0)),
+        [priorities]
     );
-
-    const priorityColor = (sortOrder: number | null): string => {
-        if (!sortOrder || maxPrioritySort <= 1) return 'blue';
-        const ratio = (sortOrder - 1) / (maxPrioritySort - 1);
-        if (ratio >= 0.75) return 'red';
-        if (ratio >= 0.5) return 'orange';
-        if (ratio >= 0.25) return 'gold';
-        return 'green';
-    };
 
     const customColumns: ColumnsType<Message> = [
         {
@@ -207,18 +199,13 @@ export default function MessagesIndex() {
             align: 'center',
             sorter: (a: Message, b: Message) =>
                 (b.PrioritySortOrder || 0) - (a.PrioritySortOrder || 0),
-            render: (name: string | null, record: Message) =>
-                name ? (
-                    <Tag
-                        icon={<ThunderboltOutlined />}
-                        color={priorityColor(record.PrioritySortOrder)}
-                        style={{ borderRadius: 6 }}
-                    >
-                        {name}
-                    </Tag>
-                ) : (
-                    <Text type="secondary">—</Text>
-                ),
+            render: (name: string | null, record: Message) => (
+                <PriorityTag
+                    name={name}
+                    sortOrder={record.PrioritySortOrder}
+                    maxSortOrder={maxPrioritySort}
+                />
+            ),
         },
         {
             title: 'موضوع',
@@ -232,7 +219,14 @@ export default function MessagesIndex() {
                     minWidth: 250,
                     justifyContent: 'flex-start',
                 }}>
-                    <div style={STYLES.iconBox}>
+                    <div
+                        style={{
+                            ...STYLES.iconBox,
+                            background: record.PriorityName
+                                ? getPriorityPalette(record.PrioritySortOrder, maxPrioritySort).gradient
+                                : STYLES.iconBox.background,
+                        }}
+                    >
                         <MessageOutlined style={{ color: '#fff', fontSize: 16 }} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
@@ -389,10 +383,18 @@ export default function MessagesIndex() {
                             value={priorityFilter}
                             onChange={(value) => setPriorityFilter(value)}
                             allowClear
-                            options={(priorities || []).map((p: PriorityItem) => ({
-                                value: String(p.msgPriorityID),
-                                label: p.Name,
-                            }))}
+                            options={(priorities || []).map((p: PriorityItem) => {
+                                const palette = getPriorityPalette(p.SortOrder, maxPrioritySort);
+                                return {
+                                    value: String(p.msgPriorityID),
+                                    label: (
+                                        <Space size={6}>
+                                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: palette.gradient, display: 'inline-block' }} />
+                                            <span style={{ color: palette.color, fontWeight: 600 }}>{p.Name}</span>
+                                        </Space>
+                                    ),
+                                };
+                            })}
                         />
                     </Col>
                     <Col xs={24} sm={12} md={5}>

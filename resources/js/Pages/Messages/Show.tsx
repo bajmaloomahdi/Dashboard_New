@@ -36,6 +36,7 @@ import {
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
+import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -303,17 +304,8 @@ export default function MessageShow() {
         }
     };
 
-    /* رنگ اولویت بر اساس ترتیب نمایش */
-    const maxPrioritySort = Math.max(1, ...priorityList.map((p) => p.SortOrder));
-
-    const priorityColor = (sortOrder: number | null): string => {
-        if (!sortOrder || maxPrioritySort <= 1) return 'blue';
-        const ratio = (sortOrder - 1) / (maxPrioritySort - 1);
-        if (ratio >= 0.75) return 'red';
-        if (ratio >= 0.5) return 'orange';
-        if (ratio >= 0.25) return 'gold';
-        return 'green';
-    };
+    /** بیشترین ترتیب نمایش اولویت */
+    const maxPrioritySort = Math.max(1, ...priorityList.map((p) => p.SortOrder || 0));
 
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return bytes + ' B';
@@ -344,13 +336,13 @@ export default function MessageShow() {
                 <Col>
                     <Space>
                         {msg.PriorityName ? (
-                            <Tag
-                                icon={<ThunderboltOutlined />}
-                                color={priorityColor(msg.PrioritySortOrder)}
-                                style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}
-                            >
-                                {msg.PriorityName}
-                            </Tag>
+                            <PriorityTag
+                                name={msg.PriorityName}
+                                sortOrder={msg.PrioritySortOrder}
+                                maxSortOrder={maxPrioritySort}
+                                description={msg.PriorityDescription}
+                                style={{ padding: '4px 16px', fontSize: 14 }}
+                            />
                         ) : null}
                         <Tag color={typeColor(msg.MessageTypeName)} style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}>
                             {msg.MessageTypeName}

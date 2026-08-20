@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Card,
     Button,
@@ -26,6 +26,7 @@ import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
+import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -38,6 +39,9 @@ interface Message {
     MessageText: string | null;
     MessageTypeID: number;
     MessageTypeName: string;
+    msgPriorityID: number | null;
+    PriorityName: string | null;
+    PrioritySortOrder: number | null;
     SenderUserID: number;
     SenderName: string;
     CreateDate: string;
@@ -57,12 +61,20 @@ interface StatusItem {
     MessageStatusName: string;
 }
 
+interface PriorityItem {
+    msgPriorityID: number;
+    Name: string;
+    SortOrder: number;
+    Description?: string | null;
+}
+
 export default function MessageArchive() {
-    const { messages, messageTypes, messageStatuses, filters, flash } = usePage().props as any;
+    const { messages, messageTypes, messageStatuses, priorities, filters, flash } = usePage().props as any;
 
     const [searchText, setSearchText] = useState(filters?.search || '');
     const [typeFilter, setTypeFilter] = useState<string | null>(filters?.message_type_id || null);
     const [statusFilter, setStatusFilter] = useState<string | null>(filters?.message_status_id || null);
+    const [priorityFilter, setPriorityFilter] = useState<string | null>(filters?.msg_priority_id || null);
     const [searching, setSearching] = useState(false);
 
     const [notification, setNotification] = useState<{
@@ -73,6 +85,12 @@ export default function MessageArchive() {
 
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isFirstRender = useRef(true);
+
+    /** بیشترین ترتیب نمایش اولویت — برای محاسبه رنگ نسبی */
+    const maxPrioritySort = useMemo(
+        () => Math.max(1, ...(priorities || []).map((p: PriorityItem) => p.SortOrder || 0)),
+        [priorities]
+    );
 
     useEffect(() => {
         if (flash?.success) showNotification('success', flash.success);
@@ -93,6 +111,7 @@ export default function MessageArchive() {
                 search: searchText || undefined,
                 message_type_id: typeFilter !== null && typeFilter !== '' ? typeFilter : undefined,
                 message_status_id: statusFilter !== null && statusFilter !== '' ? statusFilter : undefined,
+                msg_priority_id: priorityFilter !== null && priorityFilter !== '' ? priorityFilter : undefined,
             }, {
                 preserveState: true,
                 preserveScroll: true,
@@ -105,7 +124,7 @@ export default function MessageArchive() {
                 clearTimeout(searchTimeoutRef.current);
             }
         };
-    }, [searchText, typeFilter, statusFilter]);
+    }, [searchText, typeFilter, statusFilter, priorityFilter]);
 
     const showNotification = (type: NotificationType, message: string) => {
         setNotification({ open: true, type, message });
@@ -119,6 +138,7 @@ export default function MessageArchive() {
         setSearchText('');
         setTypeFilter(null);
         setStatusFilter(null);
+        setPriorityFilter(null);
     };
 
     const typeColor = (typeName: string) =>
@@ -159,11 +179,29 @@ export default function MessageArchive() {
             ),
         },
         {
+            title: 'اولویت',
+            dataIndex: 'PriorityName',
+            key: 'PriorityName',
+            width: 120,
+            align: 'center',
+            sorter: (a: Message, b: Message) =>
+                (b.PrioritySortOrder || 0) - (a.PrioritySortOrder || 0),
+            render: (name: string | null, record: Message) => (
+                <PriorityTag
+                    name={name}
+                    sortOrder={record.PrioritySortOrder}
+                    maxSortOrder={maxPrioritySort}
+                />
+            ),
+        },
+        {
             title: 'موضوع',
             key: 'subject',
             align: 'center',
             render: (_, record: Message) => {
                 const isRead = record.IsRead === 1 || record.IsRead === true;
+                const palette = getPriorityPalette(record.PrioritySortOrder, maxPrioritySort);
+
                 return (
                     <div style={{
                         display: 'inline-flex',
@@ -172,7 +210,16 @@ export default function MessageArchive() {
                         minWidth: 250,
                         justifyContent: 'flex-start',
                     }}>
-                        <div style={STYLES.iconBox}>
+                        {/* آیکون با رنگ اولویت */}
+                        <div
+                            style={{
+                                ...STYLES.iconBox,
+                                background: record.PriorityName ? palette.gradient : STYLES.iconBox.background,
+                                boxShadow: record.PriorityName
+                                    ? `0 2px 8px ${palette.shadow}`
+                                    : STYLES.iconBox.boxShadow,
+                            }}
+                        >
                             <MessageOutlined style={{ color: '#fff', fontSize: 16 }} />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
@@ -285,7 +332,7 @@ export default function MessageArchive() {
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">
-                    <Col xs={24} sm={12} md={8}>
+                    <Col xs={24} sm={12} md={7}>
                         <Input
                             placeholder="جستجو در موضوع یا شماره..."
                             prefix={
@@ -299,7 +346,7 @@ export default function MessageArchive() {
                             size="large"
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={6}>
+                    <Col xs={24} sm={12} md={5}>
                         <Select
                             placeholder="نوع پیام"
                             style={{ width: '100%' }}
@@ -313,7 +360,39 @@ export default function MessageArchive() {
                             }))}
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={6}>
+                    <Col xs={24} sm={12} md={4}>
+                        <Select
+                            placeholder="اولویت"
+                            style={{ width: '100%' }}
+                            size="large"
+                            value={priorityFilter}
+                            onChange={(value) => setPriorityFilter(value)}
+                            allowClear
+                            options={(priorities || []).map((p: PriorityItem) => {
+                                const palette = getPriorityPalette(p.SortOrder, maxPrioritySort);
+                                return {
+                                    value: String(p.msgPriorityID),
+                                    label: (
+                                        <Space size={6}>
+                                            <span
+                                                style={{
+                                                    width: 9,
+                                                    height: 9,
+                                                    borderRadius: '50%',
+                                                    background: palette.gradient,
+                                                    display: 'inline-block',
+                                                }}
+                                            />
+                                            <span style={{ color: palette.color, fontWeight: 600 }}>
+                                                {p.Name}
+                                            </span>
+                                        </Space>
+                                    ),
+                                };
+                            })}
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={5}>
                         <Select
                             placeholder="وضعیت"
                             style={{ width: '100%' }}
@@ -327,7 +406,7 @@ export default function MessageArchive() {
                             }))}
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={4}>
+                    <Col xs={24} sm={12} md={3}>
                         <Button icon={<ReloadOutlined />} onClick={handleReset} size="large" block>
                             بازنشانی
                         </Button>

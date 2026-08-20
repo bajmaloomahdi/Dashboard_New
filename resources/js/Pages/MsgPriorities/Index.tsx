@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Card,
     Button,
@@ -26,6 +26,7 @@ import MainLayout from '../../Layouts/MainLayout';
 import MsgPriorityFormModal from './MsgPriorityFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
+import { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES, columnHelpers } from '../../theme';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -108,6 +109,12 @@ export default function MsgPrioritiesIndex() {
         return matchSearch && matchActive;
     });
 
+    /** بیشترین ترتیب نمایش — برای محاسبه رنگ نسبی اولویت‌ها */
+    const maxPrioritySort = useMemo(
+        () => Math.max(1, ...(priorities || []).map((p: MsgPriority) => p.SortOrder || 0)),
+        [priorities]
+    );
+
     const customColumns: ColumnsType<MsgPriority> = [
         {
             title: 'کد',
@@ -131,7 +138,13 @@ export default function MsgPrioritiesIndex() {
                     minWidth: 220,
                     justifyContent: 'flex-start',
                 }}>
-                    <div style={STYLES.iconBox}>
+                    <div
+                        style={{
+                            ...STYLES.iconBox,
+                            background: getPriorityPalette(record.SortOrder, maxPrioritySort).gradient,
+                            boxShadow: `0 2px 8px ${getPriorityPalette(record.SortOrder, maxPrioritySort).shadow}`,
+                        }}
+                    >
                         <ThunderboltOutlined style={{ color: '#fff', fontSize: 16 }} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
@@ -155,14 +168,26 @@ export default function MsgPrioritiesIndex() {
             align: 'center',
             sorter: (a: MsgPriority, b: MsgPriority) => a.SortOrder - b.SortOrder,
             defaultSortOrder: 'ascend',
-            render: (sortOrder: number) => (
-                <Tag
-                    color="purple"
-                    style={{ borderRadius: 6, fontWeight: 600, margin: 0 }}
-                >
-                    {sortOrder}
-                </Tag>
-            ),
+            render: (sortOrder: number) => {
+                const palette = getPriorityPalette(sortOrder, maxPrioritySort);
+                return (
+                    <span
+                        style={{
+                            display: 'inline-block',
+                            minWidth: 30,
+                            padding: '2px 10px',
+                            borderRadius: 8,
+                            fontWeight: 700,
+                            fontSize: 12,
+                            color: palette.color,
+                            background: palette.bg,
+                            border: `1px solid ${palette.border}`,
+                        }}
+                    >
+                        {sortOrder}
+                    </span>
+                );
+            },
         },
         {
             title: 'وضعیت فعالیت',

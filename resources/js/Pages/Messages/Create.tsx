@@ -29,6 +29,7 @@ import {
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
+import { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -61,16 +62,6 @@ interface TaskUnit {
     ManagerUserID: number | null;
     ManagerName: string | null;
 }
-
-/** رنگ تگ اولویت بر اساس ترتیب نمایش (هرچه بالاتر، پررنگ‌تر) */
-const priorityColor = (sortOrder: number, total: number): string => {
-    if (total <= 1) return 'blue';
-    const ratio = (sortOrder - 1) / (total - 1);
-    if (ratio >= 0.75) return 'red';
-    if (ratio >= 0.5) return 'orange';
-    if (ratio >= 0.25) return 'gold';
-    return 'green';
-};
 
 export default function MessageCreate() {
     const { messageTypes, priorities, targets, taskUnits, flash } = usePage().props as any;
@@ -269,19 +260,28 @@ export default function MessageCreate() {
                                     options={priorityOptions}
                                     optionFilterProp="label"
                                     showSearch
-                                    optionRender={(option) => (
-                                        <Space>
-                                            <Tag
-                                                color={priorityColor(
-                                                    (option.data as any).__sortOrder,
-                                                    maxSortOrder
-                                                )}
-                                                style={{ borderRadius: 6, marginInlineEnd: 0 }}
-                                            >
-                                                {option.label}
-                                            </Tag>
-                                        </Space>
-                                    )}
+                                    optionRender={(option) => {
+                                        const palette = getPriorityPalette(
+                                            (option.data as any).__sortOrder,
+                                            maxSortOrder
+                                        );
+                                        return (
+                                            <Space size={8}>
+                                                <span
+                                                    style={{
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: '50%',
+                                                        background: palette.gradient,
+                                                        display: 'inline-block',
+                                                    }}
+                                                />
+                                                <span style={{ color: palette.color, fontWeight: 600 }}>
+                                                    {option.label}
+                                                </span>
+                                            </Space>
+                                        );
+                                    }}
                                 />
                             </Form.Item>
                         </Col>

@@ -1,131 +1,567 @@
-import { Card, Row, Col, Typography, Space, Tag, Avatar, List, Progress } from 'antd';
+import { useMemo, useState } from 'react';
+import { Card, Row, Col, Typography, Space, Avatar, Tabs, Button, Tooltip } from 'antd';
+import * as AntIcons from '@ant-design/icons';
 import {
-    UserOutlined,
-    ShoppingCartOutlined,
-    DollarOutlined,
-    RiseOutlined,
-    FallOutlined,
-    ShopOutlined,
-    TeamOutlined,
+    AppstoreOutlined,
+    BarChartOutlined,
     FileTextOutlined,
-    TrophyOutlined,
-    ClockCircleOutlined,
+    FolderOutlined,
+    LayoutOutlined,
+    LinkOutlined,
+    ArrowLeftOutlined,
+    InboxOutlined,
+    ThunderboltOutlined,
+    CheckCircleOutlined,
+    ExpandOutlined,
 } from '@ant-design/icons';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../Layouts/MainLayout';
-import { THEME, STYLES, columnHelpers } from '../theme';
-import {
-    LineChart,
-    Line,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-    Area,
-    AreaChart,
-} from 'recharts';
+import CompanyLogo from '../Components/CompanyLogo';
+import { THEME, STYLES } from '../theme';
 
 const { Title, Text } = Typography;
 
-// ============================================
-// داده‌های نمونه (fake data)
-// ============================================
-const kpiData = [
-    {
-        title: 'فروش امروز',
-        value: 45320000,
-        prefix: <DollarOutlined />,
-        color: '#10B981',
-        bgColor: '#D1FAE5',
-        growth: 8.3,
-        suffix: 'تومان',
-    },
-    {
-        title: 'فروش این ماه',
-        value: 1250000000,
-        prefix: <ShoppingCartOutlined />,
-        color: '#3B82F6',
-        bgColor: '#DBEAFE',
-        growth: 12.5,
-        suffix: 'تومان',
-    },
-    {
-        title: 'کل مشتریان',
-        value: 1284,
-        prefix: <TeamOutlined />,
-        color: '#8B5CF6',
-        bgColor: '#EDE9FE',
-        growth: 5.2,
-        suffix: 'نفر',
-    },
-    {
-        title: 'تعداد فاکتور',
-        value: 156,
-        prefix: <FileTextOutlined />,
-        color: '#F59E0B',
-        bgColor: '#FEF3C7',
-        growth: -2.4,
-        suffix: 'فاکتور',
-    },
-];
+/* ------------------------------------------------------------------ */
+/* تایپ‌ها                                                             */
+/* ------------------------------------------------------------------ */
 
-// نمودار فروش ۳۰ روز اخیر
-const salesChartData = [
-    { day: '1', sales: 25000000, target: 30000000 },
-    { day: '5', sales: 32000000, target: 30000000 },
-    { day: '10', sales: 28000000, target: 30000000 },
-    { day: '15', sales: 45000000, target: 35000000 },
-    { day: '20', sales: 38000000, target: 35000000 },
-    { day: '25', sales: 52000000, target: 40000000 },
-    { day: '30', sales: 45320000, target: 40000000 },
-];
+interface HomeTab {
+    MenuID: number;
+    MenuCode: string;
+    MenuTitle: string;
+    MenuKind: string;
+    Url: string | null;
+    Icon: string | null;
+    SortOrder: number;
+    Description: string | null;
+}
 
-// پرفروش‌ترین کالاها
-const topProducts = [
-    { name: 'بلیستر 20 عددی زهراوی', sales: 15000000, count: 45 },
-    { name: 'قرص استامینوفن 500', sales: 12500000, count: 38 },
-    { name: 'شربت آنتی‌بیوتیک', sales: 10200000, count: 32 },
-    { name: 'کپسول ویتامین C', sales: 8500000, count: 28 },
-    { name: 'قطره چشمی', sales: 6300000, count: 22 },
-];
+interface HomeTabItem {
+    TabMenuID: number;
+    ItemID: number;
+    ItemType: 'MENU' | 'REPORT';
+    ItemCode: string;
+    ItemTitle: string;
+    ItemKind: string;
+    Url: string | null;
+    Icon: string | null;
+    SortOrder: number;
+    Description: string | null;
+    ReportID: number | null;
+    /** عرض پنجره از 24 (اختیاری — اگر ستون PanelWidth اضافه شود) */
+    PanelWidth?: number | null;
+}
 
-// پرفروش‌ترین ویزیتورها
-const topVisitors = [
-    { name: 'علی محمدی', sales: 45000000, orders: 25, avatar: 'ع' },
-    { name: 'حسن رضایی', sales: 38000000, orders: 22, avatar: 'ح' },
-    { name: 'محمد کریمی', sales: 32000000, orders: 18, avatar: 'م' },
-    { name: 'رضا احمدی', sales: 28000000, orders: 16, avatar: 'ر' },
-    { name: 'مهدی حسینی', sales: 25000000, orders: 14, avatar: 'م' },
-];
+interface PriorityStat {
+    msgPriorityID: number | null;
+    Code: number | null;
+    PriorityName: string;
+    PrioritySortOrder: number;
+    MessageCount: number;
+}
 
-// آخرین فعالیت‌ها
-const recentActivities = [
-    { title: 'فاکتور جدید', desc: 'فاکتور #12345 به مبلغ 2,500,000', time: '5 دقیقه پیش', color: '#10B981', icon: <ShoppingCartOutlined /> },
-    { title: 'مشتری جدید', desc: 'شرکت پارس دارو به سیستم اضافه شد', time: '30 دقیقه پیش', color: '#3B82F6', icon: <TeamOutlined /> },
-    { title: 'گزارش تولید شد', desc: 'گزارش فروش ماهانه آماده است', time: '1 ساعت پیش', color: '#8B5CF6', icon: <FileTextOutlined /> },
-    { title: 'فاکتور جدید', desc: 'فاکتور #12344 به مبلغ 1,800,000', time: '2 ساعت پیش', color: '#F59E0B', icon: <ShoppingCartOutlined /> },
-];
+/* ------------------------------------------------------------------ */
+/* استایل                                                              */
+/* ------------------------------------------------------------------ */
 
-// ============================================
-// کامپوننت اصلی
-// ============================================
+const DASH_CSS = `
+.home-tabs .ant-tabs-nav { margin-bottom: 20px; }
+.home-tabs .ant-tabs-nav::before { border-bottom: 2px solid #EFECFB !important; }
+.home-tabs .ant-tabs-tab {
+    padding: 10px 20px !important;
+    margin: 0 0 0 8px !important;
+    border-radius: 12px 12px 0 0 !important;
+    background: #F7F5FE;
+    border: 1px solid #EFECFB !important;
+    border-bottom: none !important;
+    transition: all .25s ease;
+}
+.home-tabs .ant-tabs-tab:hover { background: #EEEBFB; transform: translateY(-2px); }
+.home-tabs .ant-tabs-tab .ant-tabs-tab-btn { color: #4B5563 !important; font-weight: 600; font-size: 14px; }
+.home-tabs .ant-tabs-tab-active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-color: transparent !important;
+    box-shadow: 0 6px 16px rgba(102,126,234,.35);
+}
+.home-tabs .ant-tabs-tab-active .ant-tabs-tab-btn { color: #fff !important; }
+.home-tabs .ant-tabs-ink-bar { display: none !important; }
+
+/* پنجره (Panel) */
+.dash-panel {
+    border-radius: 16px;
+    border: 1px solid #EFECFB;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(17,24,39,.05);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow .25s ease, transform .25s ease;
+}
+.dash-panel:hover {
+    box-shadow: 0 10px 26px rgba(102,126,234,.14);
+}
+.dash-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #F7F5FE 0%, #FFFFFF 100%);
+    border-bottom: 1px solid #EFECFB;
+}
+.dash-panel-body {
+    padding: 16px;
+    flex: 1;
+}
+
+/* کارت میان‌بر داخل پنجره */
+.shortcut-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    border: 1px solid #F3F4F6; background: #FCFCFF;
+    cursor: pointer; transition: all .2s ease; margin-bottom: 8px;
+}
+.shortcut-row:last-child { margin-bottom: 0; }
+.shortcut-row:hover { background: #F5F3FF; border-color: #DDD6FE; transform: translateX(-3px); }
+
+/* کارت اولویت پیام */
+.priority-card {
+    border-radius: 14px; padding: 16px; cursor: pointer;
+    transition: all .25s ease; position: relative; overflow: hidden; height: 100%;
+}
+.priority-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,.14); }
+.priority-card .pc-glow {
+    position: absolute; width: 110px; height: 110px; border-radius: 50%;
+    background: rgba(255,255,255,.16); top: -46px; left: -26px;
+}
+`;
+
+/* ------------------------------------------------------------------ */
+/* کمکی‌ها                                                             */
+/* ------------------------------------------------------------------ */
+
+const renderIcon = (name: string | null, style: React.CSSProperties = {}) => {
+    if (!name) return <AppstoreOutlined style={style} />;
+    const key = name.endsWith('Outlined') ? name : `${name}Outlined`;
+    const IconComponent = (AntIcons as any)[key];
+    return IconComponent ? <IconComponent style={style} /> : <AppstoreOutlined style={style} />;
+};
+
+const itemTypeMeta = (item: HomeTabItem) => {
+    if (item.ItemType === 'REPORT') {
+        return { color: '#7C3AED', gradient: 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)', label: 'گزارش', icon: <BarChartOutlined /> };
+    }
+    switch (item.ItemKind) {
+        case 'FOLDER':
+            return { color: '#D97706', gradient: 'linear-gradient(135deg, #FBBF24 0%, #D97706 100%)', label: 'پوشه', icon: <FolderOutlined /> };
+        case 'LINK':
+            return { color: '#0891B2', gradient: 'linear-gradient(135deg, #22D3EE 0%, #0891B2 100%)', label: 'لینک', icon: <LinkOutlined /> };
+        default:
+            return { color: '#2563EB', gradient: 'linear-gradient(135deg, #60A5FA 0%, #2563EB 100%)', label: 'صفحه', icon: <FileTextOutlined /> };
+    }
+};
+
+const priorityTheme = (sortOrder: number, maxSort: number) => {
+    if (sortOrder === 0) {
+        return { gradient: 'linear-gradient(135deg, #9CA3AF 0%, #6B7280 100%)', shadow: 'rgba(107,114,128,.35)' };
+    }
+    const ratio = maxSort <= 1 ? 1 : (sortOrder - 1) / (maxSort - 1);
+    if (ratio >= 0.75) return { gradient: 'linear-gradient(135deg, #F87171 0%, #DC2626 100%)', shadow: 'rgba(220,38,38,.35)' };
+    if (ratio >= 0.5)  return { gradient: 'linear-gradient(135deg, #FB923C 0%, #EA580C 100%)', shadow: 'rgba(234,88,12,.35)' };
+    if (ratio >= 0.25) return { gradient: 'linear-gradient(135deg, #FBBF24 0%, #D97706 100%)', shadow: 'rgba(217,119,6,.35)' };
+    return { gradient: 'linear-gradient(135deg, #34D399 0%, #059669 100%)', shadow: 'rgba(5,150,105,.35)' };
+};
+
+/* ------------------------------------------------------------------ */
+/* پوسته‌ی پنجره                                                       */
+/* ------------------------------------------------------------------ */
+
+interface PanelProps {
+    title: string;
+    icon: React.ReactNode;
+    accent: string;
+    extraText?: string;
+    onOpen?: () => void;
+    children: React.ReactNode;
+}
+
+function Panel({ title, icon, accent, extraText, onOpen, children }: PanelProps) {
+    return (
+        <div className="dash-panel">
+            <div className="dash-panel-head">
+                <div
+                    style={{
+                        width: 34, height: 34, borderRadius: 10,
+                        background: accent, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, flexShrink: 0,
+                    }}
+                >
+                    {icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text strong style={{ fontSize: 14 }}>{title}</Text>
+                    {extraText && (
+                        <div>
+                            <Text type="secondary" style={{ fontSize: 11 }}>{extraText}</Text>
+                        </div>
+                    )}
+                </div>
+                {onOpen && (
+                    <Tooltip title="باز کردن">
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<ExpandOutlined />}
+                            style={{ color: THEME.primary }}
+                            onClick={onOpen}
+                        />
+                    </Tooltip>
+                )}
+            </div>
+            <div className="dash-panel-body">{children}</div>
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* محتوای پنجره: پیام‌های من                                           */
+/* ------------------------------------------------------------------ */
+
+function MyMessagesContent({ stats }: { stats: PriorityStat[] }) {
+    const total = (stats || []).reduce((sum, s) => sum + (s.MessageCount || 0), 0);
+    const maxSort = Math.max(1, ...(stats || []).map((s) => s.PrioritySortOrder || 0));
+    const list = (stats || []).filter((s) => s.msgPriorityID !== null || s.MessageCount > 0);
+
+    if (total === 0) {
+        return (
+            <div
+                style={{
+                    background: 'linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 100%)',
+                    border: '1px dashed #86EFAC',
+                    borderRadius: 12, padding: '32px 20px', textAlign: 'center',
+                }}
+            >
+                <CheckCircleOutlined style={{ fontSize: 38, color: '#10B981', marginBottom: 10 }} />
+                <Text strong style={{ display: 'block', fontSize: 14 }}>
+                    پیام رسیدگی‌نشده‌ای ندارید
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>همه‌چیز مرتب است 🎉</Text>
+            </div>
+        );
+    }
+
+    return (
+        <Row gutter={[12, 12]}>
+            {list.map((stat) => {
+                const th = priorityTheme(stat.PrioritySortOrder, maxSort);
+                const isEmpty = stat.MessageCount === 0;
+
+                return (
+                    <Col xs={12} md={8} xl={6} key={stat.msgPriorityID ?? 'none'}>
+                        <div
+                            className="priority-card"
+                            style={{
+                                background: isEmpty ? '#F9FAFB' : th.gradient,
+                                boxShadow: isEmpty ? 'none' : `0 8px 18px ${th.shadow}`,
+                                border: isEmpty ? '1px solid #E5E7EB' : '1px solid transparent',
+                                opacity: isEmpty ? 0.7 : 1,
+                            }}
+                            onClick={() =>
+                                router.visit(
+                                    stat.msgPriorityID
+                                        ? `/messages?msg_priority_id=${stat.msgPriorityID}`
+                                        : '/messages'
+                                )
+                            }
+                        >
+                            {!isEmpty && <div className="pc-glow" />}
+                            <div style={{ position: 'relative' }}>
+                                <Space size={5}>
+                                    <ThunderboltOutlined
+                                        style={{ fontSize: 13, color: isEmpty ? '#9CA3AF' : 'rgba(255,255,255,.9)' }}
+                                    />
+                                    <Text
+                                        style={{
+                                            fontSize: 12, fontWeight: 600,
+                                            color: isEmpty ? '#6B7280' : 'rgba(255,255,255,.95)',
+                                        }}
+                                    >
+                                        {stat.PriorityName}
+                                    </Text>
+                                </Space>
+                                <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                                    <span
+                                        style={{
+                                            fontSize: 26, fontWeight: 800, lineHeight: 1,
+                                            color: isEmpty ? '#9CA3AF' : '#fff', fontFamily: 'monospace',
+                                        }}
+                                    >
+                                        {stat.MessageCount}
+                                    </span>
+                                    <span style={{ fontSize: 11, color: isEmpty ? '#9CA3AF' : 'rgba(255,255,255,.85)' }}>
+                                        پیام
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </Col>
+                );
+            })}
+        </Row>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* محتوای پنجره: میان‌برها (زیرمنوهای یک پوشه یا گزارش‌ها)              */
+/* ------------------------------------------------------------------ */
+
+function ShortcutContent({ items }: { items: HomeTabItem[] }) {
+    return (
+        <div>
+            {items.map((item) => {
+                const meta = itemTypeMeta(item);
+                return (
+                    <div
+                        key={`${item.ItemType}-${item.ItemID}`}
+                        className="shortcut-row"
+                        onClick={() => item.Url && router.visit(item.Url)}
+                    >
+                        <div
+                            style={{
+                                width: 34, height: 34, borderRadius: 9,
+                                background: meta.gradient, color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 15, flexShrink: 0,
+                            }}
+                        >
+                            {item.Icon ? renderIcon(item.Icon) : meta.icon}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <Text strong style={{ fontSize: 13, display: 'block' }}>{item.ItemTitle}</Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace', direction: 'ltr' }}>
+                                {item.ItemCode}
+                            </Text>
+                        </div>
+                        <ArrowLeftOutlined style={{ color: meta.color, fontSize: 12 }} />
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* صفحه داشبورد                                                        */
+/* ------------------------------------------------------------------ */
+
 export default function Dashboard() {
-    const { auth, company } = usePage().props as any;
+    const { auth, company, homeTabs, homeTabItems, messagePriorityStats } = usePage().props as any;
+
+    const tabs: HomeTab[] = homeTabs || [];
+    const items: HomeTabItem[] = homeTabItems || [];
+    const stats: PriorityStat[] = messagePriorityStats || [];
+
+    const [activeKey, setActiveKey] = useState<string>(
+        tabs.length ? String(tabs[0].MenuID) : ''
+    );
+
+    const itemsByTab = useMemo(() => {
+        const map: Record<number, HomeTabItem[]> = {};
+        items.forEach((item) => {
+            if (!map[item.TabMenuID]) map[item.TabMenuID] = [];
+            map[item.TabMenuID].push(item);
+        });
+        return map;
+    }, [items]);
+
+    /** آیا این تب پنجره «پیام‌های من» را دارد؟ */
+    const hasMessagesPanel = (tab: HomeTab, index: number) => {
+        const key = `${tab.Url || ''} ${tab.MenuCode || ''}`.toLowerCase();
+        if (key.includes('my-messages') || key.includes('mymessages')) return true;
+        return index === 0;
+    };
+
+    /**
+     * ساخت پنجره‌های یک تب
+     * - پنجره پیام‌های من (در تب اول یا تب با کد my-messages)
+     * - هر «پوشه» ⇒ یک پنجره که میان‌برهای داخلش را نشان می‌دهد
+     * - گزارش‌ها و صفحه‌ها ⇒ داخل یک پنجره «میان‌برها»
+     */
+    const buildPanels = (tab: HomeTab, index: number) => {
+        const tabItems = itemsByTab[tab.MenuID] || [];
+        const panels: { key: string; span: number; node: React.ReactNode }[] = [];
+
+        if (hasMessagesPanel(tab, index)) {
+            panels.push({
+                key: 'w-messages',
+                span: 24,
+                node: (
+                    <Panel
+                        title="پیام‌های من"
+                        icon={<InboxOutlined />}
+                        accent={THEME.primaryGradient}
+                        extraText="بر اساس اولویت"
+                        onOpen={() => router.visit('/messages')}
+                    >
+                        <MyMessagesContent stats={stats} />
+                    </Panel>
+                ),
+            });
+        }
+
+        const reports = tabItems.filter((i) => i.ItemType === 'REPORT');
+        const folders = tabItems.filter((i) => i.ItemType === 'MENU' && i.ItemKind === 'FOLDER');
+        const pages = tabItems.filter((i) => i.ItemType === 'MENU' && i.ItemKind !== 'FOLDER');
+
+        // هر پوشه یک پنجره مستقل
+        folders.forEach((folder) => {
+            const children = items.filter((i) => i.TabMenuID === folder.ItemID);
+            panels.push({
+                key: `folder-${folder.ItemID}`,
+                span: folder.PanelWidth || 12,
+                node: (
+                    <Panel
+                        title={folder.ItemTitle}
+                        icon={folder.Icon ? renderIcon(folder.Icon) : <FolderOutlined />}
+                        accent="linear-gradient(135deg, #FBBF24 0%, #D97706 100%)"
+                        extraText={`${children.length} مورد`}
+                        onOpen={folder.Url ? () => router.visit(folder.Url!) : undefined}
+                    >
+                        {children.length ? (
+                            <ShortcutContent items={children} />
+                        ) : (
+                            <Text type="secondary" style={{ fontSize: 12 }}>موردی ثبت نشده است</Text>
+                        )}
+                    </Panel>
+                ),
+            });
+        });
+
+        // پنجره گزارش‌ها
+        if (reports.length) {
+            panels.push({
+                key: 'reports',
+                span: 12,
+                node: (
+                    <Panel
+                        title="گزارش‌ها"
+                        icon={<BarChartOutlined />}
+                        accent="linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)"
+                        extraText={`${reports.length} گزارش`}
+                    >
+                        <ShortcutContent items={reports} />
+                    </Panel>
+                ),
+            });
+        }
+
+        // پنجره میان‌برها (صفحه‌ها)
+        if (pages.length) {
+            panels.push({
+                key: 'pages',
+                span: 12,
+                node: (
+                    <Panel
+                        title="میان‌برها"
+                        icon={<AppstoreOutlined />}
+                        accent="linear-gradient(135deg, #60A5FA 0%, #2563EB 100%)"
+                        extraText={`${pages.length} مورد`}
+                    >
+                        <ShortcutContent items={pages} />
+                    </Panel>
+                ),
+            });
+        }
+
+        return panels;
+    };
+
+    const tabItemsConfig = tabs.map((tab, index) => {
+        const tabItems = itemsByTab[tab.MenuID] || [];
+        const isActive = activeKey === String(tab.MenuID);
+        const panels = buildPanels(tab, index);
+
+        return {
+            key: String(tab.MenuID),
+            label: (
+                <Space size={8}>
+                    {renderIcon(tab.Icon, { fontSize: 16 })}
+                    <span>{tab.MenuTitle}</span>
+                    {panels.length > 0 && (
+                        <span
+                            style={{
+                                minWidth: 20, height: 20, lineHeight: '20px', padding: '0 6px',
+                                borderRadius: 10, fontSize: 11, fontWeight: 700,
+                                background: isActive ? 'rgba(255,255,255,.28)' : '#EDE9FE',
+                                color: isActive ? '#fff' : '#5B21B6',
+                                display: 'inline-block', textAlign: 'center',
+                            }}
+                        >
+                            {panels.length}
+                        </span>
+                    )}
+                </Space>
+            ),
+            children: (
+                <div>
+                    {tab.Description && (
+                        <div
+                            style={{
+                                background: '#F7F5FE', border: '1px solid #EFECFB',
+                                borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                            }}
+                        >
+                            <Text type="secondary" style={{ fontSize: 13 }}>{tab.Description}</Text>
+                        </div>
+                    )}
+
+                    {panels.length === 0 ? (
+                        <div
+                            style={{
+                                background: 'linear-gradient(180deg, #FAFAFF 0%, #FFFFFF 100%)',
+                                border: '1px dashed #DDD6FE',
+                                borderRadius: 14, padding: '48px 24px', textAlign: 'center',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    width: 64, height: 64, borderRadius: 18, margin: '0 auto 16px',
+                                    background: THEME.primaryGradientLight,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 28, color: THEME.primary,
+                                }}
+                            >
+                                <LayoutOutlined />
+                            </div>
+                            <Text strong style={{ display: 'block', fontSize: 15 }}>
+                                این تب هنوز پنجره‌ای ندارد
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                در «مدیریت گزارشات» یا «مدیریت منوها»، منوی والد را «{tab.MenuTitle}» انتخاب کنید
+                            </Text>
+                        </div>
+                    ) : (
+                        <Row gutter={[16, 16]}>
+                            {panels.map((p) => (
+                                <Col xs={24} lg={p.span} key={p.key}>
+                                    {p.node}
+                                </Col>
+                            ))}
+                        </Row>
+                    )}
+                </div>
+            ),
+        };
+    });
 
     return (
         <MainLayout>
+            <style>{DASH_CSS}</style>
+
             {/* هدر خوشامدگویی */}
             <Card
-                style={{
-                    marginBottom: 24,
-                    ...STYLES.card,
-                    background: THEME.primaryGradient,
-                    border: 'none',
-                }}
+                style={{ marginBottom: 24, ...STYLES.card, background: THEME.primaryGradient, border: 'none' }}
                 styles={{ body: { padding: 24 } }}
             >
                 <Row align="middle" justify="space-between">
@@ -136,8 +572,7 @@ export default function Dashboard() {
                                 style={{
                                     background: 'rgba(255,255,255,0.2)',
                                     border: '3px solid rgba(255,255,255,0.4)',
-                                    fontSize: 28,
-                                    fontWeight: 'bold',
+                                    fontSize: 28, fontWeight: 'bold',
                                 }}
                             >
                                 {auth?.user?.FirstName?.charAt(0) || 'م'}
@@ -153,314 +588,55 @@ export default function Dashboard() {
                         </Space>
                     </Col>
                     <Col>
-                        {/* لوگوی شرکت به‌جای ایکون نمودار */}
-                        {company?.LogoMimeType ? (
-                            <img
-                                src={`/company/logo?t=${Date.now()}`}
-                                alt="لوگوی شرکت"
-                                style={{
-                                    width: 80,
-                                    height: 80,
-                                    objectFit: 'contain',
-                                    background: 'rgba(255,255,255,0.9)',
-                                    borderRadius: 16,
-                                    padding: 6,
-                                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-                                }}
-                            />
-                        ) : (
-                            <div style={{ fontSize: 60 }}>📊</div>
-                        )}
+                        <CompanyLogo
+                            hasLogo={company?.LogoMimeType}
+                            variant="welcome"
+                            fallback="📊"
+                        />
                     </Col>
                 </Row>
             </Card>
 
-            {/* KPI Cards - ۴ کارت */}
-            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                {kpiData.map((kpi, index) => (
-                    <Col xs={24} sm={12} lg={6} key={index}>
-                        <Card
-                            hoverable
+            {/* تب‌های صفحه اصلی */}
+            <Card style={STYLES.card} styles={{ body: { padding: '16px 20px 24px' } }}>
+                {tabs.length === 0 ? (
+                    <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+                        <div
                             style={{
-                                ...STYLES.card,
-                                borderTop: `4px solid ${kpi.color}`,
+                                width: 80, height: 80, borderRadius: 22, margin: '0 auto 20px',
+                                background: THEME.primaryGradientLight,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 34, color: THEME.primary,
                             }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ flex: 1 }}>
-                                    <Text type="secondary" style={{ fontSize: 13 }}>
-                                        {kpi.title}
-                                    </Text>
-                                    <div style={{ marginTop: 8, marginBottom: 8 }}>
-                                        <Text strong style={{
-                                            fontSize: 22,
-                                            color: kpi.color,
-                                            fontFamily: 'monospace',
-                                        }}>
-                                            {columnHelpers.formatNumber(kpi.value)}
-                                        </Text>
-                                        <Text type="secondary" style={{ fontSize: 12, marginRight: 4 }}>
-                                            {kpi.suffix}
-                                        </Text>
-                                    </div>
-                                    <Space size={4}>
-                                        {kpi.growth >= 0 ? (
-                                            <RiseOutlined style={{ color: THEME.success, fontSize: 12 }} />
-                                        ) : (
-                                            <FallOutlined style={{ color: THEME.error, fontSize: 12 }} />
-                                        )}
-                                        <Text style={{
-                                            fontSize: 12,
-                                            color: kpi.growth >= 0 ? THEME.success : THEME.error,
-                                            fontWeight: 600,
-                                        }}>
-                                            {Math.abs(kpi.growth)}%
-                                        </Text>
-                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                            نسبت به دیروز
-                                        </Text>
-                                    </Space>
-                                </div>
-                                <div style={{
-                                    width: 48,
-                                    height: 48,
-                                    borderRadius: 12,
-                                    background: kpi.bgColor,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: kpi.color,
-                                    fontSize: 22,
-                                }}>
-                                    {kpi.prefix}
-                                </div>
-                            </div>
-                        </Card>
-                    </Col>
-                ))}
-            </Row>
-
-            {/* نمودارها */}
-            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                {/* نمودار خطی فروش */}
-                <Col xs={24} lg={16}>
-                    <Card
-                        title={
-                            <Space>
-                                <RiseOutlined style={{ color: THEME.primary }} />
-                                <span>نمودار فروش ۳۰ روز اخیر</span>
-                            </Space>
-                        }
-                        extra={
-                            <Space>
-                                <Tag color="green">هدف: 40M</Tag>
-                                <Tag color="blue">میانگین: 38M</Tag>
-                            </Space>
-                        }
-                        style={STYLES.card}
-                    >
-                        <ResponsiveContainer width="100%" height={300}>
-                            <AreaChart data={salesChartData}>
-                                <defs>
-                                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={THEME.primary} stopOpacity={0.8} />
-                                        <stop offset="95%" stopColor={THEME.primary} stopOpacity={0.1} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis
-                                    dataKey="day"
-                                    label={{ value: 'روز ماه', position: 'insideBottom', offset: -5 }}
-                                    style={{ fontSize: 11 }}
-                                />
-                                <YAxis
-                                    tickFormatter={(value) => `${value / 1000000}M`}
-                                    style={{ fontSize: 11 }}
-                                />
-                                <Tooltip
-                                    formatter={(value: number) => columnHelpers.formatNumber(value) + ' تومان'}
-                                    contentStyle={{
-                                        borderRadius: 8,
-                                        border: 'none',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    }}
-                                />
-                                <Legend />
-                                <Area
-                                    type="monotone"
-                                    dataKey="sales"
-                                    name="فروش واقعی"
-                                    stroke={THEME.primary}
-                                    fillOpacity={1}
-                                    fill="url(#colorSales)"
-                                    strokeWidth={3}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="target"
-                                    name="هدف"
-                                    stroke={THEME.success}
-                                    strokeWidth={2}
-                                    strokeDasharray="5 5"
-                                    dot={false}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </Card>
-                </Col>
-
-                {/* نمودار میله‌ای Top Products */}
-                <Col xs={24} lg={8}>
-                    <Card
-                        title={
-                            <Space>
-                                <TrophyOutlined style={{ color: THEME.warning }} />
-                                <span>پرفروش‌ترین کالاها</span>
-                            </Space>
-                        }
-                        style={STYLES.card}
-                    >
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={topProducts} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis
-                                    type="number"
-                                    tickFormatter={(value) => `${value / 1000000}M`}
-                                    style={{ fontSize: 10 }}
-                                />
-                                <YAxis
-                                    type="category"
-                                    dataKey="name"
-                                    width={100}
-                                    style={{ fontSize: 10 }}
-                                />
-                                <Tooltip
-                                    formatter={(value: number) => columnHelpers.formatNumber(value) + ' تومان'}
-                                    contentStyle={{
-                                        borderRadius: 8,
-                                        border: 'none',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    }}
-                                />
-                                <Bar dataKey="sales" fill={THEME.primary} radius={[0, 8, 8, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </Card>
-                </Col>
-            </Row>
-
-            {/* لیست‌ها */}
-            <Row gutter={[16, 16]}>
-                {/* پرفروش‌ترین ویزیتورها */}
-                <Col xs={24} lg={12}>
-                    <Card
-                        title={
-                            <Space>
-                                <UserOutlined style={{ color: THEME.primary }} />
-                                <span>پرفروش‌ترین ویزیتورها</span>
-                            </Space>
-                        }
-                        extra={<Text type="secondary" style={{ fontSize: 12 }}>این ماه</Text>}
-                        style={STYLES.card}
-                    >
-                        {topVisitors.map((visitor, index) => (
-                            <div key={index} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 12,
-                                padding: '12px 0',
-                                borderBottom: index < topVisitors.length - 1 ? '1px solid #F3F4F6' : 'none',
-                            }}>
-                                <div style={{
-                                    width: 32,
-                                    height: 32,
-                                    borderRadius: '50%',
-                                    background: index === 0 ? '#FEF3C7' : index === 1 ? '#E5E7EB' : '#FED7AA',
-                                    color: index === 0 ? '#D97706' : index === 1 ? '#4B5563' : '#EA580C',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontWeight: 'bold',
-                                    fontSize: 14,
-                                }}>
-                                    {index + 1}
-                                </div>
-                                <Avatar style={{ background: THEME.primaryGradient }}>
-                                    {visitor.avatar}
-                                </Avatar>
-                                <div style={{ flex: 1 }}>
-                                    <Text strong>{visitor.name}</Text>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                            {visitor.orders} سفارش
-                                        </Text>
-                                    </div>
-                                </div>
-                                <div style={{ textAlign: 'left' }}>
-                                    <Text strong style={{ color: THEME.success, fontFamily: 'monospace' }}>
-                                        {columnHelpers.formatNumber(visitor.sales)}
-                                    </Text>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 11 }}>
-                                            تومان
-                                        </Text>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </Card>
-                </Col>
-
-                {/* آخرین فعالیت‌ها */}
-                <Col xs={24} lg={12}>
-                    <Card
-                        title={
-                            <Space>
-                                <ClockCircleOutlined style={{ color: THEME.warning }} />
-                                <span>آخرین فعالیت‌ها</span>
-                            </Space>
-                        }
-                        extra={<a href="#">مشاهده همه</a>}
-                        style={STYLES.card}
-                    >
-                        {recentActivities.map((activity, index) => (
-                            <div key={index} style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: 12,
-                                padding: '12px 0',
-                                borderBottom: index < recentActivities.length - 1 ? '1px solid #F3F4F6' : 'none',
-                            }}>
-                                <div style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: 10,
-                                    background: activity.color + '20',
-                                    color: activity.color,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: 18,
-                                    flexShrink: 0,
-                                }}>
-                                    {activity.icon}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <Text strong>{activity.title}</Text>
-                                    <div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            {activity.desc}
-                                        </Text>
-                                    </div>
-                                </div>
-                                <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                                    {activity.time}
+                            <LayoutOutlined />
+                        </div>
+                        <Title level={5} style={{ marginBottom: 6 }}>
+                            هنوز تبی برای شما تعریف نشده است
+                        </Title>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                            در «مدیریت منوها» یک منو از نوع «تب صفحه اصلی (TAB)» بسازید
+                            و در «نقش‌ها» به آن دسترسی بدهید
+                        </Text>
+                    </div>
+                ) : (
+                    <Tabs
+                        className="home-tabs"
+                        activeKey={activeKey}
+                        onChange={setActiveKey}
+                        items={tabItemsConfig}
+                        size="large"
+                        tabBarExtraContent={
+                            <Space size={6}>
+                                <LayoutOutlined style={{ color: THEME.primary }} />
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {tabs.length} تب
                                 </Text>
-                            </div>
-                        ))}
-                    </Card>
-                </Col>
-            </Row>
+                            </Space>
+                        }
+                    />
+                )}
+            </Card>
         </MainLayout>
     );
 }

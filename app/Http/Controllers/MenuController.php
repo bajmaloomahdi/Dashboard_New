@@ -62,12 +62,13 @@ class MenuController extends Controller
         $validated = $request->validate([
             'ParentID' => 'nullable|integer',
             'MenuTitle' => 'required|string|max:200',
-            'MenuKind' => 'required|string|in:PAGE,FOLDER,REPORT',
+            'MenuKind' => 'required|string|in:PAGE,FOLDER,REPORT,TAB',
             'Url' => 'nullable|string|max:500',
             'Icon' => 'nullable|string|max:100',
             'SortOrder' => 'nullable|integer',
             'OpenInNewTab' => 'boolean',
             'IsVisible' => 'boolean',
+            'IsHomeTab' => 'boolean',
             'Description' => 'nullable|string|max:500',
         ]);
 
@@ -82,6 +83,7 @@ class MenuController extends Controller
                 @SortOrder = ?, 
                 @OpenInNewTab = ?, 
                 @IsVisible = ?, 
+                @IsHomeTab = ?, 
                 @Description = ?, 
                 @CreateUser = ?',
             [
@@ -93,6 +95,7 @@ class MenuController extends Controller
                 $validated['SortOrder'] ?? null,
                 $validated['OpenInNewTab'] ?? false,
                 $validated['IsVisible'] ?? true,
+                $validated['IsHomeTab'] ?? false,
                 $validated['Description'] ?? null,
                 Auth::id(),
             ]
@@ -118,12 +121,13 @@ class MenuController extends Controller
         $validated = $request->validate([
             'ParentID' => 'nullable|integer',
             'MenuTitle' => 'required|string|max:200',
-            'MenuKind' => 'required|string|in:PAGE,FOLDER,REPORT',
+            'MenuKind' => 'required|string|in:PAGE,FOLDER,REPORT,TAB',
             'Url' => 'nullable|string|max:500',
             'Icon' => 'nullable|string|max:100',
             'SortOrder' => 'nullable|integer',
             'OpenInNewTab' => 'boolean',
             'IsVisible' => 'boolean',
+            'IsHomeTab' => 'boolean',
             'Description' => 'nullable|string|max:500',
         ]);
 
@@ -139,6 +143,7 @@ class MenuController extends Controller
                 @SortOrder = ?, 
                 @OpenInNewTab = ?, 
                 @IsVisible = ?, 
+                @IsHomeTab = ?, 
                 @Description = ?, 
                 @ModifyUser = ?',
             [
@@ -151,6 +156,7 @@ class MenuController extends Controller
                 $validated['SortOrder'] ?? null,
                 $validated['OpenInNewTab'] ?? false,
                 $validated['IsVisible'] ?? true,
+                $validated['IsHomeTab'] ?? false,
                 $validated['Description'] ?? null,
                 Auth::id(),
             ]

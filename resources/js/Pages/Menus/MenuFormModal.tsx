@@ -8,6 +8,7 @@ import {
     FolderOutlined,
     FileOutlined,
     BarChartOutlined,
+    LayoutOutlined,
 } from '@ant-design/icons';
 import { useForm } from '@inertiajs/react';
 
@@ -24,6 +25,7 @@ interface Menu {
     SortOrder: number;
     OpenInNewTab: boolean | number;
     IsVisible: boolean | number;
+    IsHomeTab: boolean | number;
     Description: string | null;
 }
 
@@ -80,8 +82,11 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
         SortOrder: null as number | null,
         OpenInNewTab: false,
         IsVisible: true,
+        IsHomeTab: false,
         Description: '',
     });
+
+    const isTab = data.MenuKind === 'TAB' || data.IsHomeTab;
 
     // فیلتر Parent options (حذف خود منو در ویرایش)
     const filteredParents = useMemo(() => {
@@ -102,6 +107,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     SortOrder: editingMenu.SortOrder,
                     OpenInNewTab: toBool(editingMenu.OpenInNewTab),
                     IsVisible: toBool(editingMenu.IsVisible),
+                    IsHomeTab: toBool(editingMenu.IsHomeTab),
                     Description: editingMenu.Description || '',
                 };
                 setData(formData);
@@ -116,6 +122,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     SortOrder: null,
                     OpenInNewTab: false,
                     IsVisible: true,
+                    IsHomeTab: false,
                     Description: '',
                 };
                 setData(defaultData);
@@ -124,6 +131,39 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
             clearErrors();
         }
     }, [open, editingMenu]);
+
+    /**
+     * تغییر نوع منو
+     * نوع TAB ⇒ خودکار تب صفحه اصلی می‌شود و از سایدبار حذف می‌شود
+     */
+    const handleKindChange = (value: string) => {
+        if (value === 'TAB') {
+            setData((prev: any) => ({
+                ...prev,
+                MenuKind: value,
+                IsHomeTab: true,
+                IsVisible: false,
+                OpenInNewTab: false,
+            }));
+            form.setFieldsValue({ IsHomeTab: true, IsVisible: false, OpenInNewTab: false });
+        } else {
+            setData('MenuKind', value);
+        }
+    };
+
+    /**
+     * تغییر سوییچ «تب صفحه اصلی»
+     * روشن شدن ⇒ نمایش در سایدبار خاموش و قفل می‌شود
+     */
+    const handleHomeTabChange = (checked: boolean) => {
+        if (checked) {
+            setData((prev: any) => ({ ...prev, IsHomeTab: true, IsVisible: false }));
+            form.setFieldsValue({ IsHomeTab: true, IsVisible: false });
+        } else {
+            setData((prev: any) => ({ ...prev, IsHomeTab: false, IsVisible: true }));
+            form.setFieldsValue({ IsHomeTab: false, IsVisible: true });
+        }
+    };
 
     /**
      * ارسال فرم
@@ -154,17 +194,6 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
         reset();
         clearErrors();
         onClose();
-    };
-
-    /**
-     * آیکون کنار MenuKind
-     */
-    const getMenuKindIcon = (kind: string) => {
-        switch (kind) {
-            case 'FOLDER': return <FolderOutlined style={{ color: '#faad14' }} />;
-            case 'REPORT': return <BarChartOutlined style={{ color: '#722ed1' }} />;
-            default: return <FileOutlined style={{ color: '#1890ff' }} />;
-        }
     };
 
     return (
@@ -224,6 +253,27 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </div>
                 )}
 
+                {/* راهنمای حالت تب */}
+                {isTab && (
+                    <div
+                        style={{
+                            background: '#f6f4ff',
+                            border: '1px solid #d3c9ff',
+                            borderRadius: 8,
+                            padding: 12,
+                            marginBottom: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                        }}
+                    >
+                        <LayoutOutlined style={{ color: '#667eea', fontSize: 18 }} />
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                            این منو به‌عنوان <Text strong>تب صفحه اصلی</Text> نمایش داده می‌شود و در سایدبار دیده نمی‌شود.
+                        </Text>
+                    </div>
+                )}
+
                 <Row gutter={16}>
                     {/* عنوان منو */}
                     <Col span={12}>
@@ -258,12 +308,13 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                         >
                             <Select
                                 value={data.MenuKind}
-                                onChange={(value) => setData('MenuKind', value)}
+                                onChange={handleKindChange}
                                 size="large"
                                 options={[
                                     { value: 'PAGE', label: <span><FileOutlined style={{ color: '#1890ff' }} /> صفحه (PAGE)</span> },
                                     { value: 'FOLDER', label: <span><FolderOutlined style={{ color: '#faad14' }} /> پوشه (FOLDER)</span> },
                                     { value: 'REPORT', label: <span><BarChartOutlined style={{ color: '#722ed1' }} /> گزارش (REPORT)</span> },
+                                    { value: 'TAB', label: <span><LayoutOutlined style={{ color: '#667eea' }} /> تب صفحه اصلی (TAB)</span> },
                                 ]}
                             />
                         </Form.Item>
@@ -274,7 +325,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                         <Form.Item
                             label="منوی والد"
                             name="ParentID"
-                            extra="خالی = منوی اصلی (Level 1)"
+                            extra={isTab ? 'تب‌ها معمولاً بدون والد تعریف می‌شوند' : 'خالی = منوی اصلی (Level 1)'}
                         >
                             <Select
                                 value={data.ParentID}
@@ -297,7 +348,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                         <Form.Item
                             label="ترتیب نمایش"
                             name="SortOrder"
-                            extra="خالی = آخر لیست"
+                            extra={isTab ? 'ترتیب قرارگیری تب در صفحه اصلی' : 'خالی = آخر لیست'}
                         >
                             <InputNumber
                                 value={data.SortOrder}
@@ -305,6 +356,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                                 size="large"
                                 style={{ width: '100%' }}
                                 min={1}
+                                controls={false}
                                 placeholder="مثلاً: 1"
                             />
                         </Form.Item>
@@ -315,7 +367,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                         <Form.Item
                             label="آدرس (URL)"
                             name="Url"
-                            extra="برای FOLDER معمولاً خالی است"
+                            extra={isTab ? 'برای TAB معمولاً خالی است' : 'برای FOLDER معمولاً خالی است'}
                         >
                             <Input
                                 prefix={<LinkOutlined style={{ color: '#bfbfbf' }} />}
@@ -350,12 +402,39 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                 <Divider style={{ margin: '8px 0 16px' }} />
 
                 <Row gutter={16}>
-                    {/* قابل مشاهده */}
-                    <Col span={12}>
-                        <Form.Item label="نمایش در سایدبار" name="IsVisible">
+                    {/* تب صفحه اصلی */}
+                    <Col span={8}>
+                        <Form.Item
+                            label={
+                                <span>
+                                    <LayoutOutlined style={{ color: '#667eea', marginLeft: 6 }} />
+                                    تب صفحه اصلی
+                                </span>
+                            }
+                            name="IsHomeTab"
+                            extra="در داشبورد به‌صورت تب نمایش داده می‌شود"
+                        >
                             <Switch
-                                checked={data.IsVisible}
+                                checked={data.IsHomeTab}
+                                onChange={handleHomeTabChange}
+                                disabled={data.MenuKind === 'TAB'}
+                                checkedChildren="بله"
+                                unCheckedChildren="خیر"
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    {/* قابل مشاهده */}
+                    <Col span={8}>
+                        <Form.Item
+                            label="نمایش در سایدبار"
+                            name="IsVisible"
+                            extra={data.IsHomeTab ? 'تب‌ها در سایدبار نمایش داده نمی‌شوند' : undefined}
+                        >
+                            <Switch
+                                checked={data.IsHomeTab ? false : data.IsVisible}
                                 onChange={(checked) => setData('IsVisible', checked)}
+                                disabled={data.IsHomeTab}
                                 checkedChildren="فعال"
                                 unCheckedChildren="مخفی"
                             />
@@ -363,11 +442,12 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* باز شدن در تب جدید */}
-                    <Col span={12}>
-                        <Form.Item label="باز شدن در تب جدید" name="OpenInNewTab">
+                    <Col span={8}>
+                        <Form.Item label="باز شدن در تب جدید مرورگر" name="OpenInNewTab">
                             <Switch
                                 checked={data.OpenInNewTab}
                                 onChange={(checked) => setData('OpenInNewTab', checked)}
+                                disabled={data.IsHomeTab}
                                 checkedChildren="بله"
                                 unCheckedChildren="خیر"
                             />

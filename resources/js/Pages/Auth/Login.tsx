@@ -2,6 +2,7 @@ import { Button, Form, Input, Typography, Checkbox, Modal } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, SafetyOutlined, CloseCircleFilled } from '@ant-design/icons';
 import { useForm, usePage, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
+import CompanyLogo from '../../Components/CompanyLogo';
 
 const { Title, Text } = Typography;
 
@@ -74,7 +75,6 @@ export default function Login() {
     const handleUserNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
 
-        // اگر فارسی/عربی داره، اجازه تایپ نده
         if (hasPersianOrArabic(value)) {
             setValidationErrors(prev => ({
                 ...prev,
@@ -83,7 +83,6 @@ export default function Login() {
             return;
         }
 
-        // اگر کاراکتر غیرمجاز داره
         if (value && !isValidInput(value)) {
             setValidationErrors(prev => ({
                 ...prev,
@@ -103,7 +102,6 @@ export default function Login() {
     const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
 
-        // اگر فارسی/عربی داره، اجازه تایپ نده
         if (hasPersianOrArabic(value)) {
             setValidationErrors(prev => ({
                 ...prev,
@@ -121,7 +119,6 @@ export default function Login() {
      * ارسال فرم
      */
     const handleSubmit = () => {
-        // اعتبارسنجی قبل از ارسال
         const errors: { UserName?: string; Password?: string } = {};
 
         if (!data.UserName || data.UserName.trim() === '') {
@@ -140,7 +137,6 @@ export default function Login() {
 
         if (Object.keys(errors).length > 0) {
             setValidationErrors(errors);
-            // نمایش پیام خطا
             const firstError = Object.values(errors)[0];
             setModalMessage(firstError as string);
             setModalOpen(true);
@@ -150,7 +146,6 @@ export default function Login() {
             return;
         }
 
-        // پاک کردن خطاها و ارسال
         setValidationErrors({});
         post('/login', {
             preserveScroll: true,
@@ -169,22 +164,14 @@ export default function Login() {
                     25% { transform: translateX(-10px); }
                     75% { transform: translateX(10px); }
                 }
-                .shake {
-                    animation: shake 0.5s ease-in-out;
-                }
+                .shake { animation: shake 0.5s ease-in-out; }
+
                 @keyframes fadeInUp {
-                    from {
-                        opacity: 0;
-                        transform: translateY(20px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
-                .fade-in-up {
-                    animation: fadeInUp 0.6s ease-out;
-                }
+                .fade-in-up { animation: fadeInUp 0.6s ease-out; }
+
             `}</style>
 
             {/* Modal خطا */}
@@ -360,26 +347,11 @@ export default function Login() {
                         background: 'rgba(255,255,255,0.1)',
                         borderRadius: '50%',
                     }} />
-                    <div style={{ textAlign: 'center', color: '#fff', zIndex: 1, maxWidth: 400 }}>
-                        {/* لوگوی شرکت */}
-                        {company?.LogoMimeType ? (
-                            <img
-                                src={`/company/logo?t=${Date.now()}`}
-                                alt="لوگوی شرکت"
-                                style={{
-                                    width: 120,
-                                    height: 120,
-                                    objectFit: 'contain',
-                                    marginBottom: 20,
-                                    background: 'rgba(255,255,255,0.9)',
-                                    borderRadius: 24,
-                                    padding: 8,
-                                    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-                                }}
-                            />
-                        ) : (
-                            <div style={{ fontSize: 80, marginBottom: 20 }}>🏢</div>
-                        )}
+                    <div style={{ textAlign: 'center', color: '#fff', zIndex: 1, maxWidth: 460, width: '100%' }}>
+                        {/* لوگوی شرکت — باکس متناسب با نسبت ابعاد لوگو */}
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+                            <CompanyLogo hasLogo={company?.LogoMimeType} variant="login" />
+                        </div>
 
                         {/* نام شرکت */}
                         <Title
@@ -387,9 +359,9 @@ export default function Login() {
                             style={{
                                 color: '#fff',
                                 marginBottom: 16,
-                                wordBreak: 'break-word',      // اسم بلند بشکنه و بیاد پایین
-                                lineHeight: 1.4,              // فاصله خطوط بیشتر
-                                fontSize: 'clamp(28px, 4vw, 44px)',  // سایز واکنشگرا
+                                wordBreak: 'break-word',
+                                lineHeight: 1.4,
+                                fontSize: 'clamp(28px, 4vw, 44px)',
                                 maxWidth: '100%',
                             }}
                         >

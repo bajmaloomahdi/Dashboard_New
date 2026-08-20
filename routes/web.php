@@ -36,13 +36,23 @@ Route::middleware('guest')->group(function () {
 // --- مسیرهای احراز هویت‌شده ---
 Route::middleware('auth')->group(function () {
 
+ 
     // داشبورد
     Route::get('/dashboard', function () {
-        $result = DB::select('EXEC sp_GetUnreadNotificationsCount @UserID = ?', [Auth::id()]);
+        $userId = Auth::id();
+
+        $result = DB::select('EXEC sp_GetUnreadNotificationsCount @UserID = ?', [$userId]);
         $unreadCount = (int) ($result[0]->UnreadCount ?? 0);
 
+        $homeTabs     = DB::select('EXEC sp_GetUserHomeTabs @UserID = ?', [$userId]);
+        $homeTabItems = DB::select('EXEC sp_GetUserHomeTabItems @UserID = ?', [$userId]);
+        $messageStats = DB::select('EXEC sp_GetUserMessagePriorityStats @UserID = ?', [$userId]);
+
         return Inertia::render('Dashboard', [
-            'unreadNotificationsCount' => $unreadCount,
+            'unreadCount'          => $unreadCount,
+            'homeTabs'             => $homeTabs,
+            'homeTabItems'         => $homeTabItems,
+            'messagePriorityStats' => $messageStats,
         ]);
     })->name('dashboard');
 

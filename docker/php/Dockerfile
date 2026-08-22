@@ -59,7 +59,10 @@ RUN { \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
 # Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN curl -fsSL https://getcomposer.org/download/latest-stable/composer.phar \
+    -o /usr/local/bin/composer \
+    && chmod +x /usr/local/bin/composer \
+    && composer --version
 
 # Node.js 22
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

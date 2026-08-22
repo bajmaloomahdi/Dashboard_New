@@ -32,9 +32,16 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc \
     && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
-# PHP SQL Server extensions
-RUN pecl install sqlsrv pdo_sqlsrv \
-    && docker-php-ext-enable sqlsrv pdo_sqlsrv
+# PHP SQL Server extensions - Microsoft prebuilt binaries
+RUN curl -4 -fL \
+        https://github.com/microsoft/msphpsql/releases/download/v5.13.1/Linux_5.13.1RTW.tar.gz \
+        -o /tmp/msphpsql.tar.gz \
+    && tar -xzf /tmp/msphpsql.tar.gz -C /tmp \
+    && cp /tmp/Linux/SQLSRV_8.3_NTS.so /usr/local/lib/php/extensions/no-debug-non-zts-*/sqlsrv.so \
+    && cp /tmp/Linux/PDO_SQLSRV_8.3_NTS.so /usr/local/lib/php/extensions/no-debug-non-zts-*/pdo_sqlsrv.so \
+    && echo "extension=sqlsrv.so" > /usr/local/etc/php/conf.d/20-sqlsrv.ini \
+    && echo "extension=pdo_sqlsrv.so" > /usr/local/etc/php/conf.d/30-pdo_sqlsrv.ini \
+    && rm -rf /tmp/msphpsql.tar.gz /tmp/Linux
 
 # PHP Upload Settings
 RUN { \

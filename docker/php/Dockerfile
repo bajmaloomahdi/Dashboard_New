@@ -1,8 +1,6 @@
 FROM php:8.3-fpm
 
-# -------------------------------------------------------
-# System packages + PHP extensions
-# -------------------------------------------------------
+# System packages + PHP build dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
@@ -15,6 +13,9 @@ RUN apt-get update \
         libonig-dev \
         libxml2-dev \
         unixodbc-dev \
+        libltdl-dev \
+        libtool \
+        $PHPIZE_DEPS \
     && docker-php-ext-install \
         pdo \
         mbstring \
@@ -23,12 +24,9 @@ RUN apt-get update \
         bcmath \
         gd \
         zip \
-        opcache \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------------------------------------
 # Microsoft ODBC Driver 18 for SQL Server
-# -------------------------------------------------------
 RUN curl -4 -fsSL https://packages.microsoft.com/keys/microsoft.asc \
         | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
     && curl -4 -fsSL https://packages.microsoft.com/config/debian/12/prod.list \
@@ -37,73 +35,75 @@ RUN curl -4 -fsSL https://packages.microsoft.com/keys/microsoft.asc \
     && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------------------------------------
-# Microsoft SQL Server PHP extensions
-# PHP 8.3 / NTS
-# -------------------------------------------------------
-RUN curl -4 -fL \
-        https://github.com/microsoft/msphpsql/releases/download/v5.13.1/Linux_5.13.1RTW.tar.gz \
-        -o /tmp/msphpsql.tar.gz \
-    && tar -xzf /tmp/msphpsql.tar.gz -C /tmp \
-    && EXT_DIR="$(php-config --extension-dir)" \
-    && cp /tmp/Linux/SQLSRV_8.3_NTS.so "${EXT_DIR}/sqlsrv.so" \
-    && cp /tmp/Linux/PDO_SQLSRV_8.3_NTS.so "${EXT_DIR}/pdo_sqlsrv.so" \
-    && echo "extension=sqlsrv.so" > /usr/local/etc/php/conf.d/20-sqlsrv.ini \
-    && echo "extension=pdo_sqlsrv.so" > /usr/local/etc/php/conf.d/30-pdo_sqlsrv.ini \
+# Microsoft PHP drivers for SQL Server
+# Build from the official source instead of downloading release assets.
+RUN git clone --depth 1 --branch v5.13.3 \
+        https://github.com/microsoft/msphpsql.git \
+        /tmp/msphpsql \
+    && cp -a /tmp/msphpsql/source/shared \
+        /tmp/msphpsql/source/sqlsrv/shared \
+    && cp -a /tmp/msphpsql/source/shared \
+        /tmp/msphpsql/source/pdo_sqlsrv/shared \
+    \
+    && cd /tmp/msphpsql/source/sqlsrv \
+    && phpize \
+    && ./configure \
+    && make -j"$(nproc)" \
+    && make install \
+    \
+    && cd /tmp/msphpsql/source/pdo_sqlsrv \
+    && phpize \
+    && ./configure \
+    && make -j"$(nproc)" \
+    && make install \
+    \
+    && docker-php-ext-enable sqlsrv pdo_sqlsrv \
     && php -m | grep -E '^(sqlsrv|pdo_sqlsrv)$' \
-    && rm -rf /tmp/msphpsql.tar.gz /tmp/Linux
+    && rm -rf /tmp/msphpsql
 
-# -------------------------------------------------------
-# PHP settings
-# -------------------------------------------------------
-RUN { \
-        echo 'upload_max_filesize=50M'; \
-        echo 'post_max_size=100M'; \
-        echo 'memory_limit=256M'; \
-        echo 'max_execution_time=300'; \
-        echo 'max_input_time=300'; \
-        echo 'max_file_uploads=20'; \
-    } > /usr/local/etc/php/conf.d/uploads.ini
-
-# -------------------------------------------------------
-# OPcache
-# -------------------------------------------------------
-RUN { \
-        echo 'opcache.enable=1'; \
-        echo 'opcache.enable_cli=0'; \
-        echo 'opcache.memory_consumption=192'; \
-        echo 'opcache.interned_strings_buffer=16'; \
-        echo 'opcache.max_accelerated_files=20000'; \
-        echo 'opcache.validate_timestamps=1'; \
-        echo 'opcache.revalidate_freq=2'; \
-    } > /usr/local/etc/php/conf.d/opcache.ini
-
-# -------------------------------------------------------
 # Composer
-# -------------------------------------------------------
-RUN curl -4 -fsSL https://getcomposer.org/download/latest-stable/composer.phar \
-        -o /usr/local/bin/composer \
-    && chmod +x /usr/local/bin/composer \
-    && composer --version
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# -------------------------------------------------------
-# Application
-# -------------------------------------------------------
+# Node.js 22
+# Use npmmirror because registry.npmjs.org is unreachable on this network.
+RUN curl -4 -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && node --version \
+    && npm --version \
+    && npm config set registry https://registry.npmmirror.com \
+    && npm config set audit false \
+    && npm config set fund false \
+    && npm config set progress false \
+    && npm config set fetch-retries 10 \
+    && npm config set fetch-retry-factor 2 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm config set fetch-timeout 600000 \
+    && npm config set maxsockets 3 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /var/www/html
 
+# Copy Laravel application
 COPY . .
 
-# -------------------------------------------------------
-# Laravel dependencies
-# -------------------------------------------------------
+# Composer dependencies
 RUN composer install \
     --no-interaction \
     --prefer-dist \
+    --no-dev \
     --optimize-autoloader
 
-# -------------------------------------------------------
-# Permissions
-# -------------------------------------------------------
+# Node dependencies
+RUN npm ci \
+    --no-audit \
+    --no-fund \
+    --loglevel=verbose
+
+# Build React / Vite
+RUN npm run build
+
+# Laravel permissions
 RUN chown -R www-data:www-data \
     storage \
     bootstrap/cache

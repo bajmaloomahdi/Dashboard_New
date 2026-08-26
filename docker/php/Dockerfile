@@ -1,17 +1,20 @@
 FROM php:8.3-fpm
 
-# System packages
-RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    curl \
-    gnupg2 \
-    ca-certificates \
-    libzip-dev \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    unixodbc-dev \
+# -------------------------------------------------------
+# System packages + PHP extensions
+# -------------------------------------------------------
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        unzip \
+        curl \
+        gnupg2 \
+        ca-certificates \
+        libzip-dev \
+        libpng-dev \
+        libonig-dev \
+        libxml2-dev \
+        unixodbc-dev \
     && docker-php-ext-install \
         pdo \
         mbstring \
@@ -23,16 +26,21 @@ RUN apt-get update && apt-get install -y \
         opcache \
     && rm -rf /var/lib/apt/lists/*
 
+# -------------------------------------------------------
 # Microsoft ODBC Driver 18 for SQL Server
+# -------------------------------------------------------
 RUN curl -4 -fsSL https://packages.microsoft.com/keys/microsoft.asc \
         | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
     && curl -4 -fsSL https://packages.microsoft.com/config/debian/12/prod.list \
         -o /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
-# PHP SQL Server extensions - Microsoft prebuilt binaries
+# -------------------------------------------------------
+# Microsoft SQL Server PHP extensions
+# PHP 8.3 / NTS
+# -------------------------------------------------------
 RUN curl -4 -fL \
         https://github.com/microsoft/msphpsql/releases/download/v5.13.1/Linux_5.13.1RTW.tar.gz \
         -o /tmp/msphpsql.tar.gz \
@@ -42,20 +50,24 @@ RUN curl -4 -fL \
     && cp /tmp/Linux/PDO_SQLSRV_8.3_NTS.so "${EXT_DIR}/pdo_sqlsrv.so" \
     && echo "extension=sqlsrv.so" > /usr/local/etc/php/conf.d/20-sqlsrv.ini \
     && echo "extension=pdo_sqlsrv.so" > /usr/local/etc/php/conf.d/30-pdo_sqlsrv.ini \
-    && php -m | grep -E 'sqlsrv|pdo_sqlsrv' \
+    && php -m | grep -E '^(sqlsrv|pdo_sqlsrv)$' \
     && rm -rf /tmp/msphpsql.tar.gz /tmp/Linux
 
-# PHP Upload Settings
+# -------------------------------------------------------
+# PHP settings
+# -------------------------------------------------------
 RUN { \
-        echo 'upload_max_filesize = 50M'; \
-        echo 'post_max_size = 100M'; \
-        echo 'memory_limit = 256M'; \
-        echo 'max_execution_time = 300'; \
-        echo 'max_input_time = 300'; \
-        echo 'max_file_uploads = 20'; \
+        echo 'upload_max_filesize=50M'; \
+        echo 'post_max_size=100M'; \
+        echo 'memory_limit=256M'; \
+        echo 'max_execution_time=300'; \
+        echo 'max_input_time=300'; \
+        echo 'max_file_uploads=20'; \
     } > /usr/local/etc/php/conf.d/uploads.ini
 
+# -------------------------------------------------------
 # OPcache
+# -------------------------------------------------------
 RUN { \
         echo 'opcache.enable=1'; \
         echo 'opcache.enable_cli=0'; \
@@ -64,42 +76,34 @@ RUN { \
         echo 'opcache.max_accelerated_files=20000'; \
         echo 'opcache.validate_timestamps=1'; \
         echo 'opcache.revalidate_freq=2'; \
-        echo 'opcache.fast_shutdown=1'; \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
+# -------------------------------------------------------
 # Composer
-RUN curl -fsSL https://getcomposer.org/download/latest-stable/composer.phar \
-    -o /usr/local/bin/composer \
+# -------------------------------------------------------
+RUN curl -4 -fsSL https://getcomposer.org/download/latest-stable/composer.phar \
+        -o /usr/local/bin/composer \
     && chmod +x /usr/local/bin/composer \
     && composer --version
 
-# Node.js 22
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
-    && node --version \
-    && npm --version \
-    && rm -rf /var/lib/apt/lists/*
-
+# -------------------------------------------------------
+# Application
+# -------------------------------------------------------
 WORKDIR /var/www/html
 
-# Copy Laravel application
 COPY . .
 
-# Composer dependencies
-# --no-dev intentionally removed because this is a development environment
-# and laravel/pail is required.
+# -------------------------------------------------------
+# Laravel dependencies
+# -------------------------------------------------------
 RUN composer install \
     --no-interaction \
     --prefer-dist \
     --optimize-autoloader
 
-# Node dependencies
-RUN npm ci
-
-# Build React / Vite
-RUN npm run build
-
-# Laravel permissions
+# -------------------------------------------------------
+# Permissions
+# -------------------------------------------------------
 RUN chown -R www-data:www-data \
     storage \
     bootstrap/cache

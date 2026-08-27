@@ -1,3 +1,4 @@
+
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
@@ -15,19 +16,13 @@ export default defineConfig({
     ],
 
     server: {
-        // Vite روی تمام Interfaceها گوش بدهد
         host: '0.0.0.0',
-
         port: 5173,
         strictPort: true,
-
-        // اجازه دسترسی از سیستم‌های دیگر شبکه
         cors: true,
 
-        // آدرس واقعی که مرورگر کلاینت باید فایل‌های Vite را از آن بگیرد
         origin: `http://${process.env.VITE_HOST}:5173`,
 
-        // HMR برای سیستم‌های دیگر شبکه
         hmr: {
             host: process.env.VITE_HOST,
             port: 5173,
@@ -50,3 +45,4 @@ export default defineConfig({
         },
     },
 });
+

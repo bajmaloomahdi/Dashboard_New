@@ -1,15 +1,20 @@
+
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <title inertia>{{ config('app.name', 'Dashboard') }}</title>
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title inertia>پنل مدیریت</title>
+
+    <!-- فاوآیکون پویای شرکت از دیتابیس (بالای تب مرورگر) -->
+    <link rel="icon" href="/company/favicon">
+    <link rel="shortcut icon" href="/company/favicon">
+
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     @inertiaHead
 </head>
-<body>
+<body class="font-sans antialiased bg-slate-100 text-slate-800">
     @inertia
 </body>
 </html>

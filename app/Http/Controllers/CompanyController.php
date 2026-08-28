@@ -83,7 +83,7 @@ class CompanyController extends Controller
     }
 
     /**
-     * نمایش لوگو (برای استفاده در مرورگر)
+     * نمایش لوگو (با کش مرورگر برای سرعت بالا و بدون درگیر کردن سشن)
      */
     public function logo()
     {
@@ -95,7 +95,8 @@ class CompanyController extends Controller
         }
 
         return response($row->Logo)
-            ->header('Content-Type', $row->LogoMimeType ?? 'image/png');
+            ->header('Content-Type', $row->LogoMimeType ?? 'image/png')
+            ->header('Cache-Control', 'public, max-age=86400');
     }
 
     /**
@@ -111,6 +112,7 @@ class CompanyController extends Controller
         }
 
         return response($row->Favicon)
-            ->header('Content-Type', $row->FaviconMimeType ?? 'image/x-icon');
+            ->header('Content-Type', $row->FaviconMimeType ?? 'image/x-icon')
+            ->header('Cache-Control', 'public, max-age=86400');
     }
 }

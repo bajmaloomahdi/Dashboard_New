@@ -170,7 +170,7 @@ Route::middleware('auth')->group(function () {
 
 
 
-    // پروفایل
+     // پروفایل
     Route::get('/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password');
     Route::post('/change-password', [ProfileController::class, 'changePassword']);
 
@@ -179,8 +179,9 @@ Route::middleware('auth')->group(function () {
     
 });
 
-    Route::get('company/logo', [CompanyController::class, 'logo'])->name('company.logo');
-    Route::get('company/favicon', [CompanyController::class, 'favicon'])->name('company.favicon');
+// لوگو و فاوآیکون شرکت
+Route::get('company/logo', [CompanyController::class, 'logo'])->name('company.logo');
+Route::get('company/favicon', [CompanyController::class, 'favicon'])->name('company.favicon');
 
 // مسیر اصلی → لاگین
 Route::get('/', function () {

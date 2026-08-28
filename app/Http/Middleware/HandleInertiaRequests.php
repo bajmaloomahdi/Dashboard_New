@@ -13,30 +13,62 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $userId = $user->id ?? $user->UserID ?? 0;
+        $hasSession = $request->hasSession();
 
         return array_merge(parent::share($request), [
-            // نسخه برنامه برای نمایش در سایدبار/داشبورد
+            // شماره نسخه فارسی برای هدر
             'appVersion' => config('app.version', '1.0.0'),
 
-            // اطلاعات کاربر لاگین‌شده
+            // اطلاعات و لوگوی شرکت
+            'company' => fn () => $this->getCompany(),
+
+            // پیام‌های خوانده‌نشده
+            'unreadNotificationsCount' => fn () => $user ? $this->getUnreadCount($userId) : 0,
+            'unreadCount'              => fn () => $user ? $this->getUnreadCount($userId) : 0,
+
+            // اطلاعات کاربر جاری
             'auth' => [
                 'user' => $user,
             ],
 
-            // دریافت خودکار منوهای کاربر بر اساس دسترسی
-            'menus' => fn () => $user ? $this->getUserMenus($user->id ?? $user->UserID ?? 0) : [],
+            // منوهای کاربر
+            'menus' => fn () => $user ? $this->getUserMenus($userId) : [],
 
-            // پیام‌های نوتیفیکیشن
+            // پیام‌های فلش (ایمن در برابر عدم وجود سشن)
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
-                'error' => fn () => $request->session()->get('error'),
+                'success' => fn () => $hasSession ? $request->session()->get('success') : null,
+                'error'   => fn () => $hasSession ? $request->session()->get('error') : null,
             ],
         ]);
     }
 
-    /**
-     * دریافت منوهای کاربر با استفاده از Stored Procedure
-     */
+    private function getCompany(): ?array
+    {
+        try {
+            $company = DB::select('EXEC sp_GetCompany');
+            return !empty($company) ? (array) $company[0] : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function getUnreadCount(int $userId): int
+    {
+        if ($userId <= 0) {
+            return 0;
+        }
+
+        try {
+            return (int) DB::table('UserNotifications')
+                ->where('UserID', $userId)
+                ->where('IsRead', 0)
+                ->count();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
     private function getUserMenus(int $userId): array
     {
         if ($userId <= 0) {

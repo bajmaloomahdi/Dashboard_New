@@ -2,35 +2,22 @@ import { useState } from 'react';
 
 /* ------------------------------------------------------------------ */
 /* کامپوننت مشترک لوگوی شرکت                                          */
-/* ─────────────────────────────────────────────────────────────────── */
-/* باکس لوگو به‌صورت خودکار با نسبت ابعاد تصویر تطبیق پیدا می‌کند:      */
-/*   مربع  ⇒ باکس مربع                                                 */
-/*   پهن   ⇒ باکس مستطیل افقی                                          */
-/*   کشیده ⇒ باکس مستطیل عمودی                                         */
 /* ------------------------------------------------------------------ */
 
 export type LogoVariant = 'login' | 'welcome' | 'header';
 
 interface SizeConfig {
-    /** حداکثر عرض باکس (لوگوهای پهن) */
     maxWidth: number;
-    /** حداکثر ارتفاع باکس (لوگوهای کشیده عمودی) */
     maxHeight: number;
-    /** اندازه باکس مربعی */
     square: number;
-    /** فاصله داخلی */
     padding: number;
-    /** شعاع گوشه‌ها */
     radius: number;
-    /** سایه */
     shadow: string;
     shadowHover: string;
-    /** اندازه فونت حالت بدون لوگو */
     fallbackFontSize: number;
 }
 
 const PRESETS: Record<LogoVariant, SizeConfig> = {
-    // صفحه ورود — بزرگ
     login: {
         maxWidth: 340,
         maxHeight: 260,
@@ -41,7 +28,6 @@ const PRESETS: Record<LogoVariant, SizeConfig> = {
         shadowHover: '0 24px 55px rgba(0,0,0,0.30)',
         fallbackFontSize: 90,
     },
-    // کارت خوشامدگویی داشبورد — متوسط
     welcome: {
         maxWidth: 170,
         maxHeight: 110,
@@ -52,7 +38,6 @@ const PRESETS: Record<LogoVariant, SizeConfig> = {
         shadowHover: '0 14px 32px rgba(0,0,0,0.28)',
         fallbackFontSize: 44,
     },
-    // هدر بالای صفحه — کوچک
     header: {
         maxWidth: 120,
         maxHeight: 52,
@@ -66,21 +51,13 @@ const PRESETS: Record<LogoVariant, SizeConfig> = {
 };
 
 interface CompanyLogoProps {
-    /** آیا شرکت لوگو دارد؟ معمولاً company?.LogoMimeType */
     hasLogo?: boolean | string | null;
-    /** اندازه از پیش تعریف‌شده */
     variant?: LogoVariant;
-    /** آدرس لوگو (پیش‌فرض: /company/logo) */
     src?: string;
-    /** ایموجی یا محتوای جایگزین وقتی لوگو وجود ندارد */
     fallback?: React.ReactNode;
-    /** رنگ پس‌زمینه باکس */
     background?: string;
-    /** افکت هاور */
     hoverable?: boolean;
-    /** استایل اضافی روی باکس */
     style?: React.CSSProperties;
-    /** بازنویسی تنظیمات اندازه */
     config?: Partial<SizeConfig>;
 }
 
@@ -104,7 +81,6 @@ export default function CompanyLogo({
     const [hover, setHover] = useState(false);
     const [failed, setFailed] = useState(false);
 
-    /** محاسبه ابعاد باکس بر اساس نسبت ابعاد واقعی تصویر */
     const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
         const img = e.currentTarget;
         const w = img.naturalWidth || 1;
@@ -130,7 +106,13 @@ export default function CompanyLogo({
             boxH = cfg.square;
         }
 
-        setBox({ width: boxW + cfg.padding * 2, height: boxH + cfg.padding * 2 });
+        const finalWidth = boxW + cfg.padding * 2;
+        const finalHeight = boxH + cfg.padding * 2;
+
+        setBox({
+            width: finalWidth,
+            height: finalHeight,
+        });
         setReady(true);
     };
 
@@ -150,8 +132,7 @@ export default function CompanyLogo({
         maxWidth: '100%',
         opacity: showImage ? (ready ? 1 : 0) : 1,
         transform: hover && hoverable ? 'translateY(-3px) scale(1.02)' : 'none',
-        transition:
-            'width .35s cubic-bezier(.4,0,.2,1), height .35s cubic-bezier(.4,0,.2,1), transform .3s ease, box-shadow .3s ease, opacity .3s ease',
+        transition: 'width .35s ease, height .35s ease, transform .3s ease, box-shadow .3s ease, opacity .3s ease',
         fontSize: showImage ? undefined : cfg.fallbackFontSize,
         lineHeight: 1,
         ...style,
@@ -165,7 +146,7 @@ export default function CompanyLogo({
         >
             {showImage ? (
                 <img
-                    src={src || `/company/logo?t=${Date.now()}`}
+                    src={src || '/company/logo'}
                     alt="لوگوی شرکت"
                     onLoad={handleLoad}
                     onError={() => setFailed(true)}

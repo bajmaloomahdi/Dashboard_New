@@ -25,7 +25,7 @@ interface HeaderProps {
 }
 
 /**
- * گرفتن تاریخ شمسی فرمت شده (دستی برای ترتیب درست)
+ * گرفتن تاریخ شمسی فرمت شده
  */
 const getPersianDate = (date: Date): string => {
     const weekday = new Intl.DateTimeFormat('fa-IR', {
@@ -51,7 +51,7 @@ const getPersianDate = (date: Date): string => {
 };
 
 /**
- * گرفتن ساعت فرمت شده (با اعداد لاتین)
+ * گرفتن ساعت فرمت شده
  */
 const getPersianTime = (date: Date): string => {
     const formatter = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
@@ -64,14 +64,12 @@ const getPersianTime = (date: Date): string => {
 };
 
 export default function Header({ user, collapsed, onToggleCollapse }: HeaderProps) {
-    // state زمان
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    // تعداد اعلان‌های خوانده‌نشده (از shared props)
-    const { unreadNotificationsCount } = usePage().props as any;
+    // دریافت تعداد پیام‌ها و شماره نسخه از props سراسری اینرشیا
+    const { unreadNotificationsCount, appVersion } = usePage().props as any;
     const unreadCount = unreadNotificationsCount || 0;
 
-    // به‌روزرسانی زمان هر ثانیه
     useEffect(() => {
         const timer = setInterval(() => {
             setCurrentTime(new Date());
@@ -222,7 +220,27 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                 />
             </div>
 
-            <Space size="middle">
+            <Space size="middle" align="center">
+                {/* برچسب نسخه نرم‌افزار به صورت فارسی */}
+                <div
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px 12px',
+                        borderRadius: 8,
+                        background: '#EDE9FE',
+                        color: '#6D28D9',
+                        border: '1px solid #DDD6FE',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        direction: 'rtl',
+                        height: 40,
+                    }}
+                >
+                    نسخه : {appVersion || '1.0.0'}
+                </div>
+
                 {/* تاریخ و ساعت شمسی */}
                 <div
                     style={{
@@ -270,7 +288,7 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                     </div>
                 </div>
 
-                {/* آیکون پاکت اعلان‌ها - با تعداد خوانده‌نشده */}
+                {/* آیکون پیام‌ها */}
                 <Tooltip title={unreadCount > 0 ? `${unreadCount} پیام خوانده‌نشده` : 'پیام‌ها'}>
                     <Badge count={unreadCount} showZero={false} overflowCount={99} offset={[2, 8]}>
                         <Button
@@ -286,7 +304,7 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                     </Badge>
                 </Tooltip>
 
-                {/* منوی کاربر - سفارشی */}
+                {/* منوی کاربر */}
                 <Dropdown
                     dropdownRender={() => dropdownContent}
                     placement="bottomLeft"

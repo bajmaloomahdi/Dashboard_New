@@ -11,6 +11,7 @@ class ProjectsController extends Controller
 {
     /**
      * لیست پروژه‌ها + داده‌های کمکی (کاربران و وضعیت‌ها) برای فرم‌ها
+     * فقط پروژه‌هایی که کاربر جاری عضو یا مسئول آن است نمایش داده می‌شود.
      */
     public function index(Request $request)
     {
@@ -18,15 +19,13 @@ class ProjectsController extends Controller
         $isActive = $request->input('is_active');
         $statusId = $request->input('project_status_id');
 
-        // @UserID = NULL یعنی همه پروژه‌ها (ادمین همه را می‌بیند).
-        // بعداً برای تب «پروژه‌های من» مقدار Auth::id() فرستاده می‌شود.
         $projects = DB::select(
             'EXEC sp_GetProjects @SearchText = ?, @IsActive = ?, @ProjectStatusID = ?, @UserID = ?',
             [
                 $search ?: null,
                 $isActive !== null && $isActive !== '' ? (int) $isActive : null,
                 $statusId !== null && $statusId !== '' ? (int) $statusId : null,
-                null,
+                Auth::id(),
             ]
         );
 
@@ -44,6 +43,31 @@ class ProjectsController extends Controller
                 'is_active'         => $isActive,
                 'project_status_id' => $statusId,
             ],
+        ]);
+    }
+
+    /**
+     * جزئیات یک پروژه (فقط برای اعضا/مسئول/سازنده همان پروژه)
+     */
+    public function show(int $id)
+    {
+        $projects = DB::select(
+            'EXEC sp_GetProjects @SearchText = NULL, @IsActive = NULL, @ProjectStatusID = NULL, @UserID = ?',
+            [Auth::id()]
+        );
+        $project = collect($projects)->firstWhere('ProjectID', $id);
+
+        if (!$project) {
+            return redirect()->route('projects.index')
+                ->with('error', 'پروژه مورد نظر یافت نشد یا به آن دسترسی ندارید.');
+        }
+
+        $members = DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$id]);
+        $this->attachPositionTitles($members);
+
+        return Inertia::render('Projects/Show', [
+            'project' => $project,
+            'members' => $members,
         ]);
     }
 

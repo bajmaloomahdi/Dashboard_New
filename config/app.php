@@ -20,7 +20,7 @@ return [
     | Application Version
     |--------------------------------------------------------------------------
     |
-    | This value defines the current version of the application.
+    | شماره نسخه برنامه که در هدر و فوتر و لاگ پچ‌ها استفاده می‌شود.
     |
     */
 

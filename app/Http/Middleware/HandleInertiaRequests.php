@@ -17,13 +17,13 @@ class HandleInertiaRequests extends Middleware
         $hasSession = $request->hasSession();
 
         return array_merge(parent::share($request), [
-            // شماره نسخه فارسی برای هدر
-            'appVersion' => config('app.version', '1.0.0'),
+            // شماره نسخه برای نمایش در هدر
+            'appVersion' => config('app.version', '1.0.1'),
 
-            // اطلاعات و لوگوی شرکت
+            // اطلاعات شرکت (لوگو و نام)
             'company' => fn () => $this->getCompany(),
 
-            // پیام‌های خوانده‌نشده
+            // تعداد پیام‌های خوانده‌نشده کاربر
             'unreadNotificationsCount' => fn () => $user ? $this->getUnreadCount($userId) : 0,
             'unreadCount'              => fn () => $user ? $this->getUnreadCount($userId) : 0,
 
@@ -32,10 +32,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
             ],
 
-            // منوهای کاربر
+            // منوهای کاربر بر اساس دسترسی
             'menus' => fn () => $user ? $this->getUserMenus($userId) : [],
 
-            // پیام‌های فلش (ایمن در برابر عدم وجود سشن)
+            // پیام‌های فلش
             'flash' => [
                 'success' => fn () => $hasSession ? $request->session()->get('success') : null,
                 'error'   => fn () => $hasSession ? $request->session()->get('error') : null,

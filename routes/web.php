@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\MsgPriorityController;
+use App\Http\Controllers\ProjectsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -163,14 +164,22 @@ Route::middleware('auth')->group(function () {
     Route::post('msg-priorities/{id}/toggle', [MsgPriorityController::class, 'toggleActive'])->name('msg-priorities.toggle');
 
 
+    // ───────────────────────── پروژه‌ها ─────────────────────────
+    Route::get('/projects', [ProjectsController::class, 'index'])->name('projects.index');
+    Route::post('/projects', [ProjectsController::class, 'store'])->name('projects.store');
+    Route::get('/projects/{id}', [ProjectsController::class, 'show'])->name('projects.show');
+    Route::put('/projects/{id}', [ProjectsController::class, 'update'])->name('projects.update');
+    Route::post('/projects/{id}/toggle', [ProjectsController::class, 'toggleActive'])->name('projects.toggle-active');
+    Route::get('/projects/{id}/members', [ProjectsController::class, 'members'])->name('projects.members');
+    Route::post('/projects/{id}/members', [ProjectsController::class, 'addMember'])->name('projects.members.add');
+    Route::delete('/projects/{id}/members', [ProjectsController::class, 'removeMember'])->name('projects.members.remove');
+
+
     // تنظیمات شرکت
     Route::get('company', [CompanyController::class, 'index'])->name('company.index');
     Route::post('company', [CompanyController::class, 'store'])->name('company.store');
 
-
-
-
-     // پروفایل
+    // پروفایل
     Route::get('/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password');
     Route::post('/change-password', [ProfileController::class, 'changePassword']);
 

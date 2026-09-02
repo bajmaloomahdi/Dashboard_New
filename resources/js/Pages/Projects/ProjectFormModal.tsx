@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useForm } from '@inertiajs/react';
 import PersianDateInput from '../../Components/PersianDateInput';
+import { getUserOptionLabel } from '../../Utils/userHelpers';
 
 interface Project {
     ProjectID: number;
@@ -20,6 +21,7 @@ interface Project {
     PlannedEndDate: string | null;
     ActualEndDate: string | null;
     ProjectStatusID: number;
+    ProjectPriorityID: number | null;
     ProgressPercent: number;
     IsActive: boolean | number;
 }
@@ -27,10 +29,19 @@ interface Project {
 interface Option {
     UserID: number;
     FullName: string;
+    FirstName?: string | null;
+    LastName?: string | null;
+    UserName?: string | null;
+    PositionTitle?: string | null;
 }
 interface StatusOption {
     ProjectStatusID: number;
     Title: string;
+}
+interface PriorityOption {
+    ProjectPriorityID: number;
+    Name: string;
+    ColorHex: string;
 }
 
 interface ProjectFormModalProps {
@@ -39,6 +50,7 @@ interface ProjectFormModalProps {
     editingProject: Project | null;
     users: Option[];
     statuses: StatusOption[];
+    priorities: PriorityOption[];
 }
 
 export default function ProjectFormModal({
@@ -47,6 +59,7 @@ export default function ProjectFormModal({
     editingProject,
     users,
     statuses,
+    priorities,
 }: ProjectFormModalProps) {
     const [form] = Form.useForm();
     const isEdit = !!editingProject;
@@ -58,6 +71,7 @@ export default function ProjectFormModal({
         ProjectTitle: '',
         Description: '',
         ProjectStatusID: 2,
+        ProjectPriorityID: null as number | null,
         ProgressPercent: 0,
         StartDate: null as string | null,
         PlannedEndDate: null as string | null,
@@ -75,6 +89,7 @@ export default function ProjectFormModal({
                     ProjectTitle: editingProject.ProjectTitle || '',
                     Description: editingProject.Description || '',
                     ProjectStatusID: editingProject.ProjectStatusID ?? 2,
+                    ProjectPriorityID: editingProject.ProjectPriorityID ?? null,
                     ProgressPercent: editingProject.ProgressPercent ?? 0,
                     StartDate: editingProject.StartDate || null,
                     PlannedEndDate: editingProject.PlannedEndDate || null,
@@ -89,6 +104,7 @@ export default function ProjectFormModal({
                     ProjectTitle: d.ProjectTitle,
                     Description: d.Description,
                     ProjectStatusID: d.ProjectStatusID,
+                    ProjectPriorityID: d.ProjectPriorityID,
                     ProgressPercent: d.ProgressPercent,
                     IsActive: d.IsActive,
                 });
@@ -211,7 +227,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col span={6}>
                         <Form.Item
                             label="وضعیت پروژه"
                             name="ProjectStatusID"
@@ -228,7 +244,38 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col span={6}>
+                        <Form.Item label="اولویت پروژه" name="ProjectPriorityID">
+                            <Select
+                                placeholder="انتخاب اولویت"
+                                allowClear
+                                options={(priorities || []).map((p) => ({
+                                    value: p.ProjectPriorityID,
+                                    label: (
+                                        <span>
+                                            <span
+                                                style={{
+                                                    display: 'inline-block',
+                                                    width: 10,
+                                                    height: 10,
+                                                    borderRadius: '50%',
+                                                    background: p.ColorHex,
+                                                    marginLeft: 8,
+                                                }}
+                                            />
+                                            {p.Name}
+                                        </span>
+                                    ),
+                                }))}
+                                value={data.ProjectPriorityID}
+                                onChange={(v) => setData('ProjectPriorityID', v ?? null)}
+                                size="large"
+                                disabled={processing}
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    <Col span={6}>
                         <Form.Item label="درصد پیشرفت" name="ProgressPercent">
                             <InputNumber
                                 min={0}
@@ -243,7 +290,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col span={6}>
                         <Form.Item label="فعال" name="IsActive" valuePropName="checked">
                             <Switch
                                 checked={data.IsActive}
@@ -301,7 +348,7 @@ export default function ProjectFormModal({
                                         placeholder="انتخاب مسئول"
                                         showSearch
                                         optionFilterProp="label"
-                                        options={(users || []).map((u) => ({ value: u.UserID, label: u.FullName }))}
+                                        options={(users || []).map((u) => ({ value: u.UserID, label: getUserOptionLabel(u) }))}
                                         value={data.ResponsibleUserID}
                                         onChange={(v) => setData('ResponsibleUserID', v)}
                                         size="large"
@@ -323,7 +370,7 @@ export default function ProjectFormModal({
                                         placeholder="انتخاب اعضا"
                                         optionFilterProp="label"
                                         maxTagCount="responsive"
-                                        options={memberOptions.map((u) => ({ value: u.UserID, label: u.FullName }))}
+                                        options={memberOptions.map((u) => ({ value: u.UserID, label: getUserOptionLabel(u) }))}
                                         value={data.MemberUserIDs}
                                         onChange={(v) => setData('MemberUserIDs', v)}
                                         size="large"

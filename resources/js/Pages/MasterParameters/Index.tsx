@@ -11,7 +11,6 @@ import {
     Col,
     Select,
     Popconfirm,
-    Statistic,
 } from 'antd';
 import {
     PlusOutlined,
@@ -27,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import MasterParameterFormModal from './MasterParameterFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -331,18 +331,16 @@ export default function MasterParametersIndex() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <SettingOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        مدیریت پارامترهای Master
-                    </Title>
-                    <Text type="secondary">
-                        تعریف پارامترهای عمومی برای استفاده در گزارشات
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<SettingOutlined />}
+                title="مدیریت پارامترهای Master"
+                subtitle="تعریف پارامترهای عمومی برای استفاده در گزارشات"
+                stats={[
+                    { icon: <SettingOutlined />, label: 'کل پارامترها', value: `${totalCount} پارامتر` },
+                    { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} پارامتر` },
+                    { icon: <LinkOutlined />, label: 'در حال استفاده', value: `${usedCount} پارامتر` },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -352,42 +350,8 @@ export default function MasterParametersIndex() {
                     >
                         پارامتر جدید
                     </Button>
-                </Col>
-            </Row>
-
-            {/* آمار */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.primary}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>کل پارامترها</span>}
-                            value={totalCount}
-                            prefix={<SettingOutlined style={{ color: THEME.primary }} />}
-                            valueStyle={{ color: THEME.primary, fontSize: 24, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.success}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>پارامترهای فعال</span>}
-                            value={activeCount}
-                            prefix={<CheckCircleOutlined style={{ color: THEME.success }} />}
-                            valueStyle={{ color: THEME.success, fontSize: 24, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: '3px solid #7C3AED' }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>در حال استفاده</span>}
-                            value={usedCount}
-                            prefix={<LinkOutlined style={{ color: '#7C3AED' }} />}
-                            valueStyle={{ color: '#7C3AED', fontSize: 24, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* فیلترها - همرنگ هدر جدول */}
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>

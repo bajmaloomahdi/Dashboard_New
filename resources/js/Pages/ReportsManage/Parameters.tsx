@@ -9,14 +9,11 @@ import {
     Row,
     Col,
     Switch,
-    Statistic,
     Alert,
 } from 'antd';
 import {
     SaveOutlined,
-    ArrowLeftOutlined,
     SettingOutlined,
-    BarChartOutlined,
     DatabaseOutlined,
     CheckCircleOutlined,
     StopOutlined,
@@ -27,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import { THEME, STYLES, columnHelpers } from '../../theme';
@@ -261,29 +259,21 @@ export default function Parameters() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/reports-manage')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت به لیست
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <LinkOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                اتصال پارامترها به گزارش
-                            </Title>
-                            <Text type="secondary">
-                                گزارش: <Text strong style={{ color: THEME.primary }}>{report.ReportTitle}</Text>
-                            </Text>
-                        </div>
-                    </Space>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<LinkOutlined />}
+                title="اتصال پارامترها به گزارش"
+                subtitle={`گزارش: ${report.ReportTitle}`}
+                backHref="/reports-manage"
+                backLabel="بازگشت به لیست"
+                tags={[
+                    { label: `کد: ${report.ReportCode}` },
+                    ...(report.MenuTitle ? [{ label: report.MenuTitle }] : []),
+                ]}
+                stats={[
+                    { icon: <SettingOutlined />, label: 'کل پارامترها', value: `${masterParameters?.length || 0} پارامتر` },
+                    { icon: <CheckCircleOutlined />, label: 'انتخاب‌شده', value: `${selectedIds.size} پارامتر` },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<SaveOutlined />}
@@ -295,8 +285,8 @@ export default function Parameters() {
                     >
                         ذخیره تغییرات
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* هشدار تغییرات */}
             {hasChanges && (
@@ -308,63 +298,6 @@ export default function Parameters() {
                     style={{ marginBottom: 16, borderRadius: 8 }}
                 />
             )}
-
-            {/* کارت اطلاعات گزارش */}
-            <Card
-                style={{
-                    marginBottom: 16,
-                    ...STYLES.card,
-                    background: THEME.primaryGradientLight,
-                }}
-            >
-                <Row align="middle" gutter={16}>
-                    <Col>
-                        <div style={STYLES.iconBoxLarge}>
-                            <BarChartOutlined style={{ color: '#fff', fontSize: 24 }} />
-                        </div>
-                    </Col>
-                    <Col flex="auto">
-                        <Title level={4} style={{ margin: 0, color: THEME.textPrimary }}>
-                            {report.ReportTitle}
-                        </Title>
-                        <Space size="middle" style={{ marginTop: 4 }}>
-                            <Tag color="purple" style={{ borderRadius: 6, fontWeight: 600 }}>
-                                کد: {report.ReportCode}
-                            </Tag>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                <DatabaseOutlined /> {report.ProcedureName}
-                            </Text>
-                            {report.MenuTitle && (
-                                <Tag color="cyan" style={{ borderRadius: 6 }}>{report.MenuTitle}</Tag>
-                            )}
-                        </Space>
-                    </Col>
-                </Row>
-            </Card>
-
-            {/* آمار */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-                <Col xs={12} sm={12}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.primary}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>کل پارامترهای Master</span>}
-                            value={masterParameters?.length || 0}
-                            prefix={<SettingOutlined style={{ color: THEME.primary }} />}
-                            valueStyle={{ color: THEME.primary, fontSize: 24, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={12} sm={12}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.success}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>پارامترهای انتخاب شده</span>}
-                            value={selectedIds.size}
-                            prefix={<CheckCircleOutlined style={{ color: THEME.success }} />}
-                            valueStyle={{ color: THEME.success, fontSize: 24, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-            </Row>
 
             {/* جدول */}
             <Card style={STYLES.card}>

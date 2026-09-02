@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import UnitFormModal from './UnitFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -231,17 +232,19 @@ export default function OrganizationalUnitsIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <ApartmentOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        واحدهای سازمانی
-                    </Title>
-                    <Text type="secondary">
-                        مدیریت ساختار سازمانی و سلسله‌مراتب واحدها
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<ApartmentOutlined />}
+                title="واحدهای سازمانی"
+                subtitle="مدیریت ساختار سازمانی و سلسله‌مراتب واحدها"
+                stats={[
+                    { icon: <ApartmentOutlined />, label: 'تعداد کل', value: `${(units || []).length} واحد` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(units || []).filter((u: Unit) => columnHelpers.toBool(u.IsActive)).length} واحد`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -251,8 +254,8 @@ export default function OrganizationalUnitsIndex() {
                     >
                         واحد جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

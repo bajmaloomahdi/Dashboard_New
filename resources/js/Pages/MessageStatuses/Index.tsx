@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import MessageStatusFormModal from './MessageStatusFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -189,17 +190,19 @@ export default function MessageStatusesIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <FlagOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        وضعیت‌های پیام
-                    </Title>
-                    <Text type="secondary">
-                        تعریف وضعیت‌های پیام (ارسال شده، در حال انجام، انجام شده، ...)
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<FlagOutlined />}
+                title="وضعیت‌های پیام"
+                subtitle="تعریف وضعیت‌های پیام (ارسال شده، در حال انجام، انجام شده، ...)"
+                stats={[
+                    { icon: <FlagOutlined />, label: 'تعداد کل', value: `${(messageStatuses || []).length} وضعیت` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(messageStatuses || []).filter((s: MessageStatus) => columnHelpers.toBool(s.IsActive)).length} وضعیت`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -209,8 +212,8 @@ export default function MessageStatusesIndex() {
                     >
                         وضعیت جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

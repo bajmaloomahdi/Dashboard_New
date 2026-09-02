@@ -21,6 +21,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { THEME, STYLES } from '../../theme';
 
@@ -55,6 +56,7 @@ export default function CompanyIndex() {
         Code: company?.Code || '',
         Name: company?.Name || '',
         Description: company?.Description || '',
+        SiteTitle: company?.SiteTitle || '',
         Logo: null as File | null,
         Favicon: null as File | null,
     });
@@ -75,6 +77,7 @@ export default function CompanyIndex() {
                 Code: company.Code || '',
                 Name: company.Name || '',
                 Description: company.Description || '',
+                SiteTitle: company.SiteTitle || '',
             });
         }
     }, [company]);
@@ -108,17 +111,11 @@ export default function CompanyIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <ShopOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        تنظیمات شرکت
-                    </Title>
-                    <Text type="secondary">
-                        مشخصات، لوگو و فاوآیکون شرکت
-                    </Text>
-                </Col>
-            </Row>
+            <PageHeader
+                icon={<ShopOutlined />}
+                title="تنظیمات شرکت"
+                subtitle="مشخصات، لوگو و فاوآیکون شرکت"
+            />
 
             <Card style={STYLES.card}>
                 <Form form={form} layout="vertical" requiredMark>
@@ -179,6 +176,25 @@ export default function CompanyIndex() {
                                     rows={4}
                                     maxLength={1000}
                                     showCount
+                                />
+                            </Form.Item>
+                        </Col>
+
+                        {/* عنوان صفحه / نام روی صفحه اصلی موبایل */}
+                        <Col span={24}>
+                            <Form.Item
+                                label="عنوان صفحه (کنار فاوآیکون و نام هنگام افزودن به صفحه اصلی موبایل)"
+                                name="SiteTitle"
+                                rules={[{ max: 100, message: 'حداکثر 100 کاراکتر' }]}
+                                validateStatus={errors.SiteTitle ? 'error' : ''}
+                                help={errors.SiteTitle || 'اگر خالی بماند، از «پنل مدیریت» استفاده می‌شود.'}
+                            >
+                                <Input
+                                    placeholder="مثلاً: پنل مدیریت شرکت داروسازی..."
+                                    value={data.SiteTitle}
+                                    onChange={(e) => setData('SiteTitle', e.target.value)}
+                                    size="large"
+                                    maxLength={100}
                                 />
                             </Form.Item>
                         </Col>

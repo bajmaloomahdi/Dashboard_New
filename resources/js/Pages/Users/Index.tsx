@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import UserFormModal from './UserFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -340,17 +341,24 @@ export default function UsersIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <UserOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        مدیریت کاربران
-                    </Title>
-                    <Text type="secondary">
-                        مشاهده، ایجاد و ویرایش کاربران سیستم
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<UserOutlined />}
+                title="مدیریت کاربران"
+                subtitle="مشاهده، ایجاد و ویرایش کاربران سیستم"
+                stats={[
+                    { icon: <UserOutlined />, label: 'تعداد کل', value: `${(users || []).length} کاربر` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(users || []).filter((u: User) => columnHelpers.toBool(u.IsActive)).length} کاربر`,
+                    },
+                    {
+                        icon: <LockOutlined />,
+                        label: 'قفل‌شده',
+                        value: `${(users || []).filter((u: User) => columnHelpers.toBool(u.IsLocked)).length} کاربر`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<UserAddOutlined />}
@@ -360,8 +368,8 @@ export default function UsersIndex() {
                     >
                         کاربر جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

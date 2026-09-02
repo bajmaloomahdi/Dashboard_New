@@ -23,16 +23,18 @@ import {
     TeamOutlined,
     ProjectOutlined,
     EyeOutlined,
+    CalendarOutlined,
+    UserOutlined,
+    CrownOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import ProjectFormModal from './ProjectFormModal';
 import ProjectMembersModal from './ProjectMembersModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
-import DataGrid from '../../Components/DataGrid';
 import { THEME, STYLES, columnHelpers } from '../../theme';
 import { gregorianToJalaliDisplay } from '../../Utils/jalali';
-import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
 
@@ -46,6 +48,9 @@ interface Project {
     ActualEndDate: string | null;
     ProjectStatusID: number;
     ProjectStatusTitle: string;
+    ProjectPriorityID: number | null;
+    PriorityName: string | null;
+    PriorityColor: string | null;
     ProgressPercent: number;
     IsActive: boolean | number;
     CreatorName: string;
@@ -62,13 +67,19 @@ interface StatusOption {
     ProjectStatusID: number;
     Title: string;
 }
+interface PriorityOption {
+    ProjectPriorityID: number;
+    Name: string;
+    ColorHex: string;
+}
 
 export default function ProjectsIndex() {
-    const { projects, users, statuses, flash } = usePage().props as any;
+    const { projects, users, statuses, priorities, flash } = usePage().props as any;
 
     const [searchText, setSearchText] = useState('');
     const [statusFilter, setStatusFilter] = useState<number | undefined>(undefined);
     const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined);
+    const [priorityFilter, setPriorityFilter] = useState<number | undefined>(undefined);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -113,6 +124,7 @@ export default function ProjectsIndex() {
         setSearchText('');
         setStatusFilter(undefined);
         setActiveFilter(undefined);
+        setPriorityFilter(undefined);
     };
 
     const filteredProjects = (projects || []).filter((p: Project) => {
@@ -125,183 +137,30 @@ export default function ProjectsIndex() {
             activeFilter === undefined || activeFilter === ''
                 ? true
                 : columnHelpers.toBool(p.IsActive) === (activeFilter === '1');
-        return matchSearch && matchStatus && matchActive;
+        const matchPriority = priorityFilter === undefined || p.ProjectPriorityID === priorityFilter;
+        return matchSearch && matchStatus && matchActive && matchPriority;
     });
-
-    const customColumns: ColumnsType<Project> = [
-        {
-            title: 'کد',
-            dataIndex: 'ProjectCode',
-            key: 'ProjectCode',
-            width: 110,
-            align: 'center',
-            render: (code: string) => <span style={STYLES.codeBadge}>{code}</span>,
-        },
-        {
-            title: 'عنوان پروژه',
-            dataIndex: 'ProjectTitle',
-            key: 'ProjectTitle',
-            render: (title: string, rec: Project) => (
-                <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
-                    <Text strong>{title}</Text>
-                    {rec.Description && (
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                            {rec.Description.length > 70 ? rec.Description.substring(0, 70) + '...' : rec.Description}
-                        </Text>
-                    )}
-                </div>
-            ),
-        },
-        {
-            title: 'وضعیت',
-            dataIndex: 'ProjectStatusTitle',
-            key: 'ProjectStatusTitle',
-            width: 130,
-            align: 'center',
-            render: (title: string) => <Tag color="blue" style={{ borderRadius: 6 }}>{title}</Tag>,
-        },
-        {
-            title: 'مسئول',
-            dataIndex: 'ResponsibleName',
-            key: 'ResponsibleName',
-            width: 150,
-            align: 'center',
-            render: (name: string) =>
-                name ? (
-                    <Space size={4}>
-                        <TeamOutlined style={{ color: '#D97706' }} />
-                        <Text>{name}</Text>
-                    </Space>
-                ) : (
-                    <Text type="secondary">—</Text>
-                ),
-        },
-        {
-            title: 'ایجاد کننده',
-            dataIndex: 'CreatorName',
-            key: 'CreatorName',
-            width: 150,
-            align: 'center',
-            render: (name: string) => (name ? <Text>{name}</Text> : <Text type="secondary">—</Text>),
-        },
-        {
-            title: 'تاریخ ایجاد',
-            dataIndex: 'Date_InsertFirst',
-            key: 'Date_InsertFirst',
-            width: 120,
-            align: 'center',
-            render: (d: string | null) =>
-                d ? <span style={STYLES.dateBadge}>{gregorianToJalaliDisplay(d)}</span> : <Text type="secondary">—</Text>,
-        },
-        {
-            title: 'اعضا',
-            dataIndex: 'MemberCount',
-            key: 'MemberCount',
-            width: 90,
-            align: 'center',
-            render: (count: number) => (
-                <Tag color="purple" style={{ borderRadius: 6 }}>{count} نفر</Tag>
-            ),
-        },
-        {
-            title: 'پیشرفت',
-            dataIndex: 'ProgressPercent',
-            key: 'ProgressPercent',
-            width: 160,
-            align: 'center',
-            render: (pct: number) => (
-                <Progress percent={Number(pct) || 0} size="small" />
-            ),
-        },
-        {
-            title: 'تاریخ شروع',
-            dataIndex: 'StartDate',
-            key: 'StartDate',
-            width: 120,
-            align: 'center',
-            render: (d: string | null) =>
-                d ? <span style={STYLES.dateBadge}>{gregorianToJalaliDisplay(d)}</span> : <Text type="secondary">—</Text>,
-        },
-        {
-            title: 'فعالیت',
-            key: 'isActive',
-            width: 110,
-            align: 'center',
-            render: (_, rec: Project) => {
-                const isActive = columnHelpers.toBool(rec.IsActive);
-                return (
-                    <Tag icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />} color={isActive ? 'success' : 'default'} style={{ borderRadius: 6 }}>
-                        {isActive ? 'فعال' : 'غیرفعال'}
-                    </Tag>
-                );
-            },
-        },
-        {
-            title: 'عملیات',
-            key: 'actions',
-            width: 210,
-            align: 'center',
-            render: (_, rec: Project) => {
-                const isActive = columnHelpers.toBool(rec.IsActive);
-                return (
-                    <Space>
-                        <Tooltip title="مشاهده جزئیات">
-                            <Button
-                                type="text"
-                                icon={<EyeOutlined />}
-                                style={{ color: THEME.primary }}
-                                onClick={() => router.visit(`/projects/${rec.ProjectID}`)}
-                            />
-                        </Tooltip>
-                        <Tooltip title="ویرایش">
-                            <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => handleEdit(rec)} />
-                        </Tooltip>
-                        <Tooltip title="مدیریت اعضا">
-                            <Button
-                                type="text"
-                                icon={<TeamOutlined />}
-                                style={{ color: '#722ed1' }}
-                                onClick={() => setMembersModal({ open: true, project: rec })}
-                            />
-                        </Tooltip>
-                        <Popconfirm
-                            title={isActive ? 'غیرفعال کردن پروژه' : 'فعال کردن پروژه'}
-                            description="آیا مطمئن هستید؟"
-                            onConfirm={() => handleToggleActive(rec.ProjectID)}
-                            okText="بله"
-                            cancelText="خیر"
-                            okButtonProps={{ danger: isActive }}
-                        >
-                            <Tooltip title={isActive ? 'غیرفعال کردن' : 'فعال کردن'}>
-                                <Button
-                                    type="text"
-                                    icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
-                                    style={{ color: isActive ? THEME.error : THEME.success }}
-                                />
-                            </Tooltip>
-                        </Popconfirm>
-                    </Space>
-                );
-            },
-        },
-    ];
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <ProjectOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        پروژه‌ها
-                    </Title>
-                    <Text type="secondary">ایجاد و مدیریت پروژه‌ها و اعضای آن‌ها</Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<ProjectOutlined />}
+                title="پروژه‌ها"
+                subtitle="ایجاد و مدیریت پروژه‌ها و اعضای آن‌ها"
+                stats={[
+                    { icon: <ProjectOutlined />, label: 'تعداد کل', value: `${(projects || []).length} پروژه` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(projects || []).filter((p: Project) => columnHelpers.toBool(p.IsActive)).length} پروژه`,
+                    },
+                ]}
+                actions={
                     <Button type="primary" icon={<PlusOutlined />} size="large" style={STYLES.primaryButton} onClick={handleCreate}>
                         پروژه جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">
@@ -348,15 +207,256 @@ export default function ProjectsIndex() {
                 </Row>
             </Card>
 
-            <Card style={STYLES.card}>
-                <DataGrid
-                    columns={[]}
-                    dataSource={filteredProjects}
-                    customColumns={customColumns}
-                    rowKey="ProjectID"
-                    showColumnSearch={false}
-                />
+            {(priorities || []).length > 0 && (
+                <div className="priority-filter-bar">
+                    <span
+                        className={`priority-chip ${priorityFilter === undefined ? 'active' : ''}`}
+                        onClick={() => setPriorityFilter(undefined)}
+                    >
+                        همه
+                    </span>
+                    {(priorities || []).map((p: PriorityOption) => (
+                        <span
+                            key={p.ProjectPriorityID}
+                            className={`priority-chip ${priorityFilter === p.ProjectPriorityID ? 'active' : ''}`}
+                            style={
+                                priorityFilter === p.ProjectPriorityID
+                                    ? { background: p.ColorHex, color: '#fff', borderColor: p.ColorHex }
+                                    : { borderColor: p.ColorHex, color: p.ColorHex }
+                            }
+                            onClick={() => setPriorityFilter(priorityFilter === p.ProjectPriorityID ? undefined : p.ProjectPriorityID)}
+                        >
+                            <span
+                                className="priority-dot"
+                                style={{ background: priorityFilter === p.ProjectPriorityID ? '#fff' : p.ColorHex }}
+                            />
+                            {p.Name}
+                        </span>
+                    ))}
+                </div>
+            )}
+
+            <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
+                {filteredProjects.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>
+                        هیچ پروژه‌ای یافت نشد
+                    </div>
+                ) : (
+                    <div className="project-cards-grid">
+                        {filteredProjects.map((rec: Project) => {
+                            const isActive = columnHelpers.toBool(rec.IsActive);
+                            return (
+                                <div
+                                    className="project-card"
+                                    key={rec.ProjectID}
+                                    onClick={() => router.visit(`/projects/${rec.ProjectID}`)}
+                                    style={rec.PriorityColor ? { borderInlineEndColor: rec.PriorityColor } : undefined}
+                                >
+                                    <div className="project-card-header">
+                                        <span style={STYLES.codeBadge}>{rec.ProjectCode}</span>
+                                        <Space size={4}>
+                                            {rec.PriorityName ? (
+                                                <Tag
+                                                    style={{
+                                                        borderRadius: 6,
+                                                        margin: 0,
+                                                        color: rec.PriorityColor || undefined,
+                                                        borderColor: rec.PriorityColor || undefined,
+                                                        background: rec.PriorityColor ? `${rec.PriorityColor}18` : undefined,
+                                                    }}
+                                                >
+                                                    {rec.PriorityName}
+                                                </Tag>
+                                            ) : null}
+                                            <Tag
+                                                icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />}
+                                                color={isActive ? 'success' : 'default'}
+                                                style={{ borderRadius: 6, margin: 0 }}
+                                            >
+                                                {isActive ? 'فعال' : 'غیرفعال'}
+                                            </Tag>
+                                        </Space>
+                                    </div>
+
+                                    <Title level={5} style={{ margin: '10px 0 4px', color: THEME.textPrimary }}>
+                                        <ProjectOutlined style={{ marginLeft: 6, color: THEME.primary }} />
+                                        {rec.ProjectTitle}
+                                    </Title>
+
+                                    {rec.Description ? (
+                                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 10 }}>
+                                            {rec.Description.length > 80 ? rec.Description.substring(0, 80) + '...' : rec.Description}
+                                        </Text>
+                                    ) : (
+                                        <div style={{ marginBottom: 10 }} />
+                                    )}
+
+                                    <Tag color="blue" style={{ borderRadius: 6, marginBottom: 12 }}>
+                                        {rec.ProjectStatusTitle}
+                                    </Tag>
+
+                                    <div className="project-card-progress">
+                                        <Progress percent={Number(rec.ProgressPercent) || 0} size="small" />
+                                    </div>
+
+                                    <div className="project-card-meta">
+                                        <Space size={6}>
+                                            <CrownOutlined style={{ color: '#D97706' }} />
+                                            <Text style={{ fontSize: 12 }}>{rec.ResponsibleName || '—'}</Text>
+                                        </Space>
+                                        <Space size={6}>
+                                            <TeamOutlined style={{ color: '#722ed1' }} />
+                                            <Text style={{ fontSize: 12 }}>{rec.MemberCount} نفر</Text>
+                                        </Space>
+                                    </div>
+
+                                    <div className="project-card-meta">
+                                        <Space size={6}>
+                                            <UserOutlined style={{ color: THEME.textLight }} />
+                                            <Text type="secondary" style={{ fontSize: 12 }}>{rec.CreatorName || '—'}</Text>
+                                        </Space>
+                                        <Space size={6}>
+                                            <CalendarOutlined style={{ color: THEME.textLight }} />
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                {rec.Date_InsertFirst ? gregorianToJalaliDisplay(rec.Date_InsertFirst) : '—'}
+                                            </Text>
+                                        </Space>
+                                    </div>
+
+                                    <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
+                                        <Tooltip title="مشاهده جزئیات">
+                                            <Button
+                                                type="text"
+                                                icon={<EyeOutlined />}
+                                                style={{ color: THEME.primary }}
+                                                onClick={() => router.visit(`/projects/${rec.ProjectID}`)}
+                                            />
+                                        </Tooltip>
+                                        <Tooltip title="ویرایش">
+                                            <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => handleEdit(rec)} />
+                                        </Tooltip>
+                                        <Tooltip title="مدیریت اعضا">
+                                            <Button
+                                                type="text"
+                                                icon={<TeamOutlined />}
+                                                style={{ color: '#722ed1' }}
+                                                onClick={() => setMembersModal({ open: true, project: rec })}
+                                            />
+                                        </Tooltip>
+                                        <Popconfirm
+                                            title={isActive ? 'غیرفعال کردن پروژه' : 'فعال کردن پروژه'}
+                                            description="آیا مطمئن هستید؟"
+                                            onConfirm={() => handleToggleActive(rec.ProjectID)}
+                                            okText="بله"
+                                            cancelText="خیر"
+                                            okButtonProps={{ danger: isActive }}
+                                        >
+                                            <Tooltip title={isActive ? 'غیرفعال کردن' : 'فعال کردن'}>
+                                                <Button
+                                                    type="text"
+                                                    icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+                                                    style={{ color: isActive ? THEME.error : THEME.success }}
+                                                />
+                                            </Tooltip>
+                                        </Popconfirm>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </Card>
+
+            <style>{`
+                .priority-filter-bar {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-bottom: 16px;
+                }
+                .priority-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 14px;
+                    border-radius: 999px;
+                    border: 1.5px solid ${THEME.border};
+                    background: #fff;
+                    color: ${THEME.textSecondary};
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.18s ease;
+                    user-select: none;
+                }
+                .priority-chip:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+                }
+                .priority-chip.active {
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                }
+                .priority-chip:not(.active):first-child {
+                    border-color: ${THEME.primary};
+                    color: ${THEME.primary};
+                }
+                .priority-chip.active:first-child {
+                    background: ${THEME.primaryGradient};
+                    color: #fff;
+                    border-color: transparent;
+                }
+                .priority-dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    display: inline-block;
+                }
+                .project-cards-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                    gap: 18px;
+                }
+                .project-card {
+                    background: #fff;
+                    border: 1px solid ${THEME.border};
+                    border-inline-end-width: 5px;
+                    border-inline-end-style: solid;
+                    border-inline-end-color: transparent;
+                    border-radius: 14px;
+                    padding: 16px;
+                    cursor: pointer;
+                    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+                }
+                .project-card:hover {
+                    transform: translateY(-8px) scale(1.02);
+                    box-shadow: 0 16px 32px rgba(102, 126, 234, 0.22);
+                    border-color: ${THEME.borderPrimary};
+                }
+                .project-card-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .project-card-progress {
+                    margin-bottom: 10px;
+                }
+                .project-card-meta {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding-top: 8px;
+                    border-top: 1px dashed ${THEME.borderLight};
+                    margin-top: 6px;
+                }
+                .project-card-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 2px;
+                    margin-top: 10px;
+                    padding-top: 8px;
+                    border-top: 1px solid ${THEME.borderLight};
+                }
+            `}</style>
 
             <ProjectFormModal
                 open={modalOpen}
@@ -364,6 +464,7 @@ export default function ProjectsIndex() {
                 editingProject={editingProject}
                 users={users || []}
                 statuses={statuses || []}
+                priorities={priorities || []}
             />
 
             <ProjectMembersModal

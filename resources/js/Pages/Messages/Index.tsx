@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
@@ -310,17 +311,18 @@ export default function MessagesIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <InboxOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        کارتابل پیام‌ها
-                    </Title>
-                    <Text type="secondary">
-                        پیام‌های وارده و صادره
-                    </Text>
-                </Col>
-            </Row>
+            <PageHeader
+                icon={<InboxOutlined />}
+                title="کارتابل پیام‌ها"
+                subtitle="پیام‌های وارده و صادره"
+                stats={[
+                    {
+                        icon: activeMode === 'sent' ? <SendOutlined /> : <InboxOutlined />,
+                        label: activeMode === 'sent' ? 'صادره' : 'وارده',
+                        value: `${(messages || []).length} پیام`,
+                    },
+                ]}
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Tabs

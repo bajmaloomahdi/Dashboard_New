@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import PositionFormModal from './PositionFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -269,17 +270,24 @@ export default function PositionsIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <IdcardOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        سمت‌ها
-                    </Title>
-                    <Text type="secondary">
-                        مدیریت سمت‌های سازمانی و جایگاه‌های شغلی
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<IdcardOutlined />}
+                title="سمت‌ها"
+                subtitle="مدیریت سمت‌های سازمانی و جایگاه‌های شغلی"
+                stats={[
+                    { icon: <IdcardOutlined />, label: 'تعداد کل', value: `${(positions || []).length} سمت` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(positions || []).filter((p: Position) => columnHelpers.toBool(p.IsActive)).length} سمت`,
+                    },
+                    {
+                        icon: <CrownOutlined />,
+                        label: 'مدیر واحد',
+                        value: `${(positions || []).filter((p: Position) => columnHelpers.toBool(p.IsUnitManager)).length} سمت`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -289,8 +297,8 @@ export default function PositionsIndex() {
                     >
                         سمت جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

@@ -6,7 +6,9 @@ import { ConfigProvider } from 'antd';
 import faIR from 'antd/locale/fa_IR';
 import { THEME } from './theme';
 
-const appName = import.meta.env.VITE_APP_NAME || 'داشبورد مدیریت';
+// عنوان پایه رو از همون <title> که بلید (از دیتابیس، تنظیمات شرکت) رندر کرده می‌خونیم؛
+// این‌طوری با VITE_APP_NAME (که ممکنه هنوز "Laravel" پیش‌فرض باشه) قاطی نمی‌شه.
+const appName = document.title || 'داشبورد مدیریت';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

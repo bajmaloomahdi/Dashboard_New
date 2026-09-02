@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import MsgPriorityFormModal from './MsgPriorityFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -248,17 +249,19 @@ export default function MsgPrioritiesIndex() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <ThunderboltOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        اولویت‌های پیام
-                    </Title>
-                    <Text type="secondary">
-                        تعریف اولویت‌های پیام (کم، متوسط، زیاد، فوری، ...)
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<ThunderboltOutlined />}
+                title="اولویت‌های پیام"
+                subtitle="تعریف اولویت‌های پیام (کم، متوسط، زیاد، فوری، ...)"
+                stats={[
+                    { icon: <ThunderboltOutlined />, label: 'تعداد کل', value: `${(priorities || []).length} اولویت` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(priorities || []).filter((p: MsgPriority) => columnHelpers.toBool(p.IsActive)).length} اولویت`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -268,8 +271,8 @@ export default function MsgPrioritiesIndex() {
                     >
                         اولویت جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

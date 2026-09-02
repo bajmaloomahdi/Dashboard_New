@@ -9,16 +9,12 @@ import {
     Row,
     Col,
     Switch,
-    Statistic,
     Alert,
-    Avatar,
 } from 'antd';
 import {
     SearchOutlined,
     SaveOutlined,
-    ArrowLeftOutlined,
     SafetyOutlined,
-    UserOutlined,
     TeamOutlined,
     CheckCircleOutlined,
     StopOutlined,
@@ -27,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import { THEME, STYLES, columnHelpers } from '../../theme';
@@ -210,31 +207,18 @@ export default function UserRoles() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/users')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت به لیست
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <SafetyOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                مدیریت نقش‌های کاربر
-                            </Title>
-                            <Text type="secondary">
-                                کاربر: <Text strong style={{ color: THEME.primary }}>{user.FullName || user.UserName}</Text>
-                                {' '}
-                                (@{user.UserName})
-                            </Text>
-                        </div>
-                    </Space>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<SafetyOutlined />}
+                title="مدیریت نقش‌های کاربر"
+                subtitle={`کاربر: ${user.FullName || user.UserName} (@${user.UserName})`}
+                backHref="/users"
+                backLabel="بازگشت به لیست"
+                tags={[{ label: `کد: ${user.UserCode}` }]}
+                stats={[
+                    { icon: <SafetyOutlined />, label: 'کل نقش‌ها', value: `${roles.length} نقش` },
+                    { icon: <CheckCircleOutlined />, label: 'نقش‌های فعلی', value: `${selectedRoleIds.size} نقش` },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<SaveOutlined />}
@@ -246,8 +230,8 @@ export default function UserRoles() {
                     >
                         ذخیره تغییرات
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* هشدار تغییرات */}
             {hasChanges && (
@@ -259,86 +243,6 @@ export default function UserRoles() {
                     style={{ marginBottom: 16, borderRadius: 8 }}
                 />
             )}
-
-            {/* کارت اطلاعات کاربر */}
-            <Card
-                style={{
-                    marginBottom: 16,
-                    ...STYLES.card,
-                    background: THEME.primaryGradientLight,
-                }}
-            >
-                <Row align="middle" gutter={16}>
-                    <Col>
-                        <Avatar
-                            size={64}
-                            style={{
-                                background: THEME.primaryGradient,
-                                fontSize: 24,
-                            }}
-                        >
-                            {user.FirstName?.charAt(0) || <UserOutlined />}
-                        </Avatar>
-                    </Col>
-                    <Col flex="auto">
-                        <div>
-                            <Title level={4} style={{ margin: 0 }}>
-                                {user.FullName || user.UserName}
-                            </Title>
-                            <Space size="middle" style={{ marginTop: 4 }}>
-                                <Text type="secondary">
-                                    <UserOutlined /> {user.UserName}
-                                </Text>
-                                <Tag color="purple" style={{ borderRadius: 6 }}>کد: {user.UserCode}</Tag>
-                                {user.Email && (
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {user.Email}
-                                    </Text>
-                                )}
-                                {user.Mobile && (
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {user.Mobile}
-                                    </Text>
-                                )}
-                            </Space>
-                        </div>
-                    </Col>
-                </Row>
-            </Card>
-
-            {/* آمار */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.primary}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>کل نقش‌ها</span>}
-                            value={roles.length}
-                            prefix={<SafetyOutlined style={{ color: THEME.primary }} />}
-                            valueStyle={{ color: THEME.primary, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.success}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>نقش‌های فعلی کاربر</span>}
-                            value={selectedRoleIds.size}
-                            prefix={<CheckCircleOutlined style={{ color: THEME.success }} />}
-                            valueStyle={{ color: THEME.success, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.warning}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>نقش‌های بدون کاربر</span>}
-                            value={roles.filter((r: Role) => r.UsersCount === 0).length}
-                            prefix={<StopOutlined style={{ color: THEME.warning }} />}
-                            valueStyle={{ color: THEME.warning, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-            </Row>
 
             {/* جدول */}
             <Card style={STYLES.card}>

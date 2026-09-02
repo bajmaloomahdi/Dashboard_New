@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Select, Button, Table, Tag, Space, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined, CrownOutlined, TeamOutlined } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
-import PersianDateInput from '../../Components/PersianDateInput';
-import { gregorianToJalaliDisplay } from '../../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
 import { getUserDisplayName, getUserOptionLabel } from '../../Utils/userHelpers';
 import { toBool } from '../../Utils/bool';
 
@@ -20,6 +19,7 @@ interface Member {
     StartDate: string | null;
     EndDate: string | null;
     IsActive: boolean | number;
+    Date_InsertFirst: string;
 }
 
 interface Option {
@@ -75,7 +75,6 @@ export default function ProjectMembersModal({
     const [loading, setLoading] = useState(false);
 
     const [newUser, setNewUser] = useState<number | null>(null);
-    const [newStartDate, setNewStartDate] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
@@ -107,7 +106,6 @@ export default function ProjectMembersModal({
     useEffect(() => {
         if (open && projectId) {
             setNewUser(null);
-            setNewStartDate(null);
             loadMembers();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,16 +118,15 @@ export default function ProjectMembersModal({
         }
         setSaving(true);
         // اعضای جدید همیشه به‌عنوان عضو عادی اضافه می‌شوند؛ هر پروژه فقط یک مسئول دارد
-        // که در زمان ایجاد پروژه تعیین شده است.
+        // که در زمان ایجاد پروژه تعیین شده است. تاریخ عضویت هم نیازی به انتخاب دستی ندارد؛
+        // زمان واقعی ثبت (Date_InsertFirst) به‌صورت خودکار توسط سرور ثبت می‌شود.
         const result = await api(`/projects/${projectId}/members`, 'POST', {
             UserID: newUser,
             IsResponsible: false,
-            StartDate: newStartDate,
         });
         setSaving(false);
         if (result.success) {
             setNewUser(null);
-            setNewStartDate(null);
             showNotification('success', result.message);
             loadMembers();
         } else {
@@ -188,11 +185,11 @@ export default function ProjectMembersModal({
             ),
         },
         {
-            title: 'تاریخ عضویت',
-            dataIndex: 'StartDate',
-            key: 'StartDate',
-            width: 140,
-            render: (d: string | null) => (d ? <Typography.Text>{gregorianToJalaliDisplay(d)}</Typography.Text> : '—'),
+            title: 'تاریخ ایجاد',
+            dataIndex: 'Date_InsertFirst',
+            key: 'Date_InsertFirst',
+            width: 160,
+            render: (d: string | null) => (d ? <Typography.Text>{gregorianToJalaliDateTimeDisplay(d)}</Typography.Text> : '—'),
         },
         {
             title: 'عملیات',
@@ -240,14 +237,6 @@ export default function ProjectMembersModal({
                         onChange={(v) => setNewUser(v)}
                         options={availableUsers.map((u) => ({ value: u.UserID, label: getUserOptionLabel(u) }))}
                     />
-                    <div style={{ width: 170 }}>
-                        <PersianDateInput
-                            value={newStartDate}
-                            onChange={setNewStartDate}
-                            placeholder="تاریخ عضویت"
-                            size="middle"
-                        />
-                    </div>
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}

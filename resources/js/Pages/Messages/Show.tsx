@@ -17,7 +17,6 @@ import {
     Divider,
 } from 'antd';
 import {
-    ArrowLeftOutlined,
     PaperClipOutlined,
     DownloadOutlined,
     MessageOutlined,
@@ -31,12 +30,12 @@ import {
     CommentOutlined,
     UserAddOutlined,
     PictureOutlined,
-    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
+import ChipTabs from '../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
-import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -289,9 +288,6 @@ export default function MessageShow() {
         });
     };
 
-    const typeColor = (typeName: string) =>
-        typeName === 'وظیفه' ? 'orange' : 'geekblue';
-
     const statusColor = (statusName: string) => {
         switch (statusName) {
             case 'ارسال شده': return 'default';
@@ -304,96 +300,48 @@ export default function MessageShow() {
         }
     };
 
-    /** بیشترین ترتیب نمایش اولویت */
-    const maxPrioritySort = Math.max(1, ...priorityList.map((p) => p.SortOrder || 0));
-
     const formatSize = (bytes: number) => {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
 
+    const [activeTab, setActiveTab] = useState<'message' | 'comments'>('message');
+
+    const tabDefs = [
+        { key: 'message' as const, label: 'پیام', icon: <MessageOutlined />, count: null },
+        {
+            key: 'comments' as const,
+            label: 'نظرات و ضمیمه‌ها',
+            icon: <CommentOutlined />,
+            count: commentList.length + attachmentList.length,
+        },
+    ];
+
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/messages')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <MessageOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                موضوع پیام
-                            </Title>
-                        </div>
-                    </Space>
-                </Col>
-                <Col>
-                    <Space>
-                        {msg.PriorityName ? (
-                            <PriorityTag
-                                name={msg.PriorityName}
-                                sortOrder={msg.PrioritySortOrder}
-                                maxSortOrder={maxPrioritySort}
-                                description={msg.PriorityDescription}
-                                style={{ padding: '4px 16px', fontSize: 14 }}
-                            />
-                        ) : null}
-                        <Tag color={typeColor(msg.MessageTypeName)} style={{ borderRadius: 8, padding: '4px 16px', fontSize: 14 }}>
-                            {msg.MessageTypeName}
-                        </Tag>
-                    </Space>
-                </Col>
-            </Row>
+            <PageHeader
+                icon={<MessageOutlined />}
+                title={msg.Subject}
+                subtitle={msg.MessageNumber || undefined}
+                backHref="/messages"
+                backLabel="بازگشت"
+                tags={[
+                    { label: msg.MessageTypeName },
+                    ...(msg.PriorityName ? [{ label: `اولویت ${msg.PriorityName}` }] : []),
+                ]}
+                stats={[
+                    { icon: <UserOutlined />, label: 'فرستنده', value: msg.SenderName },
+                    { icon: <ClockCircleOutlined />, label: 'تاریخ ارسال', value: new Date(msg.CreateDate).toLocaleString('fa-IR') },
+                ]}
+            />
 
-            {/* سربرگ */}
-            <Card
-                style={{
-                    marginBottom: 16,
-                    borderRadius: 12,
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    border: 'none',
-                }}
-            >
-                <Row align="middle" gutter={16}>
-                    <Col>
-                        <Avatar size={56} style={{ background: 'rgba(255,255,255,0.25)', color: '#fff', fontSize: 24 }}>
-                            <MessageOutlined />
-                        </Avatar>
-                    </Col>
-                    <Col flex="auto">
-                        <Title level={4} style={{ margin: 0, color: '#fff' }}>
-                            {msg.Subject}
-                            {msg.MessageNumber ? (
-                                <Tag style={{ background: 'rgba(255,255,255,0.25)', color: '#fff', borderRadius: 6, border: 'none', marginRight: 8, fontSize: 13 }}>
-                                    {msg.MessageNumber}
-                                </Tag>
-                            ) : null}
-                        </Title>
-                        <Space split={<Text style={{ color: 'rgba(255,255,255,0.7)' }}>|</Text>} style={{ marginTop: 8, flexWrap: 'wrap' }}>
-                            <Text style={{ color: 'rgba(255,255,255,0.95)' }}>
-                                <UserOutlined /> {msg.SenderName}
-                            </Text>
-                            <Text style={{ color: 'rgba(255,255,255,0.95)' }}>
-                                <ClockCircleOutlined /> {new Date(msg.CreateDate).toLocaleString('fa-IR')}
-                            </Text>
-                            {msg.PriorityName ? (
-                                <Text style={{ color: 'rgba(255,255,255,0.95)' }}>
-                                    <ThunderboltOutlined /> اولویت: {msg.PriorityName}
-                                </Text>
-                            ) : null}
-                        </Space>
-                    </Col>
-                </Row>
-            </Card>
+            <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
 
-            {/* تغییر وضعیت وظیفه — فقط برای آخرین گیرنده */}
-            {isTask && isLastRecipient ? (
+            {activeTab === 'message' && (
+                <>
+                    {/* تغییر وضعیت وظیفه — فقط برای آخرین گیرنده */}
+                    {isTask && isLastRecipient ? (
                 <Card
                     title={whiteTitle(
                         <Space>
@@ -575,94 +523,6 @@ export default function MessageShow() {
                 )}
             </Card>
 
-            {/* نظرات / توضیحات */}
-            <Card
-                title={whiteTitle(
-                    <Space>
-                        <CommentOutlined />
-                        <span>نظرات و توضیحات</span>
-                    </Space>
-                )}
-                headStyle={gradientHeadStyle}
-                style={{ ...STYLES.card, marginBottom: 16 }}
-            >
-                {commentList.length === 0 ? (
-                    <Empty description="هنوز توضیحی ثبت نشده است" />
-                ) : (
-                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        {commentList.map((c) => (
-                            <div
-                                key={c.MessageCommentID}
-                                style={{
-                                    background: '#fafafa',
-                                    borderRadius: 10,
-                                    padding: '12px 16px',
-                                    width: '100%',
-                                }}
-                            >
-                                <Space>
-                                    <Avatar size={28} style={{ background: '#667eea', fontSize: 13 }}>
-                                        {c.UserName ? c.UserName.charAt(0) : <UserOutlined />}
-                                    </Avatar>
-                                    <Text strong>{c.UserName}</Text>
-                                    <Text type="secondary" style={{ fontSize: 11 }}>
-                                        <ClockCircleOutlined /> {new Date(c.CreateDate).toLocaleString('fa-IR')}
-                                    </Text>
-                                </Space>
-                                <div style={{ marginTop: 8 }}>
-                                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
-                                        {c.Comment || ''}
-                                    </Text>
-                                </div>
-                            </div>
-                        ))}
-                    </Space>
-                )}
-
-                {/* فرم افزودن نظر — فقط اگه مجاز باشه */}
-                {canComment ? (
-                    <>
-                        <Divider style={{ margin: '20px 0 16px' }} />
-                        {commentErrors?.comment ? (
-                            <Alert type="error" message={commentErrors.comment} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />
-                        ) : null}
-                        <Row gutter={16}>
-                            <Col xs={24}>
-                                <Input.TextArea
-                                    rows={3}
-                                    placeholder="توضیح یا نظر خود را بنویسید..."
-                                    value={commentData.Comment}
-                                    onChange={(e) => setCommentData('Comment', e.target.value)}
-                                    maxLength={2000}
-                                    showCount
-                                />
-                            </Col>
-                            <Col xs={24} style={{ marginTop: 12 }}>
-                                <Upload
-                                    beforeUpload={beforeCommentUpload}
-                                    fileList={commentFileList}
-                                    onChange={handleCommentUploadChange}
-                                    multiple
-                                >
-                                    <Button icon={<UploadOutlined />}>ضمیمه فایل</Button>
-                                </Upload>
-                            </Col>
-                        </Row>
-                        <Row justify="end" style={{ marginTop: 12 }}>
-                            <Button
-                                type="primary"
-                                icon={<SaveOutlined />}
-                                size="large"
-                                loading={commentProcessing}
-                                onClick={handleSubmitComment}
-                            >
-                                {getSubmitButtonText()}
-                            </Button>
-                        </Row>
-                    </>
-                ) : null}
-            </Card>
-
             {/* رونوشت‌ها + افزودن رونوشت */}
             <Card
                 title={whiteTitle(
@@ -788,6 +648,98 @@ export default function MessageShow() {
                     <Alert type="error" message={copyErrors.copy} showIcon style={{ marginTop: 12, borderRadius: 8 }} />
                 ) : null}
             </Card>
+            </>
+            )}
+
+            {activeTab === 'comments' && (
+            <>
+            {/* نظرات / توضیحات */}
+            <Card
+                title={whiteTitle(
+                    <Space>
+                        <CommentOutlined />
+                        <span>نظرات و توضیحات</span>
+                    </Space>
+                )}
+                headStyle={gradientHeadStyle}
+                style={{ ...STYLES.card, marginBottom: 16 }}
+            >
+                {commentList.length === 0 ? (
+                    <Empty description="هنوز توضیحی ثبت نشده است" />
+                ) : (
+                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                        {commentList.map((c) => (
+                            <div
+                                key={c.MessageCommentID}
+                                style={{
+                                    background: '#fafafa',
+                                    borderRadius: 10,
+                                    padding: '12px 16px',
+                                    width: '100%',
+                                }}
+                            >
+                                <Space>
+                                    <Avatar size={28} style={{ background: '#667eea', fontSize: 13 }}>
+                                        {c.UserName ? c.UserName.charAt(0) : <UserOutlined />}
+                                    </Avatar>
+                                    <Text strong>{c.UserName}</Text>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        <ClockCircleOutlined /> {new Date(c.CreateDate).toLocaleString('fa-IR')}
+                                    </Text>
+                                </Space>
+                                <div style={{ marginTop: 8 }}>
+                                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+                                        {c.Comment || ''}
+                                    </Text>
+                                </div>
+                            </div>
+                        ))}
+                    </Space>
+                )}
+
+                {/* فرم افزودن نظر — فقط اگه مجاز باشه */}
+                {canComment ? (
+                    <>
+                        <Divider style={{ margin: '20px 0 16px' }} />
+                        {commentErrors?.comment ? (
+                            <Alert type="error" message={commentErrors.comment} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />
+                        ) : null}
+                        <Row gutter={16}>
+                            <Col xs={24}>
+                                <Input.TextArea
+                                    rows={3}
+                                    placeholder="توضیح یا نظر خود را بنویسید..."
+                                    value={commentData.Comment}
+                                    onChange={(e) => setCommentData('Comment', e.target.value)}
+                                    maxLength={2000}
+                                    showCount
+                                />
+                            </Col>
+                            <Col xs={24} style={{ marginTop: 12 }}>
+                                <Upload
+                                    beforeUpload={beforeCommentUpload}
+                                    fileList={commentFileList}
+                                    onChange={handleCommentUploadChange}
+                                    multiple
+                                >
+                                    <Button icon={<UploadOutlined />}>ضمیمه فایل</Button>
+                                </Upload>
+                            </Col>
+                        </Row>
+                        <Row justify="end" style={{ marginTop: 12 }}>
+                            <Button
+                                type="primary"
+                                icon={<SaveOutlined />}
+                                size="large"
+                                loading={commentProcessing}
+                                onClick={handleSubmitComment}
+                            >
+                                {getSubmitButtonText()}
+                            </Button>
+                        </Row>
+                    </>
+                ) : null}
+            </Card>
 
             {/* ضمیمه‌ها */}
             <Card
@@ -820,7 +772,7 @@ export default function MessageShow() {
                                     return isImage ? (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                             <a
-                                                href={`/storage/${record.FilePath}`}
+                                                href={`/messages/${msg.MessageID}/attachments/${record.MessageAttachmentID}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 style={{
@@ -834,7 +786,7 @@ export default function MessageShow() {
                                                 }}
                                             >
                                                 <img
-                                                    src={`/storage/${record.FilePath}`}
+                                                    src={`/messages/${msg.MessageID}/attachments/${record.MessageAttachmentID}`}
                                                     alt={name}
                                                     style={{
                                                         width: 80,
@@ -921,7 +873,7 @@ export default function MessageShow() {
                                 width: 110,
                                 align: 'center',
                                 render: (_, record: Attachment) => (
-                                    <a href={`/storage/${record.FilePath}`} target="_blank" rel="noopener noreferrer">
+                                    <a href={`/messages/${msg.MessageID}/attachments/${record.MessageAttachmentID}`} target="_blank" rel="noopener noreferrer">
                                         <Button type="primary" ghost icon={<DownloadOutlined />} size="small">
                                             دانلود
                                         </Button>
@@ -949,7 +901,7 @@ export default function MessageShow() {
                         {imageAttachments.map((img) => (
                             <Col key={img.MessageAttachmentID} xs={12} sm={8} md={6} lg={4}>
                                 <a
-                                    href={`/storage/${img.FilePath}`}
+                                    href={`/messages/${msg.MessageID}/attachments/${img.MessageAttachmentID}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     style={{ display: 'block' }}
@@ -974,7 +926,7 @@ export default function MessageShow() {
                                         }}
                                     >
                                         <img
-                                            src={`/storage/${img.FilePath}`}
+                                            src={`/messages/${msg.MessageID}/attachments/${img.MessageAttachmentID}`}
                                             alt={img.FileName}
                                             style={{
                                                 width: '100%',
@@ -1004,6 +956,8 @@ export default function MessageShow() {
                     </Row>
                 </Card>
             ) : null}
+            </>
+            )}
 
             <NotificationModal
                 key={notificationKey}

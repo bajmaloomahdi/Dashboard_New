@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class MessageController extends Controller
@@ -247,6 +248,78 @@ class MessageController extends Controller
             'isTask' => $isTask,
             'canComment' => $canComment,
         ]);
+    }
+
+    /**
+     * نمایش/دانلود یک ضمیمه‌ی اصلی پیام — از طریق خود PHP سرو می‌شود
+     * (نه لینک مستقیم nginx/storage) تا مشکل symlink بین کانتینرها دور زده شود
+     * و فقط فرستنده/گیرنده/رونوشت‌گیرنده‌های پیام دسترسی داشته باشند.
+     */
+    public function downloadAttachment(int $id, int $attachmentId)
+    {
+        if (!$this->isMessageParticipant($id)) {
+            abort(403, 'شما به این پیام دسترسی ندارید.');
+        }
+
+        $attachments = DB::select('EXEC sp_GetMessageAttachmentsList @MessageID = ?', [$id]);
+        $attachment = collect($attachments)->firstWhere('MessageAttachmentID', $attachmentId);
+
+        if (!$attachment) {
+            abort(404, 'فایل مورد نظر یافت نشد.');
+        }
+
+        $disk = Storage::disk('public');
+        if (!$disk->exists($attachment->FilePath)) {
+            abort(404, 'فایل روی سرور یافت نشد.');
+        }
+
+        return $disk->response($attachment->FilePath, $attachment->FileName);
+    }
+
+    /**
+     * نمایش/دانلود یک ضمیمه‌ی مربوط به یک نظر (کامنت) پیام
+     */
+    public function downloadCommentAttachment(int $id, int $commentId, int $attachmentId)
+    {
+        if (!$this->isMessageParticipant($id)) {
+            abort(403, 'شما به این پیام دسترسی ندارید.');
+        }
+
+        $attachments = DB::select('EXEC sp_GetMessageCommentAttachments @MessageCommentID = ?', [$commentId]);
+        $attachment = collect($attachments)->firstWhere('MessageCommentAttachmentID', $attachmentId);
+
+        if (!$attachment) {
+            abort(404, 'فایل مورد نظر یافت نشد.');
+        }
+
+        $disk = Storage::disk('public');
+        if (!$disk->exists($attachment->FilePath)) {
+            abort(404, 'فایل روی سرور یافت نشد.');
+        }
+
+        return $disk->response($attachment->FilePath, $attachment->FileName);
+    }
+
+    /**
+     * آیا کاربر جاری در این پیام نقشی دارد؟ (فرستنده، گیرنده یا رونوشت)
+     */
+    private function isMessageParticipant(int $messageId): bool
+    {
+        $userId = Auth::id();
+        if (!$userId) {
+            return false;
+        }
+
+        $exists = DB::select(
+            'SELECT 1 FROM dbo.Messages WHERE MessageID = ? AND SenderUserID = ?
+             UNION ALL
+             SELECT 1 FROM dbo.MessageDetails WHERE MessageID = ? AND ToUserID = ?
+             UNION ALL
+             SELECT 1 FROM dbo.MessageCopies WHERE MessageID = ? AND UserID = ?',
+            [$messageId, $userId, $messageId, $userId, $messageId, $userId]
+        );
+
+        return !empty($exists);
     }
 
     public function changeStatus(Request $request, $id)

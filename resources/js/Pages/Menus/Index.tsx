@@ -29,6 +29,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import MenuFormModal from './MenuFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -354,18 +355,19 @@ export default function MenusIndex() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <AppstoreOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        مدیریت منوها
-                    </Title>
-                    <Text type="secondary">
-                        تعریف و مدیریت منوهای سایدبار سیستم
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<AppstoreOutlined />}
+                title="مدیریت منوها"
+                subtitle="تعریف و مدیریت منوهای سایدبار سیستم"
+                stats={[
+                    { icon: <AppstoreOutlined />, label: 'تعداد کل', value: `${(allMenus || []).length} منو` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(allMenus || []).filter((m: Menu) => columnHelpers.toBool(m.IsActive)).length} منو`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -375,8 +377,8 @@ export default function MenusIndex() {
                     >
                         منوی جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* فیلترها - همرنگ هدر جدول */}
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>

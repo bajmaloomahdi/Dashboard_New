@@ -155,6 +155,8 @@ Route::middleware('auth')->group(function () {
     Route::post('messages/{id}/forward', [MessageController::class, 'forward'])->name('messages.forward');
     Route::post('messages/{id}/comment', [MessageController::class, 'addComment'])->name('messages.comment');
     Route::post('messages/{id}/copy', [MessageController::class, 'addCopy'])->name('messages.copy');
+    Route::get('messages/{id}/attachments/{attachmentId}', [MessageController::class, 'downloadAttachment'])->name('messages.attachments.show');
+    Route::get('messages/{id}/comments/{commentId}/attachments/{attachmentId}', [MessageController::class, 'downloadCommentAttachment'])->name('messages.comment-attachments.show');
 
 
     // اولویت‌های پیام
@@ -173,6 +175,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{id}/members', [ProjectsController::class, 'members'])->name('projects.members');
     Route::post('/projects/{id}/members', [ProjectsController::class, 'addMember'])->name('projects.members.add');
     Route::delete('/projects/{id}/members', [ProjectsController::class, 'removeMember'])->name('projects.members.remove');
+    Route::post('/projects/{id}/tasks', [ProjectsController::class, 'createTask'])->name('projects.tasks.store');
+    Route::get('/projects/{id}/tasks', [ProjectsController::class, 'tasks'])->name('projects.tasks.index');
+    Route::get('/projects/{id}/comments', [ProjectsController::class, 'comments'])->name('projects.comments.index');
+    Route::post('/projects/{id}/comments', [ProjectsController::class, 'addComment'])->name('projects.comments.store');
+    Route::get('/projects/{id}/attachments/{attachmentId}', [ProjectsController::class, 'downloadAttachment'])->name('projects.attachments.show');
 
 
     // تنظیمات شرکت
@@ -191,6 +198,7 @@ Route::middleware('auth')->group(function () {
 // لوگو و فاوآیکون شرکت
 Route::get('company/logo', [CompanyController::class, 'logo'])->name('company.logo');
 Route::get('company/favicon', [CompanyController::class, 'favicon'])->name('company.favicon');
+Route::get('manifest.json', [CompanyController::class, 'manifest'])->name('company.manifest');
 
 // مسیر اصلی → لاگین
 Route::get('/', function () {

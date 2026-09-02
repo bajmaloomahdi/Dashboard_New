@@ -9,12 +9,9 @@ import {
     Typography,
     Row,
     Col,
-    Statistic,
     Alert,
-    Avatar,
 } from 'antd';
 import {
-    ArrowLeftOutlined,
     SaveOutlined,
     IdcardOutlined,
     SearchOutlined,
@@ -22,10 +19,10 @@ import {
     StopOutlined,
     CheckSquareOutlined,
     BorderOutlined,
-    TeamOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import { THEME, STYLES, columnHelpers } from '../../theme';
@@ -193,31 +190,17 @@ export default function UserPositions() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/users')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت به لیست
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <IdcardOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                مدیریت سمت‌های کاربر
-                            </Title>
-                            <Text type="secondary">
-                                کاربر: <Text strong style={{ color: THEME.primary }}>{user.FullName || user.UserName}</Text>
-                                {' '}
-                                (@{user.UserName})
-                            </Text>
-                        </div>
-                    </Space>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<IdcardOutlined />}
+                title="مدیریت سمت‌های کاربر"
+                subtitle={`کاربر: ${user.FullName || user.UserName} (@${user.UserName})`}
+                backHref="/users"
+                backLabel="بازگشت به لیست"
+                stats={[
+                    { icon: <IdcardOutlined />, label: 'کل سمت‌ها', value: `${positions.length} سمت` },
+                    { icon: <CheckCircleOutlined />, label: 'سمت‌های فعلی', value: `${selectedPositionIds.size} سمت` },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<SaveOutlined />}
@@ -229,8 +212,8 @@ export default function UserPositions() {
                     >
                         ذخیره تغییرات
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {hasChanges && (
                 <Alert
@@ -241,40 +224,6 @@ export default function UserPositions() {
                     style={{ marginBottom: 16, borderRadius: 8 }}
                 />
             )}
-
-            {/* آمار */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.primary}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>کل سمت‌ها</span>}
-                            value={positions.length}
-                            prefix={<IdcardOutlined style={{ color: THEME.primary }} />}
-                            valueStyle={{ color: THEME.primary, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={12} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.success}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>سمت‌های فعلی کاربر</span>}
-                            value={selectedPositionIds.size}
-                            prefix={<CheckCircleOutlined style={{ color: THEME.success }} />}
-                            valueStyle={{ color: THEME.success, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card style={{ borderRadius: 8, borderTop: `3px solid ${THEME.warning}` }}>
-                        <Statistic
-                            title={<span style={{ color: THEME.textSecondary }}>سمت‌های بدون تخصیص</span>}
-                            value={positions.filter((p: Position) => !selectedPositionIds.has(p.PositionID)).length}
-                            prefix={<StopOutlined style={{ color: THEME.warning }} />}
-                            valueStyle={{ color: THEME.warning, fontSize: 20, fontWeight: 'bold' }}
-                        />
-                    </Card>
-                </Col>
-            </Row>
 
             {/* جدول */}
             <Card style={STYLES.card}>

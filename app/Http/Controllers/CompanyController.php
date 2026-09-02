@@ -31,6 +31,7 @@ class CompanyController extends Controller
             'Code' => 'required|string|max:50',
             'Name' => 'required|string|max:200',
             'Description' => 'nullable|string|max:1000',
+            'SiteTitle' => 'nullable|string|max:100',
             'Logo' => 'nullable|image|max:2048',        // حداکثر 2MB
             'Favicon' => 'nullable|image|max:512',      // حداکثر 512KB
         ]);
@@ -54,7 +55,7 @@ class CompanyController extends Controller
 
         $result = DB::select(
             'EXEC sp_SaveCompany
-                @Code = ?, @Name = ?, @Description = ?,
+                @Code = ?, @Name = ?, @Description = ?, @SiteTitle = ?,
                 @LogoBase64 = ?, @LogoMimeType = ?,
                 @FaviconBase64 = ?, @FaviconMimeType = ?,
                 @UserID = ?',
@@ -62,6 +63,7 @@ class CompanyController extends Controller
                 $validated['Code'],
                 $validated['Name'],
                 $validated['Description'] ?? null,
+                $validated['SiteTitle'] ?? null,
                 $logoBase64,
                 $logoMime,
                 $faviconBase64,
@@ -80,6 +82,38 @@ class CompanyController extends Controller
 
         return redirect()->route('company.index')
             ->with('success', $response['Message']);
+    }
+
+    /**
+     * مانیفست PWA (برای نام و آیکون هنگام افزودن به صفحه اصلی موبایل)
+     */
+    public function manifest()
+    {
+        $result = DB::select('EXEC sp_GetCompany');
+        $company = $result[0] ?? null;
+
+        $title = $company->SiteTitle ?: ($company->Name ?? 'پنل مدیریت');
+
+        return response()->json([
+            'name' => $title,
+            'short_name' => $title,
+            'start_url' => '/',
+            'display' => 'standalone',
+            'background_color' => '#ffffff',
+            'theme_color' => '#667eea',
+            'icons' => [
+                [
+                    'src' => '/company/favicon',
+                    'sizes' => '192x192',
+                    'type' => $company->FaviconMimeType ?? 'image/png',
+                ],
+                [
+                    'src' => '/company/favicon',
+                    'sizes' => '512x512',
+                    'type' => $company->FaviconMimeType ?? 'image/png',
+                ],
+            ],
+        ])->header('Content-Type', 'application/manifest+json');
     }
 
     /**

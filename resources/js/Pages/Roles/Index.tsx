@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import RoleFormModal from './RoleFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -296,18 +297,19 @@ export default function RolesIndex() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <SafetyOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        مدیریت نقش‌ها
-                    </Title>
-                    <Text type="secondary">
-                        تعریف نقش‌ها و مدیریت دسترسی‌های سیستم
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<SafetyOutlined />}
+                title="مدیریت نقش‌ها"
+                subtitle="تعریف نقش‌ها و مدیریت دسترسی‌های سیستم"
+                stats={[
+                    { icon: <SafetyOutlined />, label: 'تعداد کل', value: `${(roles || []).length} نقش` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(roles || []).filter((r: Role) => columnHelpers.toBool(r.IsActive)).length} نقش`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -317,8 +319,8 @@ export default function RolesIndex() {
                     >
                         نقش جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* فیلترها - همرنگ هدر جدول */}
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>

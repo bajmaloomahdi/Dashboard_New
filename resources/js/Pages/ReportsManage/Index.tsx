@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import ReportFormModal from './ReportFormModal';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
@@ -317,18 +318,19 @@ export default function ReportsManageIndex() {
 
     return (
         <MainLayout>
-            {/* هدر */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Title level={3} style={{ margin: 0 }}>
-                        <BarChartOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                        مدیریت گزارشات
-                    </Title>
-                    <Text type="secondary">
-                        تعریف و مدیریت گزارشات سیستم
-                    </Text>
-                </Col>
-                <Col>
+            <PageHeader
+                icon={<BarChartOutlined />}
+                title="مدیریت گزارشات"
+                subtitle="تعریف و مدیریت گزارشات سیستم"
+                stats={[
+                    { icon: <BarChartOutlined />, label: 'تعداد کل', value: `${(reports || []).length} گزارش` },
+                    {
+                        icon: <CheckCircleOutlined />,
+                        label: 'فعال',
+                        value: `${(reports || []).filter((r: Report) => columnHelpers.toBool(r.IsActive)).length} گزارش`,
+                    },
+                ]}
+                actions={
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -338,8 +340,8 @@ export default function ReportsManageIndex() {
                     >
                         گزارش جدید
                     </Button>
-                </Col>
-            </Row>
+                }
+            />
 
             {/* فیلترها - همرنگ هدر جدول */}
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>

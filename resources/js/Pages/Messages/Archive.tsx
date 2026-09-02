@@ -20,10 +20,10 @@ import {
     LoadingOutlined,
     EyeOutlined,
     ReadOutlined,
-    ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
@@ -307,28 +307,14 @@ export default function MessageArchive() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/messages')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت به کارتابل
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <InboxOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                آرشیو پیام‌ها
-                            </Title>
-                            <Text type="secondary">
-                                تمام پیام‌های دریافتی (خوانده و نخوانده)
-                            </Text>
-                        </div>
-                    </Space>
-                </Col>
-            </Row>
+            <PageHeader
+                icon={<InboxOutlined />}
+                title="آرشیو پیام‌ها"
+                subtitle="تمام پیام‌های دریافتی (خوانده و نخوانده)"
+                backHref="/messages"
+                backLabel="بازگشت به کارتابل"
+                stats={[{ icon: <InboxOutlined />, label: 'تعداد کل', value: `${(messages || []).length} پیام` }]}
+            />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">

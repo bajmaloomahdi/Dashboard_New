@@ -16,7 +16,6 @@ import {
 } from 'antd';
 import {
     SendOutlined,
-    ArrowLeftOutlined,
     MessageOutlined,
     UserOutlined,
     TeamOutlined,
@@ -28,6 +27,7 @@ import {
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
@@ -184,28 +184,13 @@ export default function MessageCreate() {
 
     return (
         <MainLayout>
-            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
-                <Col>
-                    <Space>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={() => router.visit('/messages')}
-                            style={{ borderColor: THEME.primary, color: THEME.primary }}
-                        >
-                            بازگشت به کارتابل
-                        </Button>
-                        <div>
-                            <Title level={3} style={{ margin: 0 }}>
-                                <MessageOutlined style={{ marginLeft: 8, color: THEME.primary }} />
-                                ارسال پیام جدید
-                            </Title>
-                            <Text type="secondary">
-                                ارسال پیام به همکاران و مدیران
-                            </Text>
-                        </div>
-                    </Space>
-                </Col>
-            </Row>
+            <PageHeader
+                icon={<MessageOutlined />}
+                title="ارسال پیام جدید"
+                subtitle="ارسال پیام به همکاران و مدیران"
+                backHref="/messages"
+                backLabel="بازگشت به کارتابل"
+            />
 
             <Card style={STYLES.card}>
                 <Form form={form} layout="vertical" requiredMark>
@@ -295,9 +280,11 @@ export default function MessageCreate() {
                                 >
                                     <Select
                                         size="large"
-                                        placeholder="انتخاب واحد"
+                                        placeholder="جستجو و انتخاب واحد..."
                                         options={unitOptions}
                                         onChange={handleUnitChange}
+                                        showSearch
+                                        optionFilterProp="label"
                                     />
                                 </Form.Item>
                                 {data.RecipientUserIDs.length > 0 ? (

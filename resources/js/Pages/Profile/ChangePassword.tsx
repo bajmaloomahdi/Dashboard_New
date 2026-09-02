@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import { useForm, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 
 const { Title, Text } = Typography;
@@ -141,19 +142,18 @@ export default function ChangePassword() {
 
     return (
         <MainLayout>
+            <PageHeader
+                icon={<KeyOutlined />}
+                title="تغییر کلمه عبور"
+                subtitle="برای امنیت بیشتر، کلمه عبور خود را به‌روز نگه دارید"
+                stats={[
+                    { icon: <SafetyOutlined />, label: 'کاربر', value: auth?.user?.FullName || '—' },
+                    { icon: <LockOutlined />, label: 'نام کاربری', value: `@${auth?.user?.UserName || ''}` },
+                ]}
+            />
+
             <Row justify="center">
                 <Col xs={24} md={20} lg={16} xl={14}>
-                    {/* هدر صفحه */}
-                    <div style={{ marginBottom: 24 }}>
-                        <Title level={3} style={{ margin: 0 }}>
-                            <KeyOutlined style={{ marginLeft: 8, color: '#1890ff' }} />
-                            تغییر کلمه عبور
-                        </Title>
-                        <Text type="secondary">
-                            برای امنیت بیشتر، کلمه عبور خود را به‌روز نگه دارید
-                        </Text>
-                    </div>
-
                     <Row gutter={16}>
                         {/* فرم اصلی */}
                         <Col xs={24} lg={14}>
@@ -164,28 +164,6 @@ export default function ChangePassword() {
                                     boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
                                 }}
                             >
-                                {/* اطلاعات کاربر */}
-                                <div
-                                    style={{
-                                        background: 'linear-gradient(135deg, #f6f9fc 0%, #e9f0f7 100%)',
-                                        padding: 16,
-                                        borderRadius: 8,
-                                        marginBottom: 24,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                    }}
-                                >
-                                    <SafetyOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-                                    <div>
-                                        <Text strong>{auth?.user?.FullName}</Text>
-                                        <br />
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            @{auth?.user?.UserName}
-                                        </Text>
-                                    </div>
-                                </div>
-
                                 <Form
                                     form={form}
                                     layout="vertical"

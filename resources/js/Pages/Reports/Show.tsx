@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
+import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
 import DatePicker, { DateObject } from 'react-multi-date-picker';
@@ -589,28 +590,17 @@ export default function ReportShow() {
 
     return (
         <MainLayout>
-            <Card style={{
-                marginBottom: 16,
-                ...STYLES.card,
-                background: THEME.primaryGradientLight,
-            }}>
-                <Row align="middle" justify="space-between">
-                    <Col>
-                        <Space size="middle">
-                            <div style={STYLES.iconBoxLarge}>
-                                <BarChartOutlined style={{ color: '#fff', fontSize: 28 }} />
-                            </div>
-                            <div>
-                                <Title level={3} style={{ margin: 0 }}>{report.ReportTitle}</Title>
-                                <Space size={8} style={{ marginTop: 4 }}>
-                                    <Tag color="purple" style={{ borderRadius: 6 }}>کد: {report.ReportCode}</Tag>
-                                    {report.Description && <Text type="secondary" style={{ fontSize: 12 }}>{report.Description}</Text>}
-                                </Space>
-                            </div>
-                        </Space>
-                    </Col>
-                </Row>
-            </Card>
+            <PageHeader
+                icon={<BarChartOutlined />}
+                title={report.ReportTitle}
+                subtitle={report.Description || undefined}
+                tags={[{ label: `کد: ${report.ReportCode}` }]}
+                stats={
+                    results.length > 0
+                        ? [{ icon: <BarChartOutlined />, label: 'نتایج', value: `${columnHelpers.formatNumber(results.length)} ردیف` }]
+                        : undefined
+                }
+            />
 
             {hasParameters && (
                 <Card

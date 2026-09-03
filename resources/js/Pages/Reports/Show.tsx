@@ -270,7 +270,7 @@ export default function ReportShow() {
 
         parameters?.forEach((p: Parameter) => {
             if ((p.ControlType === 'SELECT' || p.ControlType === 'MULTISELECT') && p.LookupProcedure) {
-                loadLookupData(p.ParameterName, p.LookupProcedure);
+                loadLookupData(p.ParameterName, p.ReportParameterID);
             }
         });
 
@@ -285,9 +285,14 @@ export default function ReportShow() {
 
     const closeNotification = () => setNotification((prev) => ({ ...prev, open: false }));
 
-    const loadLookupData = async (paramName: string, procedureName: string) => {
+    const loadLookupData = async (paramName: string, reportParameterId: number) => {
         try {
-            const response = await axios.get('/reports/lookup', { params: { procedure_name: procedureName } });
+            const response = await axios.get('/reports/lookup', {
+                params: {
+                    report_code: report.ReportCode,
+                    report_parameter_id: reportParameterId,
+                },
+            });
             if (response.data.success) {
                 setLookupData((prev) => ({ ...prev, [paramName]: response.data.data }));
             }

@@ -355,24 +355,28 @@ export default function Dashboard() {
         return map;
     }, [items]);
 
-    /** آیا این تب پنجره «پیام‌های من» را دارد؟ */
-    const hasMessagesPanel = (tab: HomeTab, index: number) => {
+    /**
+     * آیا این تب پنجره «پیام‌های من» را دارد؟
+     * فقط زمانی که تب صراحتاً با Url یا MenuCode مربوط به my-messages / mymessages
+     * مشخص شده باشد. (قبلاً به‌صورت fallback روی تب اول — index === 0 — هم اضافه می‌شد
+     * که باعث می‌شد پنجره به اشتباه در تب‌های دیگری مثل «کارهای روزانه من» ظاهر شود.)
+     */
+    const hasMessagesPanel = (tab: HomeTab) => {
         const key = `${tab.Url || ''} ${tab.MenuCode || ''}`.toLowerCase();
-        if (key.includes('my-messages') || key.includes('mymessages')) return true;
-        return index === 0;
+        return key.includes('my-messages') || key.includes('mymessages');
     };
 
     /**
      * ساخت پنجره‌های یک تب
-     * - پنجره پیام‌های من (در تب اول یا تب با کد my-messages)
+     * - پنجره پیام‌های من (فقط در تبی که با my-messages / mymessages مشخص شده باشد)
      * - هر «پوشه» ⇒ یک پنجره که میان‌برهای داخلش را نشان می‌دهد
      * - گزارش‌ها و صفحه‌ها ⇒ داخل یک پنجره «میان‌برها»
      */
-    const buildPanels = (tab: HomeTab, index: number) => {
+    const buildPanels = (tab: HomeTab) => {
         const tabItems = itemsByTab[tab.MenuID] || [];
         const panels: { key: string; span: number; node: React.ReactNode }[] = [];
 
-        if (hasMessagesPanel(tab, index)) {
+        if (hasMessagesPanel(tab)) {
             panels.push({
                 key: 'w-messages',
                 span: 24,
@@ -458,9 +462,9 @@ export default function Dashboard() {
     };
 
     // داده‌ی هر تب: پنجره‌ها یک‌بار ساخته می‌شود و هم برای شمارنده‌ی چیپ و هم برای بدنه استفاده می‌شود
-    const tabsData = tabs.map((tab, index) => ({
+    const tabsData = tabs.map((tab) => ({
         tab,
-        panels: buildPanels(tab, index),
+        panels: buildPanels(tab),
     }));
 
     // آیتم‌های نوار تب به‌شکل چیپ — همان الگوی ChipTabs در «نامه‌ها» و «پروژه‌ها»

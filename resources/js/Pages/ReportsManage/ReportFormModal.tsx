@@ -134,6 +134,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
             open={open}
             onCancel={handleClose}
             width={800}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -185,7 +186,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کد گزارش"
                             name="ReportCode"
@@ -207,7 +208,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام Stored Procedure"
                             name="ProcedureName"
@@ -251,7 +252,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="زمان انتظار (ثانیه)"
                             name="CommandTimeout"
@@ -270,7 +271,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="مدت کش (دقیقه)"
                             name="CacheDuration"
@@ -291,7 +292,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                 <Divider style={{ margin: '8px 0 16px' }}>خروجی‌های مجاز</Divider>
 
                 <Row gutter={16}>
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="خروجی Excel" name="AllowExcel">
                             <Switch
                                 checked={data.AllowExcel}
@@ -302,7 +303,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="خروجی PDF" name="AllowPdf">
                             <Switch
                                 checked={data.AllowPdf}
@@ -314,7 +315,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="چاپ" name="AllowPrint">
                             <Switch
                                 checked={data.AllowPrint}

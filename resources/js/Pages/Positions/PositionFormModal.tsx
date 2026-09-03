@@ -156,6 +156,7 @@ export default function PositionFormModal({
             open={open}
             onCancel={handleClose}
             width={650}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -178,7 +179,7 @@ export default function PositionFormModal({
         >
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کد سمت"
                             extra="کد به صورت خودکار و از 101 ساخته می‌شود"
@@ -193,7 +194,7 @@ export default function PositionFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام سمت"
                             name="PositionName"
@@ -214,7 +215,7 @@ export default function PositionFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="واحد"
                             name="UnitID"
@@ -238,7 +239,7 @@ export default function PositionFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="مدیر واحد"
                             name="IsUnitManager"

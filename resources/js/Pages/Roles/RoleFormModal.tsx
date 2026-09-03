@@ -95,6 +95,7 @@ export default function RoleFormModal({ open, onClose, editingRole }: RoleFormMo
             open={open}
             onCancel={handleClose}
             width={600}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"

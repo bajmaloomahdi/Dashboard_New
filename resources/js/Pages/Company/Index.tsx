@@ -121,7 +121,7 @@ export default function CompanyIndex() {
                 <Form form={form} layout="vertical" requiredMark>
                     <Row gutter={16}>
                         {/* کد شرکت */}
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="کد شرکت"
                                 name="Code"
@@ -141,7 +141,7 @@ export default function CompanyIndex() {
                         </Col>
 
                         {/* نام شرکت */}
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نام شرکت"
                                 name="Name"

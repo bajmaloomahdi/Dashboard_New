@@ -64,7 +64,20 @@ const buildAntMenuItems = (tree: MenuTree[]): any[] => {
     });
 };
 
-export default function Sidebar({ menus, collapsed, currentUrl }: SidebarProps) {
+interface SidebarMenuProps {
+    menus: MenuType[];
+    currentUrl: string;
+    /** فشرده بودن (فقط برای حالت Sider دسکتاپ) */
+    collapsed?: boolean;
+    /** بعد از یک ناوبری واقعی صدا زده می‌شود — برای بستن Drawer در موبایل */
+    onNavigate?: () => void;
+}
+
+/**
+ * لوگو + منوی داینامیک — بدون پوسته‌ی <Sider>.
+ * در دسکتاپ داخل <Sider> و در موبایل داخل <Drawer> استفاده می‌شود.
+ */
+export function SidebarMenu({ menus, currentUrl, collapsed = false, onNavigate }: SidebarMenuProps) {
     // تبدیل flat به tree (فقط یک بار محاسبه میشه)
     const menuTree = useMemo(() => buildMenuTree(menus), [menus]);
 
@@ -91,34 +104,24 @@ export default function Sidebar({ menus, collapsed, currentUrl }: SidebarProps) 
     /**
      * هندلر کلیک روی منو
      */
-const handleMenuClick = ({ key }: { key: string }) => {
-    // اگر روی folder کلیک شد، navigate نکن
-    if (key.startsWith('folder-') || key.startsWith('menu-')) return;
+    const handleMenuClick = ({ key }: { key: string }) => {
+        // اگر روی folder کلیک شد، navigate نکن (و Drawer را هم نبند)
+        if (key.startsWith('folder-') || key.startsWith('menu-')) return;
 
-    // 🔴 خروج از سیستم (POST درخواست)
-    if (key === '/logout') {
-        router.post('/logout');
-        return;
-    }
+        // 🔴 خروج از سیستم (POST درخواست)
+        if (key === '/logout') {
+            router.post('/logout');
+            onNavigate?.();
+            return;
+        }
 
-    // navigate به آدرس
-    router.visit(key);
-};
+        // navigate به آدرس
+        router.visit(key);
+        onNavigate?.();
+    };
+
     return (
-        <Sider
-            collapsible
-            collapsed={collapsed}
-            trigger={null}
-            width={260}
-            style={{
-                background: '#001529',
-                overflow: 'auto',
-                height: '100vh',
-                position: 'sticky',
-                top: 0,
-                right: 0,
-            }}
-        >
+        <>
             {/* لوگو */}
             <div
                 style={{
@@ -150,6 +153,28 @@ const handleMenuClick = ({ key }: { key: string }) => {
                     marginTop: 8,
                 }}
             />
+        </>
+    );
+}
+
+export default function Sidebar({ menus, collapsed, currentUrl }: SidebarProps) {
+    return (
+        <Sider
+            collapsible
+            collapsed={collapsed}
+            trigger={null}
+            width={260}
+            className="app-desktop-sider"
+            style={{
+                background: '#001529',
+                overflow: 'auto',
+                height: '100vh',
+                position: 'sticky',
+                top: 0,
+                right: 0,
+            }}
+        >
+            <SidebarMenu menus={menus} currentUrl={currentUrl} collapsed={collapsed} />
         </Sider>
     );
 }

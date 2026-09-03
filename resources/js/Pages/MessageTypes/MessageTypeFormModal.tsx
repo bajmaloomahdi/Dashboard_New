@@ -80,6 +80,7 @@ export default function MessageTypeFormModal({ open, onClose, editingType }: Mes
             open={open}
             onCancel={handleClose}
             width={600}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -102,7 +103,7 @@ export default function MessageTypeFormModal({ open, onClose, editingType }: Mes
         >
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کد نوع"
                             extra="کد به صورت خودکار و از 101 ساخته می‌شود"
@@ -117,7 +118,7 @@ export default function MessageTypeFormModal({ open, onClose, editingType }: Mes
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام نوع پیام"
                             name="MessageTypeName"

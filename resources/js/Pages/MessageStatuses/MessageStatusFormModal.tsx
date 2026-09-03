@@ -79,6 +79,7 @@ export default function MessageStatusFormModal({ open, onClose, editingStatus }:
             open={open}
             onCancel={handleClose}
             width={600}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -101,7 +102,7 @@ export default function MessageStatusFormModal({ open, onClose, editingStatus }:
         >
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کد وضعیت"
                             extra="کد به صورت خودکار و از 101 ساخته می‌شود"
@@ -116,7 +117,7 @@ export default function MessageStatusFormModal({ open, onClose, editingStatus }:
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام وضعیت"
                             name="MessageStatusName"

@@ -100,6 +100,7 @@ export default function MsgPriorityFormModal({ open, onClose, editingPriority }:
             open={open}
             onCancel={handleClose}
             width={600}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -122,7 +123,7 @@ export default function MsgPriorityFormModal({ open, onClose, editingPriority }:
         >
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کد اولویت"
                             extra="کد به صورت خودکار و از 101 ساخته می‌شود"
@@ -137,7 +138,7 @@ export default function MsgPriorityFormModal({ open, onClose, editingPriority }:
                         </Form.Item>
                     </Col>
 
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام اولویت"
                             name="Name"
@@ -159,7 +160,7 @@ export default function MsgPriorityFormModal({ open, onClose, editingPriority }:
                     </Col>
 
                     {isEdit && (
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="ترتیب نمایش"
                                 required

@@ -111,6 +111,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
             open={open}
             onCancel={handleClose}
             width={700}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -143,7 +144,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
             >
                 <Row gutter={16}>
                     {/* نام کاربری */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام کاربری"
                             name="UserName"
@@ -169,7 +170,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
 
                     {/* کلمه عبور */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="کلمه عبور"
                             name="Password"
@@ -198,7 +199,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
 
                     {/* نام */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام"
                             name="FirstName"
@@ -217,7 +218,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
 
                     {/* نام خانوادگی */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نام خانوادگی"
                             name="LastName"
@@ -236,7 +237,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
 
                     {/* ایمیل */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="ایمیل"
                             name="Email"
@@ -259,7 +260,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
 
                     {/* موبایل */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="موبایل"
                             name="Mobile"

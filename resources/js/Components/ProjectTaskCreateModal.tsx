@@ -108,6 +108,7 @@ export default function ProjectTaskCreateModal({
                 }
                 open={open}
                 onCancel={() => onClose(false)}
+                className="responsive-modal"
                 footer={[
                     <Button key="cancel" onClick={() => onClose(false)}>
                         انصراف

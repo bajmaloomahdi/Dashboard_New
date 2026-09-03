@@ -220,6 +220,7 @@ export default function ProjectMembersModal({
             open={open}
             onCancel={onClose}
             width={620}
+            className="responsive-modal"
             footer={[
                 <Button key="close" onClick={onClose}>
                     بستن
@@ -260,6 +261,7 @@ export default function ProjectMembersModal({
                 loading={loading}
                 size="middle"
                 pagination={false}
+                scroll={{ x: 'max-content' }}
                 locale={{ emptyText: 'هنوز عضوی تعریف نشده است' }}
             />
 

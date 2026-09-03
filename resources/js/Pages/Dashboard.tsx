@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Card, Row, Col, Typography, Space, Avatar, Tabs, Button, Tooltip } from 'antd';
+import { Card, Row, Col, Typography, Space, Avatar, Button, Tooltip } from 'antd';
 import * as AntIcons from '@ant-design/icons';
 import {
     AppstoreOutlined,
@@ -17,6 +17,7 @@ import {
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../Layouts/MainLayout';
 import CompanyLogo from '../Components/CompanyLogo';
+import ChipTabs from '../Components/ChipTabs';
 import { THEME, STYLES } from '../theme';
 
 const { Title, Text } = Typography;
@@ -65,27 +66,6 @@ interface PriorityStat {
 /* ------------------------------------------------------------------ */
 
 const DASH_CSS = `
-.home-tabs .ant-tabs-nav { margin-bottom: 20px; }
-.home-tabs .ant-tabs-nav::before { border-bottom: 2px solid #EFECFB !important; }
-.home-tabs .ant-tabs-tab {
-    padding: 10px 20px !important;
-    margin: 0 0 0 8px !important;
-    border-radius: 12px 12px 0 0 !important;
-    background: #F7F5FE;
-    border: 1px solid #EFECFB !important;
-    border-bottom: none !important;
-    transition: all .25s ease;
-}
-.home-tabs .ant-tabs-tab:hover { background: #EEEBFB; transform: translateY(-2px); }
-.home-tabs .ant-tabs-tab .ant-tabs-tab-btn { color: #4B5563 !important; font-weight: 600; font-size: 14px; }
-.home-tabs .ant-tabs-tab-active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    border-color: transparent !important;
-    box-shadow: 0 6px 16px rgba(102,126,234,.35);
-}
-.home-tabs .ant-tabs-tab-active .ant-tabs-tab-btn { color: #fff !important; }
-.home-tabs .ant-tabs-ink-bar { display: none !important; }
-
 /* پنجره (Panel) */
 .dash-panel {
     border-radius: 16px;
@@ -477,83 +457,72 @@ export default function Dashboard() {
         return panels;
     };
 
-    const tabItemsConfig = tabs.map((tab, index) => {
-        const tabItems = itemsByTab[tab.MenuID] || [];
-        const isActive = activeKey === String(tab.MenuID);
-        const panels = buildPanels(tab, index);
+    // داده‌ی هر تب: پنجره‌ها یک‌بار ساخته می‌شود و هم برای شمارنده‌ی چیپ و هم برای بدنه استفاده می‌شود
+    const tabsData = tabs.map((tab, index) => ({
+        tab,
+        panels: buildPanels(tab, index),
+    }));
 
-        return {
-            key: String(tab.MenuID),
-            label: (
-                <Space size={8}>
-                    {renderIcon(tab.Icon, { fontSize: 16 })}
-                    <span>{tab.MenuTitle}</span>
-                    {panels.length > 0 && (
-                        <span
-                            style={{
-                                minWidth: 20, height: 20, lineHeight: '20px', padding: '0 6px',
-                                borderRadius: 10, fontSize: 11, fontWeight: 700,
-                                background: isActive ? 'rgba(255,255,255,.28)' : '#EDE9FE',
-                                color: isActive ? '#fff' : '#5B21B6',
-                                display: 'inline-block', textAlign: 'center',
-                            }}
-                        >
-                            {panels.length}
-                        </span>
-                    )}
-                </Space>
-            ),
-            children: (
-                <div>
-                    {tab.Description && (
-                        <div
-                            style={{
-                                background: '#F7F5FE', border: '1px solid #EFECFB',
-                                borderRadius: 10, padding: '10px 14px', marginBottom: 16,
-                            }}
-                        >
-                            <Text type="secondary" style={{ fontSize: 13 }}>{tab.Description}</Text>
-                        </div>
-                    )}
+    // آیتم‌های نوار تب به‌شکل چیپ — همان الگوی ChipTabs در «نامه‌ها» و «پروژه‌ها»
+    const tabDefs = tabsData.map(({ tab, panels }) => ({
+        key: String(tab.MenuID),
+        label: tab.MenuTitle,
+        icon: renderIcon(tab.Icon),
+        count: panels.length || null,
+    }));
 
-                    {panels.length === 0 ? (
-                        <div
-                            style={{
-                                background: 'linear-gradient(180deg, #FAFAFF 0%, #FFFFFF 100%)',
-                                border: '1px dashed #DDD6FE',
-                                borderRadius: 14, padding: '48px 24px', textAlign: 'center',
-                            }}
-                        >
-                            <div
-                                style={{
-                                    width: 64, height: 64, borderRadius: 18, margin: '0 auto 16px',
-                                    background: THEME.primaryGradientLight,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: 28, color: THEME.primary,
-                                }}
-                            >
-                                <LayoutOutlined />
-                            </div>
-                            <Text strong style={{ display: 'block', fontSize: 15 }}>
-                                این تب هنوز پنجره‌ای ندارد
-                            </Text>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                در «مدیریت گزارشات» یا «مدیریت منوها»، منوی والد را «{tab.MenuTitle}» انتخاب کنید
-                            </Text>
-                        </div>
-                    ) : (
-                        <Row gutter={[16, 16]}>
-                            {panels.map((p) => (
-                                <Col xs={24} lg={p.span} key={p.key}>
-                                    {p.node}
-                                </Col>
-                            ))}
-                        </Row>
-                    )}
+    const activeTabData =
+        tabsData.find((d) => String(d.tab.MenuID) === activeKey) ?? tabsData[0];
+
+    const renderTabBody = (tab: HomeTab, panels: ReturnType<typeof buildPanels>) => (
+        <div>
+            {tab.Description && (
+                <div
+                    style={{
+                        background: '#F7F5FE', border: '1px solid #EFECFB',
+                        borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                    }}
+                >
+                    <Text type="secondary" style={{ fontSize: 13 }}>{tab.Description}</Text>
                 </div>
-            ),
-        };
-    });
+            )}
+
+            {panels.length === 0 ? (
+                <div
+                    style={{
+                        background: 'linear-gradient(180deg, #FAFAFF 0%, #FFFFFF 100%)',
+                        border: '1px dashed #DDD6FE',
+                        borderRadius: 14, padding: '48px 24px', textAlign: 'center',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: 64, height: 64, borderRadius: 18, margin: '0 auto 16px',
+                            background: THEME.primaryGradientLight,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 28, color: THEME.primary,
+                        }}
+                    >
+                        <LayoutOutlined />
+                    </div>
+                    <Text strong style={{ display: 'block', fontSize: 15 }}>
+                        این تب هنوز پنجره‌ای ندارد
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        در «مدیریت گزارشات» یا «مدیریت منوها»، منوی والد را «{tab.MenuTitle}» انتخاب کنید
+                    </Text>
+                </div>
+            ) : (
+                <Row gutter={[16, 16]}>
+                    {panels.map((p) => (
+                        <Col xs={24} lg={p.span} key={p.key}>
+                            {p.node}
+                        </Col>
+                    ))}
+                </Row>
+            )}
+        </div>
+    );
 
     return (
         <MainLayout>
@@ -620,21 +589,26 @@ export default function Dashboard() {
                         </Text>
                     </div>
                 ) : (
-                    <Tabs
-                        className="home-tabs"
-                        activeKey={activeKey}
-                        onChange={setActiveKey}
-                        items={tabItemsConfig}
-                        size="large"
-                        tabBarExtraContent={
-                            <Space size={6}>
-                                <LayoutOutlined style={{ color: THEME.primary }} />
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {tabs.length} تب
-                                </Text>
-                            </Space>
-                        }
-                    />
+                    <>
+                        <div
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12,
+                            }}
+                        >
+                            <LayoutOutlined style={{ color: THEME.primary }} />
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                {tabs.length} تب
+                            </Text>
+                        </div>
+
+                        <ChipTabs
+                            items={tabDefs}
+                            activeKey={activeKey}
+                            onChange={setActiveKey}
+                        />
+
+                        {activeTabData && renderTabBody(activeTabData.tab, activeTabData.panels)}
+                    </>
                 )}
             </Card>
         </MainLayout>

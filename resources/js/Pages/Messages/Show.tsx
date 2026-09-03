@@ -320,6 +320,49 @@ export default function MessageShow() {
 
     return (
         <MainLayout>
+            <div className="msg-show">
+            <style>{`
+                /* موبایل — عرض کمتر از ۷۶۸px */
+                @media (max-width: 767px) {
+                    .msg-show .ant-card-body { padding: 14px !important; }
+
+                    /* ChipTabs: به‌جای شکستن چندخطی، اسکرول افقی کنترل‌شده */
+                    .msg-show .chip-tabbar {
+                        flex-wrap: nowrap !important;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        -webkit-overflow-scrolling: touch;
+                        scrollbar-width: none;
+                    }
+                    .msg-show .chip-tabbar::-webkit-scrollbar { display: none; }
+                    .msg-show .chip-tab { flex: 0 0 auto; }
+
+                    .msg-show .msg-text-box { padding: 12px 14px !important; }
+
+                    /* دکمه‌ی عملیات تمام‌عرض و قابل لمس */
+                    .msg-show .msg-action-row { justify-content: stretch; }
+                    .msg-show .msg-action-row > .ant-btn { width: 100%; }
+
+                    /* نام فایل ضمیمه: محدود و شکسته‌شونده */
+                    .msg-show .msg-att-name {
+                        display: block;
+                        max-width: 58vw;
+                        overflow-wrap: anywhere;
+                        word-break: break-word;
+                    }
+                }
+
+                /* شکستن متن طولانی / URL / رشته‌ی بدون فاصله در هر عرضی */
+                .msg-show .msg-longtext {
+                    overflow-wrap: anywhere;
+                    word-break: break-word;
+                }
+
+                /* گارد جلوگیری از سرریز افقی صفحه */
+                .msg-show .ant-card { max-width: 100%; }
+                .msg-show .ant-table-wrapper { max-width: 100%; }
+            `}</style>
+
             <PageHeader
                 icon={<MessageOutlined />}
                 title={msg.Subject}
@@ -355,7 +398,7 @@ export default function MessageShow() {
                     {errors?.status ? (
                         <Alert type="error" message={errors.status} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />
                     ) : null}
-                    <Row gutter={16}>
+                    <Row gutter={[16, 16]}>
                         <Col xs={24} md={8}>
                             <Select
                                 style={{ width: '100%' }}
@@ -400,7 +443,7 @@ export default function MessageShow() {
                         </Col>
                     </Row>
 
-                    <Row justify="end" style={{ marginTop: 24 }}>
+                    <Row justify="end" className="msg-action-row" style={{ marginTop: 24 }}>
                         <Button
                             type="primary"
                             icon={<SaveOutlined />}
@@ -425,8 +468,8 @@ export default function MessageShow() {
                 headStyle={gradientHeadStyle}
                 style={{ ...STYLES.card, marginBottom: 16 }}
             >
-                <div style={{ background: '#fafafa', borderRadius: 10, padding: '16px 20px', minHeight: 80 }}>
-                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 15 }}>
+                <div className="msg-text-box" style={{ background: '#fafafa', borderRadius: 10, padding: '16px 20px', minHeight: 80 }}>
+                    <Text className="msg-longtext" style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 15, display: 'block' }}>
                         {msg.MessageText || '—'}
                     </Text>
                 </div>
@@ -451,6 +494,7 @@ export default function MessageShow() {
                         dataSource={detailList}
                         pagination={false}
                         size="middle"
+                        scroll={{ x: 'max-content' }}
                         columns={[
                             {
                                 title: 'فرستنده',
@@ -543,6 +587,7 @@ export default function MessageShow() {
                         pagination={false}
                         size="middle"
                         style={{ marginBottom: 16 }}
+                        scroll={{ x: 'max-content' }}
                         columns={[
                             {
                                 title: 'نام',
@@ -606,7 +651,7 @@ export default function MessageShow() {
 
                 {/* فرم افزودن رونوشت */}
                 <Divider style={{ margin: '16px 0' }} />
-                <Row gutter={16} align="bottom">
+                <Row gutter={[16, 16]} align="bottom">
                     <Col xs={24} md={10}>
                         <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
                             افزودن رونوشت جدید
@@ -678,7 +723,7 @@ export default function MessageShow() {
                                     width: '100%',
                                 }}
                             >
-                                <Space>
+                                <Space wrap>
                                     <Avatar size={28} style={{ background: '#667eea', fontSize: 13 }}>
                                         {c.UserName ? c.UserName.charAt(0) : <UserOutlined />}
                                     </Avatar>
@@ -688,7 +733,7 @@ export default function MessageShow() {
                                     </Text>
                                 </Space>
                                 <div style={{ marginTop: 8 }}>
-                                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+                                    <Text className="msg-longtext" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, display: 'block' }}>
                                         {c.Comment || ''}
                                     </Text>
                                 </div>
@@ -704,7 +749,7 @@ export default function MessageShow() {
                         {commentErrors?.comment ? (
                             <Alert type="error" message={commentErrors.comment} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />
                         ) : null}
-                        <Row gutter={16}>
+                        <Row gutter={[16, 16]}>
                             <Col xs={24}>
                                 <Input.TextArea
                                     rows={3}
@@ -726,7 +771,7 @@ export default function MessageShow() {
                                 </Upload>
                             </Col>
                         </Row>
-                        <Row justify="end" style={{ marginTop: 12 }}>
+                        <Row justify="end" className="msg-action-row" style={{ marginTop: 12 }}>
                             <Button
                                 type="primary"
                                 icon={<SaveOutlined />}
@@ -760,6 +805,7 @@ export default function MessageShow() {
                         dataSource={attachmentList}
                         pagination={false}
                         size="middle"
+                        scroll={{ x: 'max-content' }}
                         columns={[
                             {
                                 title: 'نام فایل',
@@ -797,8 +843,8 @@ export default function MessageShow() {
                                                     }}
                                                 />
                                             </a>
-                                            <div>
-                                                <Text strong>{name}</Text>
+                                            <div style={{ minWidth: 0 }}>
+                                                <Text strong className="msg-att-name">{name}</Text>
                                                 {record.FileExtension ? (
                                                     <Tag color="geekblue" style={{ borderRadius: 6, marginTop: 2 }}>
                                                         {record.FileExtension}
@@ -811,8 +857,8 @@ export default function MessageShow() {
                                             <Avatar size={32} style={{ background: '#f0f5ff', color: '#667eea' }}>
                                                 <PaperClipOutlined />
                                             </Avatar>
-                                            <div>
-                                                <Text strong>{name}</Text>
+                                            <div style={{ minWidth: 0 }}>
+                                                <Text strong className="msg-att-name">{name}</Text>
                                                 {record.FileExtension ? (
                                                     <Tag color="geekblue" style={{ borderRadius: 6, marginTop: 2 }}>
                                                         {record.FileExtension}
@@ -958,6 +1004,7 @@ export default function MessageShow() {
             ) : null}
             </>
             )}
+            </div>
 
             <NotificationModal
                 key={notificationKey}

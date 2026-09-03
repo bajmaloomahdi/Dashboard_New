@@ -162,6 +162,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
             open={open}
             onCancel={handleClose}
             width={800}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -210,7 +211,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نام پارامتر (در SP)"
                                 name="ParameterName"
@@ -234,7 +235,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="عنوان نمایشی"
                                 name="ParameterCaption"
@@ -272,7 +273,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نوع داده (DataType)"
                                 name="DataType"
@@ -290,7 +291,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نوع کنترل (Control)"
                                 name="ControlType"
@@ -349,7 +350,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="مقدار پیش‌فرض"
                                 name="DefaultValue"
@@ -365,7 +366,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="ترتیب نمایش"
                                 name="SortOrder"
@@ -397,7 +398,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item label="پارامتر اجباری" name="IsRequired">
                                 <Switch
                                     checked={data.IsRequired}
@@ -408,7 +409,7 @@ export default function ParameterFormModal({ open, onClose, editingParameter, re
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item label="نمایش در فرم" name="IsVisible">
                                 <Switch
                                     checked={data.IsVisible}

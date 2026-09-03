@@ -157,6 +157,7 @@ export default function ProjectFormModal({
             open={open}
             onCancel={handleClose}
             width={720}
+            className="responsive-modal"
             footer={[
                 <Button key="cancel" icon={<CloseOutlined />} onClick={handleClose} disabled={processing}>
                     انصراف
@@ -174,7 +175,7 @@ export default function ProjectFormModal({
         >
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item
                             label="کد پروژه"
                             extra="کد یکتا (مثلاً PRJ-001)"
@@ -192,7 +193,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={16}>
+                    <Col xs={24} md={16}>
                         <Form.Item
                             label="عنوان پروژه"
                             name="ProjectTitle"
@@ -227,7 +228,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={6}>
+                    <Col xs={24} md={6}>
                         <Form.Item
                             label="وضعیت پروژه"
                             name="ProjectStatusID"
@@ -244,7 +245,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={6}>
+                    <Col xs={24} md={6}>
                         <Form.Item label="اولویت پروژه" name="ProjectPriorityID">
                             <Select
                                 placeholder="انتخاب اولویت"
@@ -275,7 +276,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={6}>
+                    <Col xs={24} md={6}>
                         <Form.Item label="درصد پیشرفت" name="ProgressPercent">
                             <InputNumber
                                 min={0}
@@ -290,7 +291,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={6}>
+                    <Col xs={24} md={6}>
                         <Form.Item label="فعال" name="IsActive" valuePropName="checked">
                             <Switch
                                 checked={data.IsActive}
@@ -300,7 +301,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="تاریخ شروع" name="StartDate">
                             <PersianDateInput
                                 value={data.StartDate}
@@ -310,7 +311,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="تاریخ پایان پیش‌بینی" name="PlannedEndDate">
                             <PersianDateInput
                                 value={data.PlannedEndDate}
@@ -320,7 +321,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="تاریخ پایان واقعی" name="ActualEndDate">
                             <PersianDateInput
                                 value={data.ActualEndDate}
@@ -333,7 +334,7 @@ export default function ProjectFormModal({
                     {/* فقط در حالت ایجاد: انتخاب مسئول و اعضا */}
                     {!isEdit && (
                         <>
-                            <Col span={12}>
+                            <Col xs={24} md={12}>
                                 <Form.Item
                                     label={
                                         <span>
@@ -357,7 +358,7 @@ export default function ProjectFormModal({
                                 </Form.Item>
                             </Col>
 
-                            <Col span={12}>
+                            <Col xs={24} md={12}>
                                 <Form.Item
                                     label={
                                         <span>

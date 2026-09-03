@@ -207,6 +207,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
             open={open}
             onCancel={handleClose}
             width={800}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -276,7 +277,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
 
                 <Row gutter={16}>
                     {/* عنوان منو */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="عنوان منو"
                             name="MenuTitle"
@@ -298,7 +299,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* نوع منو */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="نوع منو"
                             name="MenuKind"
@@ -321,7 +322,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* منوی والد */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="منوی والد"
                             name="ParentID"
@@ -344,7 +345,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* ترتیب نمایش */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="ترتیب نمایش"
                             name="SortOrder"
@@ -363,7 +364,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* آدرس (URL) */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="آدرس (URL)"
                             name="Url"
@@ -381,7 +382,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* آیکون */}
-                    <Col span={12}>
+                    <Col xs={24} md={12}>
                         <Form.Item
                             label="آیکون"
                             name="Icon"
@@ -403,7 +404,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
 
                 <Row gutter={16}>
                     {/* تب صفحه اصلی */}
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item
                             label={
                                 <span>
@@ -425,7 +426,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* قابل مشاهده */}
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item
                             label="نمایش در سایدبار"
                             name="IsVisible"
@@ -442,7 +443,7 @@ export default function MenuFormModal({ open, onClose, editingMenu, parentOption
                     </Col>
 
                     {/* باز شدن در تب جدید */}
-                    <Col span={8}>
+                    <Col xs={24} md={8}>
                         <Form.Item label="باز شدن در تب جدید مرورگر" name="OpenInNewTab">
                             <Switch
                                 checked={data.OpenInNewTab}

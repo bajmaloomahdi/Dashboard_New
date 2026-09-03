@@ -142,6 +142,7 @@ export default function MasterParameterFormModal({ open, onClose, editingParamet
             open={open}
             onCancel={handleClose}
             width={700}
+            className="responsive-modal"
             footer={[
                 <Button
                     key="cancel"
@@ -189,7 +190,7 @@ export default function MasterParameterFormModal({ open, onClose, editingParamet
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نام پارامتر (Technical)"
                                 name="ParameterName"
@@ -213,7 +214,7 @@ export default function MasterParameterFormModal({ open, onClose, editingParamet
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="عنوان نمایشی"
                                 name="ParameterCaption"
@@ -251,7 +252,7 @@ export default function MasterParameterFormModal({ open, onClose, editingParamet
                     </Text>
 
                     <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نوع داده (DataType)"
                                 name="DataType"
@@ -266,7 +267,7 @@ export default function MasterParameterFormModal({ open, onClose, editingParamet
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="نوع کنترل"
                                 name="ControlType"

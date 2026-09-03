@@ -2,6 +2,7 @@ import { Layout, Button, Dropdown, Avatar, Space, Typography, Badge, Divider, To
 import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
+    MenuOutlined,
     UserOutlined,
     LogoutOutlined,
     BellOutlined,
@@ -21,6 +22,8 @@ const { Text } = Typography;
 interface HeaderProps {
     user: User | null;
     collapsed: boolean;
+    /** حالت موبایل/تبلت — همبرگر به‌جای collapse، منوی کشویی را باز می‌کند */
+    isMobile?: boolean;
     onToggleCollapse: () => void;
 }
 
@@ -63,7 +66,7 @@ const getPersianTime = (date: Date): string => {
     return formatter.format(date);
 };
 
-export default function Header({ user, collapsed, onToggleCollapse }: HeaderProps) {
+export default function Header({ user, collapsed, isMobile = false, onToggleCollapse }: HeaderProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     // دریافت تعداد پیام‌ها و شماره نسخه از props سراسری اینرشیا
@@ -194,6 +197,7 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
 
     return (
         <AntHeader
+            className="app-header"
             style={{
                 background: '#fff',
                 padding: '0 24px',
@@ -207,22 +211,31 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                 height: 64,
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <Button
                     type="text"
-                    icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                    aria-label="منو"
+                    icon={
+                        isMobile
+                            ? <MenuOutlined />
+                            : (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />)
+                    }
                     onClick={onToggleCollapse}
                     style={{
                         fontSize: 18,
                         width: 48,
                         height: 48,
+                        flexShrink: 0,
                     }}
                 />
+                {/* برند فشرده — فقط در موبایل (در دسکتاپ لوگو داخل Sider است) */}
+                <span className="app-header-brand">🎯 داشبورد</span>
             </div>
 
-            <Space size="middle" align="center">
+            <Space className="app-header-actions" size="middle" align="center">
                 {/* برچسب نسخه نرم‌افزار به صورت فارسی */}
                 <div
+                    className="app-header-version"
                     style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -335,6 +348,7 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                             {getAvatarLetter() || <UserOutlined />}
                         </Avatar>
                         <div
+                            className="app-header-usertext"
                             style={{
                                 display: 'flex',
                                 flexDirection: 'column',
@@ -373,9 +387,35 @@ export default function Header({ user, collapsed, onToggleCollapse }: HeaderProp
                     transform: translateY(-1px);
                     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
                 }
-                @media (max-width: 768px) {
-                    .datetime-display {
-                        display: none !important;
+
+                /* برند فشرده‌ی هدر — فقط در موبایل/تبلت دیده می‌شود */
+                .app-header-brand {
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: #667eea;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 42vw;
+                }
+                @media (min-width: 992px) {
+                    .app-header-brand { display: none !important; }
+                }
+
+                /* موبایل / تبلت */
+                @media (max-width: 991px) {
+                    .app-header { padding: 0 12px !important; }
+                }
+
+                /* موبایل کوچک — حذف اطلاعات غیرضروری، فشرده‌سازی */
+                @media (max-width: 767px) {
+                    .datetime-display { display: none !important; }
+                    .app-header-version { display: none !important; }
+                    .app-header-usertext { display: none !important; }
+                    .app-header-actions { gap: 6px !important; }
+                    .user-profile-trigger {
+                        padding: 5px !important;
+                        border-color: transparent !important;
                     }
                 }
             `}</style>

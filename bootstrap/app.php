@@ -15,6 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/Console/Commands',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
+        // پشت پراکسی (Cloudflare + روتر + nginx) — به هدرهای X-Forwarded-* اعتماد کن
+        // تا Laravel اسکیم/هاست/IP واقعی کاربر را درست تشخیص دهد (HTTPS, redirectها, ...).
+        $middleware->trustProxies(
+            at: ['172.16.0.0/12'],
+            headers: Request::HEADER_X_FORWARDED_FOR
+                   | Request::HEADER_X_FORWARDED_HOST
+                   | Request::HEADER_X_FORWARDED_PORT
+                   | Request::HEADER_X_FORWARDED_PROTO,
+        );
+
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);

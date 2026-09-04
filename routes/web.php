@@ -49,11 +49,16 @@ Route::middleware('auth')->group(function () {
         $homeTabItems = DB::select('EXEC sp_GetUserHomeTabItems @UserID = ?', [$userId]);
         $messageStats = DB::select('EXEC sp_GetUserMessagePriorityStats @UserID = ?', [$userId]);
 
+        // لیست کامل اولویت‌های فعال (همان SP صفحه‌ی «نامه‌ها») تا کارت‌های اولویت در
+        // داشبورد همیشه نمایش داده شوند، حتی وقتی هیچ پیامی برای کاربر نیست.
+        $priorities   = DB::select('EXEC sp_GetMsgPriorities @SearchText = ?, @IsActive = ?', [null, 1]);
+
         return Inertia::render('Dashboard', [
             'unreadCount'          => $unreadCount,
             'homeTabs'             => $homeTabs,
             'homeTabItems'         => $homeTabItems,
             'messagePriorityStats' => $messageStats,
+            'priorities'           => $priorities,
         ]);
     })->name('dashboard');
 

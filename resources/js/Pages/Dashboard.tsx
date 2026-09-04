@@ -61,6 +61,16 @@ interface PriorityStat {
     MessageCount: number;
 }
 
+/** یک اولویت فعال از `sp_GetMsgPriorities` (همان ساختار صفحه‌ی «نامه‌ها») */
+interface MsgPriority {
+    msgPriorityID: number;
+    Code: number | null;
+    Name: string;
+    Description: string | null;
+    SortOrder: number;
+    IsActive: boolean | number;
+}
+
 /* ------------------------------------------------------------------ */
 /* استایل                                                              */
 /* ------------------------------------------------------------------ */
@@ -208,12 +218,77 @@ function Panel({ title, icon, accent, extraText, onOpen, children }: PanelProps)
 /* محتوای پنجره: پیام‌های من                                           */
 /* ------------------------------------------------------------------ */
 
-function MyMessagesContent({ stats }: { stats: PriorityStat[] }) {
-    const total = (stats || []).reduce((sum, s) => sum + (s.MessageCount || 0), 0);
-    const maxSort = Math.max(1, ...(stats || []).map((s) => s.PrioritySortOrder || 0));
-    const list = (stats || []).filter((s) => s.msgPriorityID !== null || s.MessageCount > 0);
+interface PriorityRow {
+    id: number | null;
+    name: string;
+    sortOrder: number;
+    count: number;
+}
 
-    if (total === 0) {
+function MyMessagesContent({
+    stats,
+    priorities,
+}: {
+    stats: PriorityStat[];
+    priorities: MsgPriority[];
+}) {
+    const statList = stats || [];
+
+    // درایور sqlsrv مقادیر عددی را به‌صورت رشته برمی‌گرداند ⇒ همه‌جا صریحاً به عدد تبدیل می‌شود.
+    const num = (v: unknown) => Number(v ?? 0) || 0;
+
+    // شمارش هر اولویت از روی stats؛ کلید = msgPriorityID (به‌صورت عدد)
+    const countByPriority = new Map<number, number>();
+    statList.forEach((s) => {
+        if (s.msgPriorityID !== null && s.msgPriorityID !== undefined) {
+            const key = num(s.msgPriorityID);
+            countByPriority.set(key, (countByPriority.get(key) || 0) + num(s.MessageCount));
+        }
+    });
+
+    // منبع اصلی کارت‌ها = لیست کامل اولویت‌های فعال (از DB).
+    const byId = new Map<number, PriorityRow>();
+    (priorities || []).forEach((p) => {
+        const id = num(p.msgPriorityID);
+        byId.set(id, {
+            id,
+            name: p.Name,
+            sortOrder: num(p.SortOrder),
+            count: countByPriority.get(id) || 0,
+        });
+    });
+
+    // ایمنی: اولویتی که در stats شمارش دارد ولی در لیست فعال نیست (مثلاً بعداً غیرفعال شده
+    // ولی پیام قدیمی دارد) هم اضافه شود تا count واقعی گم نشود.
+    statList.forEach((s) => {
+        if (s.msgPriorityID === null || s.msgPriorityID === undefined) return;
+        const id = num(s.msgPriorityID);
+        if (!byId.has(id) && num(s.MessageCount) > 0) {
+            byId.set(id, { id, name: s.PriorityName, sortOrder: num(s.PrioritySortOrder), count: num(s.MessageCount) });
+        }
+    });
+
+    // مرتب بر اساس SortOrder واقعی (نزولی — بالاترین اولویت اول).
+    const rows: PriorityRow[] = [...byId.values()].sort((a, b) => b.sortOrder - a.sortOrder);
+
+    // ردیف «بدون اولویت» فقط اگر واقعاً آیتمی بدون اولویت وجود داشته باشد.
+    const noPriority = statList.find(
+        (s) => (s.msgPriorityID === null || s.msgPriorityID === undefined) && num(s.MessageCount) > 0,
+    );
+    if (noPriority) {
+        rows.push({
+            id: null,
+            name: noPriority.PriorityName || 'بدون اولویت',
+            sortOrder: 0,
+            count: num(noPriority.MessageCount),
+        });
+    }
+
+    const total = rows.reduce((sum, r) => sum + r.count, 0);
+    const maxSort = Math.max(1, ...rows.map((r) => r.sortOrder));
+
+    // اگر هیچ اولویت فعالی در سیستم تعریف نشده باشد (حالت نادر) پیام وضعیت نشان بده.
+    if (rows.length === 0) {
         return (
             <div
                 style={{
@@ -232,54 +307,68 @@ function MyMessagesContent({ stats }: { stats: PriorityStat[] }) {
     }
 
     return (
+        <>
+        {total === 0 && (
+            <div
+                style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 100%)',
+                    border: '1px dashed #86EFAC',
+                    borderRadius: 12, padding: '10px 14px', marginBottom: 12,
+                }}
+            >
+                <CheckCircleOutlined style={{ fontSize: 18, color: '#10B981' }} />
+                <Text style={{ fontSize: 12 }}>پیام رسیدگی‌نشده‌ای ندارید — همه‌چیز مرتب است 🎉</Text>
+            </div>
+        )}
         <Row gutter={[12, 12]}>
-            {list.map((stat) => {
-                const th = priorityTheme(stat.PrioritySortOrder, maxSort);
-                const isEmpty = stat.MessageCount === 0;
+            {rows.map((row) => {
+                // کارت اولویت همیشه رنگی و با آیکون است — count صفر فقط عددش صفر است،
+                // ظاهر کارت تغییری نمی‌کند.
+                const th = priorityTheme(row.sortOrder, maxSort);
 
                 return (
-                    <Col xs={12} md={8} xl={6} key={stat.msgPriorityID ?? 'none'}>
+                    <Col xs={12} md={8} xl={6} key={row.id ?? 'none'}>
                         <div
                             className="priority-card"
                             style={{
-                                background: isEmpty ? '#F9FAFB' : th.gradient,
-                                boxShadow: isEmpty ? 'none' : `0 8px 18px ${th.shadow}`,
-                                border: isEmpty ? '1px solid #E5E7EB' : '1px solid transparent',
-                                opacity: isEmpty ? 0.7 : 1,
+                                background: th.gradient,
+                                boxShadow: `0 8px 18px ${th.shadow}`,
+                                border: '1px solid transparent',
                             }}
                             onClick={() =>
                                 router.visit(
-                                    stat.msgPriorityID
-                                        ? `/messages?msg_priority_id=${stat.msgPriorityID}`
+                                    row.id
+                                        ? `/messages?msg_priority_id=${row.id}`
                                         : '/messages'
                                 )
                             }
                         >
-                            {!isEmpty && <div className="pc-glow" />}
+                            <div className="pc-glow" />
                             <div style={{ position: 'relative' }}>
                                 <Space size={5}>
                                     <ThunderboltOutlined
-                                        style={{ fontSize: 13, color: isEmpty ? '#9CA3AF' : 'rgba(255,255,255,.9)' }}
+                                        style={{ fontSize: 13, color: 'rgba(255,255,255,.9)' }}
                                     />
                                     <Text
                                         style={{
                                             fontSize: 12, fontWeight: 600,
-                                            color: isEmpty ? '#6B7280' : 'rgba(255,255,255,.95)',
+                                            color: 'rgba(255,255,255,.95)',
                                         }}
                                     >
-                                        {stat.PriorityName}
+                                        {row.name}
                                     </Text>
                                 </Space>
                                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 5 }}>
                                     <span
                                         style={{
                                             fontSize: 26, fontWeight: 800, lineHeight: 1,
-                                            color: isEmpty ? '#9CA3AF' : '#fff', fontFamily: 'monospace',
+                                            color: '#fff', fontFamily: 'monospace',
                                         }}
                                     >
-                                        {stat.MessageCount}
+                                        {row.count}
                                     </span>
-                                    <span style={{ fontSize: 11, color: isEmpty ? '#9CA3AF' : 'rgba(255,255,255,.85)' }}>
+                                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,.85)' }}>
                                         پیام
                                     </span>
                                 </div>
@@ -289,6 +378,7 @@ function MyMessagesContent({ stats }: { stats: PriorityStat[] }) {
                 );
             })}
         </Row>
+        </>
     );
 }
 
@@ -336,11 +426,16 @@ function ShortcutContent({ items }: { items: HomeTabItem[] }) {
 /* ------------------------------------------------------------------ */
 
 export default function Dashboard() {
-    const { auth, company, homeTabs, homeTabItems, messagePriorityStats } = usePage().props as any;
+    const { auth, company, homeTabs, homeTabItems, messagePriorityStats, priorities } = usePage().props as any;
 
     const tabs: HomeTab[] = homeTabs || [];
     const items: HomeTabItem[] = homeTabItems || [];
     const stats: PriorityStat[] = messagePriorityStats || [];
+    const priorityList: MsgPriority[] = priorities || [];
+
+    // مجموع واقعی پیام‌های رسیدگی‌نشده‌ی کاربر (drivers مقدار را رشته می‌دهند ⇒ تبدیل صریح).
+    // مبنای badge تبِ «کارهای روزانه من»؛ اگر پیامی نباشد دقیقاً 0 است.
+    const unreadTotal = stats.reduce((sum, s) => sum + (Number(s.MessageCount ?? 0) || 0), 0);
 
     const [activeKey, setActiveKey] = useState<string>(
         tabs.length ? String(tabs[0].MenuID) : ''
@@ -356,14 +451,17 @@ export default function Dashboard() {
     }, [items]);
 
     /**
-     * آیا این تب پنجره «پیام‌های من» را دارد؟
-     * فقط زمانی که تب صراحتاً با Url یا MenuCode مربوط به my-messages / mymessages
-     * مشخص شده باشد. (قبلاً به‌صورت fallback روی تب اول — index === 0 — هم اضافه می‌شد
-     * که باعث می‌شد پنجره به اشتباه در تب‌های دیگری مثل «کارهای روزانه من» ظاهر شود.)
+     * آیا این تب پنجره «پیام‌های من» (کارت‌های اولویت) را دارد؟
+     * تشخیص صریح بر اساس Url / MenuCode مربوط به my-messages، یا عنوان تب
+     * «کارهای روزانه من». (fallback قبلی روی تب اول — index === 0 — حذف شده تا
+     * پنجره به اشتباه در تب‌های نامرتبط ظاهر نشود.)
      */
     const hasMessagesPanel = (tab: HomeTab) => {
         const key = `${tab.Url || ''} ${tab.MenuCode || ''}`.toLowerCase();
-        return key.includes('my-messages') || key.includes('mymessages');
+        if (key.includes('my-messages') || key.includes('mymessages') || key.includes('daily-tasks')) {
+            return true;
+        }
+        return (tab.MenuTitle || '').includes('کارهای روزانه من');
     };
 
     /**
@@ -388,7 +486,7 @@ export default function Dashboard() {
                         extraText="بر اساس اولویت"
                         onOpen={() => router.visit('/messages')}
                     >
-                        <MyMessagesContent stats={stats} />
+                        <MyMessagesContent stats={stats} priorities={priorityList} />
                     </Panel>
                 ),
             });
@@ -468,11 +566,13 @@ export default function Dashboard() {
     }));
 
     // آیتم‌های نوار تب به‌شکل چیپ — همان الگوی ChipTabs در «نامه‌ها» و «پروژه‌ها»
+    // badge تبِ «پیام‌های من / کارهای روزانه من» = تعداد واقعی پیام‌های رسیدگی‌نشده (می‌تواند 0 باشد)،
+    // نه تعداد پنجره‌ها. بقیه‌ی تب‌ها همان تعداد پنجره را نشان می‌دهند (0 ⇒ بدون badge).
     const tabDefs = tabsData.map(({ tab, panels }) => ({
         key: String(tab.MenuID),
         label: tab.MenuTitle,
         icon: renderIcon(tab.Icon),
-        count: panels.length || null,
+        count: hasMessagesPanel(tab) ? unreadTotal : (panels.length || null),
     }));
 
     const activeTabData =

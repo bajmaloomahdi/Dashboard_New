@@ -155,10 +155,17 @@ public function permissions(int $id, Request $request)
         [$id, $searchText ?: null]
     );
 
+    // دریافت لیست دسترسی‌های عملیاتی با وضعیت
+    $rolePermissions = DB::select(
+        'EXEC sp_GetPermissionsForRole @RoleID = ?, @SearchText = ?',
+        [$id, $searchText ?: null]
+    );
+
     return Inertia::render('Roles/Permissions', [
         'role' => $role,
         'roleMenus' => $roleMenus,
         'roleReports' => $roleReports,
+        'rolePermissions' => $rolePermissions,
         'filters' => [
             'search' => $searchText,
         ],
@@ -207,9 +214,9 @@ public function permissions(int $id, Request $request)
         $reportIds = implode(',', $validated['report_ids'] ?? []);
 
         $result = DB::select(
-            'EXEC sp_SaveRoleReports 
-                @RoleID = ?, 
-                @ReportIDs = ?, 
+            'EXEC sp_SaveRoleReports
+                @RoleID = ?,
+                @ReportIDs = ?,
                 @ModifyUser = ?',
             [$id, $reportIds, Auth::id()]
         );
@@ -218,6 +225,35 @@ public function permissions(int $id, Request $request)
 
         if (empty($response['Success'])) {
             return back()->with('error', $response['Message'] ?? 'خطا در ذخیره دسترسی گزارشات');
+        }
+
+        return back()->with('success', $response['Message']);
+    }
+
+    /**
+     * ذخیره دسترسی‌های عملیاتی (Permissions) نقش
+     */
+    public function savePermissions(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'permission_ids' => 'nullable|array',
+            'permission_ids.*' => 'integer',
+        ]);
+
+        $permissionIds = implode(',', $validated['permission_ids'] ?? []);
+
+        $result = DB::select(
+            'EXEC sp_SaveRolePermissions
+                @RoleID = ?,
+                @PermissionIDs = ?,
+                @ModifyUser = ?',
+            [$id, $permissionIds, Auth::id()]
+        );
+
+        $response = (array) ($result[0] ?? []);
+
+        if (empty($response['Success'])) {
+            return back()->with('error', $response['Message'] ?? 'خطا در ذخیره دسترسی‌های عملیاتی');
         }
 
         return back()->with('success', $response['Message']);

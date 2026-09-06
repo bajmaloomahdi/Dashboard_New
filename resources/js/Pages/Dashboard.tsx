@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Card, Row, Col, Typography, Space, Avatar, Button, Tooltip } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Card, Row, Col, Typography, Space, Avatar, Button, Tooltip, List, Tag, Empty, Spin } from 'antd';
 import * as AntIcons from '@ant-design/icons';
 import {
     AppstoreOutlined,
@@ -13,12 +13,15 @@ import {
     ThunderboltOutlined,
     CheckCircleOutlined,
     ExpandOutlined,
+    CalendarOutlined,
+    ClockCircleOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../Layouts/MainLayout';
 import CompanyLogo from '../Components/CompanyLogo';
 import ChipTabs from '../Components/ChipTabs';
 import { THEME, STYLES } from '../theme';
+import { toApiDate } from '../Utils/jalaliCalendar';
 
 const { Title, Text } = Typography;
 
@@ -422,11 +425,156 @@ function ShortcutContent({ items }: { items: HomeTabItem[] }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* محتوای پنجره: رویدادهای امروز من                                    */
+/* ------------------------------------------------------------------ */
+
+interface TodayEvent {
+    EventID: number;
+    OccurrenceKey: string;
+    Title: string;
+    StartDateTime: string;
+    EndDateTime: string;
+    IsAllDay: boolean | number;
+    Color: string;
+    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+    MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'NONE';
+}
+
+const REL_LABEL: Record<string, string> = {
+    CREATOR: 'ساخته‌ی شما',
+    OWNER: 'به عهده‌ی شما',
+    ATTENDEE: 'دعوت‌شده',
+};
+
+function hhmm(dt: string): string {
+    const d = new Date(dt);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function TodayEventsContent() {
+    const [loading, setLoading] = useState(true);
+    const [events, setEvents] = useState<TodayEvent[]>([]);
+
+    useEffect(() => {
+        const today = toApiDate(new Date());
+        const params = new URLSearchParams({ from: today, to: today });
+        fetch(`/calendar/events?${params.toString()}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+            credentials: 'same-origin',
+        })
+            .then((r) => (r.ok ? r.json() : { events: [] }))
+            .then((data) => setEvents(data.events || []))
+            .catch(() => setEvents([]))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const sorted = [...events].sort((a, b) => {
+        const aAll = Number(a.IsAllDay) === 1 ? 0 : 1;
+        const bAll = Number(b.IsAllDay) === 1 ? 0 : 1;
+        if (aAll !== bAll) return aAll - bAll;
+        return new Date(a.StartDateTime).getTime() - new Date(b.StartDateTime).getTime();
+    });
+
+    if (loading) {
+        return (
+            <div style={{ textAlign: 'center', padding: 24 }}>
+                <Spin />
+            </div>
+        );
+    }
+
+    if (sorted.length === 0) {
+        return (
+            <div
+                style={{
+                    background: 'linear-gradient(180deg, #F5F3FF 0%, #FFFFFF 100%)',
+                    border: '1px dashed #DDD6FE',
+                    borderRadius: 12,
+                    padding: '28px 20px',
+                    textAlign: 'center',
+                }}
+            >
+                <CalendarOutlined style={{ fontSize: 34, color: THEME.primary, marginBottom: 8 }} />
+                <Text strong style={{ display: 'block', fontSize: 14 }}>
+                    امروز رویدادی ندارید
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                    برای افزودن رویداد به تقویم بروید
+                </Text>
+            </div>
+        );
+    }
+
+    return (
+        <List
+            dataSource={sorted}
+            split={false}
+            renderItem={(ev) => {
+                const allDay = Number(ev.IsAllDay) === 1;
+                return (
+                    <div
+                        className="shortcut-row"
+                        onClick={() => router.visit('/calendar')}
+                        style={{ opacity: ev.Status === 'CANCELLED' ? 0.6 : 1 }}
+                    >
+                        <span
+                            style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: '50%',
+                                background: ev.Color || THEME.primary,
+                                flexShrink: 0,
+                            }}
+                        />
+                        <div
+                            style={{
+                                fontFamily: 'monospace',
+                                direction: 'ltr',
+                                fontSize: 12,
+                                minWidth: allDay ? 62 : 90,
+                                color: THEME.textSecondary,
+                                textAlign: 'center',
+                            }}
+                        >
+                            {allDay ? 'تمام‌روز' : `${hhmm(ev.StartDateTime)}–${hhmm(ev.EndDateTime)}`}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                                strong
+                                style={{
+                                    fontSize: 13,
+                                    display: 'block',
+                                    textDecoration: ev.Status === 'CANCELLED' ? 'line-through' : 'none',
+                                }}
+                            >
+                                {ev.Title}
+                            </Text>
+                            {REL_LABEL[ev.MyRelation] && (
+                                <Text type="secondary" style={{ fontSize: 11 }}>
+                                    {REL_LABEL[ev.MyRelation]}
+                                </Text>
+                            )}
+                        </div>
+                        {ev.Status === 'TENTATIVE' && (
+                            <Tag color="warning" style={{ borderRadius: 6, fontSize: 10 }}>
+                                موقت
+                            </Tag>
+                        )}
+                        <ArrowLeftOutlined style={{ color: THEME.primary, fontSize: 12 }} />
+                    </div>
+                );
+            }}
+        />
+    );
+}
+
+/* ------------------------------------------------------------------ */
 /* صفحه داشبورد                                                        */
 /* ------------------------------------------------------------------ */
 
 export default function Dashboard() {
-    const { auth, company, homeTabs, homeTabItems, messagePriorityStats, priorities } = usePage().props as any;
+    const { auth, company, homeTabs, homeTabItems, messagePriorityStats, priorities, canViewCalendar } =
+        usePage().props as any;
 
     const tabs: HomeTab[] = homeTabs || [];
     const items: HomeTabItem[] = homeTabItems || [];
@@ -490,6 +638,25 @@ export default function Dashboard() {
                     </Panel>
                 ),
             });
+
+            // کارت «رویدادهای امروز من» — دقیقاً زیر کارت پیام‌های من (فقط با دسترسی تقویم)
+            if (canViewCalendar) {
+                panels.push({
+                    key: 'w-today-events',
+                    span: 24,
+                    node: (
+                        <Panel
+                            title="رویدادهای امروز من"
+                            icon={<CalendarOutlined />}
+                            accent="linear-gradient(135deg, #34D399 0%, #059669 100%)"
+                            extraText="از تقویم شما"
+                            onOpen={() => router.visit('/calendar')}
+                        >
+                            <TodayEventsContent />
+                        </Panel>
+                    ),
+                });
+            }
         }
 
         const reports = tabItems.filter((i) => i.ItemType === 'REPORT');

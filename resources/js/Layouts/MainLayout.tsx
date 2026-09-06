@@ -3,6 +3,7 @@ import { useState, useEffect, ReactNode } from 'react';
 import { usePage } from '@inertiajs/react';
 import Sidebar, { SidebarMenu } from '../Components/Sidebar';
 import Header from '../Components/Header';
+import ReminderWatcher from '../Components/ReminderWatcher';
 
 const { Content, Footer } = Layout;
 const { useBreakpoint } = Grid;
@@ -43,6 +44,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
     return (
         <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
+            {/* ناظرِ سراسریِ یادآوری‌ها — روی همه‌ی صفحات فعال است */}
+            <ReminderWatcher />
+
             {/* Sider دسکتاپ — در موبایل با CSS مخفی می‌شود */}
             <Sidebar menus={menus || []} collapsed={collapsed} currentUrl={currentUrl} />
 

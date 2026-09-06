@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\MasterParameterController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\MessageController;
@@ -53,12 +54,17 @@ Route::middleware('auth')->group(function () {
         // داشبورد همیشه نمایش داده شوند، حتی وقتی هیچ پیامی برای کاربر نیست.
         $priorities   = DB::select('EXEC sp_GetMsgPriorities @SearchText = ?, @IsActive = ?', [null, 1]);
 
+        // آیا کاربر دسترسی مشاهده‌ی تقویم را دارد؟ (کارت «رویدادهای امروز من» در داشبورد)
+        $calPerm = DB::select('EXEC sp_CheckUserPermission @UserID = ?, @PermissionCode = ?', [$userId, 'CALENDAR_VIEW']);
+        $canViewCalendar = (bool) ($calPerm[0]->HasPermission ?? 0);
+
         return Inertia::render('Dashboard', [
             'unreadCount'          => $unreadCount,
             'homeTabs'             => $homeTabs,
             'homeTabItems'         => $homeTabItems,
             'messagePriorityStats' => $messageStats,
             'priorities'           => $priorities,
+            'canViewCalendar'      => $canViewCalendar,
         ]);
     })->name('dashboard');
 
@@ -86,6 +92,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/{id}/permissions', [RoleController::class, 'permissions'])->name('permissions');
         Route::post('/{id}/menus', [RoleController::class, 'saveMenus'])->name('save-menus');
         Route::post('/{id}/reports', [RoleController::class, 'saveReports'])->name('save-reports');
+        Route::post('/{id}/permissions', [RoleController::class, 'savePermissions'])->name('save-permissions');
     });
 
     // منوها
@@ -186,6 +193,26 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects/{id}/comments', [ProjectsController::class, 'addComment'])->name('projects.comments.store');
     Route::get('/projects/{id}/attachments/{attachmentId}', [ProjectsController::class, 'downloadAttachment'])->name('projects.attachments.show');
 
+
+    // ───────────────────────── تقویم و یادآوری‌ها ─────────────────────────
+    Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
+    Route::get('/calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
+
+    // یادآوری‌ها (قبل از مسیرهای {id} رویداد تا تداخل نداشته باشند)
+    Route::get('/calendar/reminders/due', [CalendarController::class, 'dueReminders'])->name('calendar.reminders.due');
+    Route::get('/calendar/reminders', [CalendarController::class, 'myReminders'])->name('calendar.reminders.index');
+    Route::post('/calendar/reminders/standalone', [CalendarController::class, 'storeStandaloneReminder'])->name('calendar.reminders.standalone.store');
+    Route::put('/calendar/reminders/standalone/{id}', [CalendarController::class, 'updateStandaloneReminder'])->name('calendar.reminders.standalone.update');
+    Route::post('/calendar/reminders/{id}/seen', [CalendarController::class, 'markReminderSeen'])->name('calendar.reminders.seen');
+    Route::delete('/calendar/reminders/{id}', [CalendarController::class, 'destroyReminder'])->name('calendar.reminders.destroy');
+
+    // رویدادها
+    Route::get('/calendar/events/{id}', [CalendarController::class, 'show'])->name('calendar.events.show');
+    Route::post('/calendar/events', [CalendarController::class, 'store'])->name('calendar.events.store');
+    Route::put('/calendar/events/{id}', [CalendarController::class, 'update'])->name('calendar.events.update');
+    Route::delete('/calendar/events/{id}', [CalendarController::class, 'destroy'])->name('calendar.events.destroy');
+    Route::post('/calendar/events/{id}/respond', [CalendarController::class, 'respond'])->name('calendar.events.respond');
+    Route::post('/calendar/events/{id}/reminder', [CalendarController::class, 'saveMyEventReminder'])->name('calendar.events.reminder');
 
     // تنظیمات شرکت
     Route::get('company', [CompanyController::class, 'index'])->name('company.index');

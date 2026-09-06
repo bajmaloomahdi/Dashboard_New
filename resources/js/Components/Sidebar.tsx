@@ -9,6 +9,7 @@ import {
     BarChartOutlined,
     FolderOutlined,
     AppstoreOutlined,
+    CalendarOutlined,
 } from '@ant-design/icons';
 import { useMemo } from 'react';
 import type { Menu as MenuType, MenuTree } from '../Types';
@@ -28,6 +29,7 @@ interface SidebarProps {
 const getMenuIcon = (menuCode: string) => {
     const iconMap: Record<string, JSX.Element> = {
         DASHBOARD: <DashboardOutlined />,
+        CALENDAR: <CalendarOutlined />,
         REPORTS: <FileTextOutlined />,
         ADMIN: <SettingOutlined />,
         USERS: <TeamOutlined />,

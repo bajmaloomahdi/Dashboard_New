@@ -24,6 +24,7 @@ import {
     StopOutlined,
     CheckSquareOutlined,
     BorderOutlined,
+    KeyOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -67,17 +68,29 @@ interface Report {
     HasAccess: boolean | number;
 }
 
+interface Permission {
+    PermissionID: number;
+    PermissionCode: string;
+    PermissionName: string;
+    PermissionGroup: string;
+    Description: string | null;
+    SortOrder: number;
+    HasAccess: boolean | number;
+}
+
 export default function RolePermissions() {
-    const { role, roleMenus: menus, roleReports: reports, flash } = usePage().props as any;
+    const { role, roleMenus: menus, roleReports: reports, rolePermissions: permissions = [], flash } = usePage().props as any;
 
     const [activeTab, setActiveTab] = useState('menus');
     const [searchText, setSearchText] = useState('');
 
     const [selectedMenuIds, setSelectedMenuIds] = useState<Set<number>>(new Set());
     const [selectedReportIds, setSelectedReportIds] = useState<Set<number>>(new Set());
+    const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
 
     const [initialMenuIds, setInitialMenuIds] = useState<Set<number>>(new Set());
     const [initialReportIds, setInitialReportIds] = useState<Set<number>>(new Set());
+    const [initialPermissionIds, setInitialPermissionIds] = useState<Set<number>>(new Set());
 
     const [saving, setSaving] = useState(false);
 
@@ -94,12 +107,17 @@ export default function RolePermissions() {
         const reportIds = new Set<number>(
             reports.filter((r: Report) => columnHelpers.toBool(r.HasAccess)).map((r: Report) => r.ReportID)
         );
+        const permissionIds = new Set<number>(
+            permissions.filter((p: Permission) => columnHelpers.toBool(p.HasAccess)).map((p: Permission) => p.PermissionID)
+        );
 
         setSelectedMenuIds(menuIds);
         setSelectedReportIds(reportIds);
+        setSelectedPermissionIds(permissionIds);
         setInitialMenuIds(menuIds);
         setInitialReportIds(reportIds);
-    }, [menus, reports]);
+        setInitialPermissionIds(permissionIds);
+    }, [menus, reports, permissions]);
 
     useEffect(() => {
         if (flash?.success) showNotification('success', flash.success);
@@ -153,21 +171,27 @@ export default function RolePermissions() {
         );
     }, [reports, searchText]);
 
+    const filteredPermissions = useMemo(() => {
+        if (!searchText) return permissions;
+        const search = searchText.toLowerCase();
+        return permissions.filter((p: Permission) =>
+            p.PermissionName?.toLowerCase().includes(search) ||
+            p.PermissionCode?.toLowerCase().includes(search) ||
+            p.PermissionGroup?.toLowerCase().includes(search)
+        );
+    }, [permissions, searchText]);
+
+    const setsDiffer = (a: Set<number>, b: Set<number>) => {
+        if (a.size !== b.size) return true;
+        for (const id of a) if (!b.has(id)) return true;
+        return false;
+    };
+
     const hasChanges = useMemo(() => {
-        if (activeTab === 'menus') {
-            if (selectedMenuIds.size !== initialMenuIds.size) return true;
-            for (const id of selectedMenuIds) {
-                if (!initialMenuIds.has(id)) return true;
-            }
-            return false;
-        } else {
-            if (selectedReportIds.size !== initialReportIds.size) return true;
-            for (const id of selectedReportIds) {
-                if (!initialReportIds.has(id)) return true;
-            }
-            return false;
-        }
-    }, [activeTab, selectedMenuIds, selectedReportIds, initialMenuIds, initialReportIds]);
+        if (activeTab === 'menus') return setsDiffer(selectedMenuIds, initialMenuIds);
+        if (activeTab === 'reports') return setsDiffer(selectedReportIds, initialReportIds);
+        return setsDiffer(selectedPermissionIds, initialPermissionIds);
+    }, [activeTab, selectedMenuIds, selectedReportIds, selectedPermissionIds, initialMenuIds, initialReportIds, initialPermissionIds]);
 
     const handleToggleMenu = (menuId: number, checked: boolean) => {
         const newSet = new Set(selectedMenuIds);
@@ -181,6 +205,22 @@ export default function RolePermissions() {
         if (checked) newSet.add(reportId);
         else newSet.delete(reportId);
         setSelectedReportIds(newSet);
+    };
+
+    const handleTogglePermission = (permissionId: number, checked: boolean) => {
+        const newSet = new Set(selectedPermissionIds);
+        if (checked) newSet.add(permissionId);
+        else newSet.delete(permissionId);
+        setSelectedPermissionIds(newSet);
+    };
+
+    const handleSelectAllPermissions = (selectAll: boolean) => {
+        const newSet = new Set(selectedPermissionIds);
+        filteredPermissions.forEach((p: Permission) => {
+            if (selectAll) newSet.add(p.PermissionID);
+            else newSet.delete(p.PermissionID);
+        });
+        setSelectedPermissionIds(newSet);
     };
 
     // انتخاب/عدم انتخاب همه منوها (بر اساس نتایج فیلتر شده)
@@ -205,25 +245,15 @@ export default function RolePermissions() {
 
     const handleSave = () => {
         setSaving(true);
+        const only = ['flash', 'roleMenus', 'roleReports', 'rolePermissions', 'menus'];
+        const opts = { preserveScroll: true, preserveState: true, only, onFinish: () => setSaving(false) };
 
         if (activeTab === 'menus') {
-            router.post(`/roles/${role.RoleID}/menus`, {
-                menu_ids: Array.from(selectedMenuIds),
-            }, {
-                preserveScroll: true,
-                preserveState: true,
-                only: ['flash', 'roleMenus', 'roleReports', 'menus'],
-                onFinish: () => setSaving(false),
-            });
+            router.post(`/roles/${role.RoleID}/menus`, { menu_ids: Array.from(selectedMenuIds) }, opts);
+        } else if (activeTab === 'reports') {
+            router.post(`/roles/${role.RoleID}/reports`, { report_ids: Array.from(selectedReportIds) }, opts);
         } else {
-            router.post(`/roles/${role.RoleID}/reports`, {
-                report_ids: Array.from(selectedReportIds),
-            }, {
-                preserveScroll: true,
-                preserveState: true,
-                only: ['flash', 'roleMenus', 'roleReports', 'menus'],
-                onFinish: () => setSaving(false),
-            });
+            router.post(`/roles/${role.RoleID}/permissions`, { permission_ids: Array.from(selectedPermissionIds) }, opts);
         }
     };
 
@@ -235,6 +265,10 @@ export default function RolePermissions() {
     const allReportsSelected = filteredReports.length > 0 &&
         filteredReports.every((r: Report) => selectedReportIds.has(r.ReportID));
     const someReportsSelected = filteredReports.some((r: Report) => selectedReportIds.has(r.ReportID));
+
+    const allPermissionsSelected = filteredPermissions.length > 0 &&
+        filteredPermissions.every((p: Permission) => selectedPermissionIds.has(p.PermissionID));
+    const somePermissionsSelected = filteredPermissions.some((p: Permission) => selectedPermissionIds.has(p.PermissionID));
 
     // ستون‌های جدول منوها
     const menuColumns: ColumnsType<Menu> = [
@@ -340,6 +374,56 @@ export default function RolePermissions() {
         },
     ];
 
+    // ستون‌های جدول دسترسی‌های عملیاتی
+    const permissionColumns: ColumnsType<Permission> = [
+        {
+            title: 'دسترسی',
+            key: 'access',
+            width: 100,
+            align: 'center',
+            render: (_, record: Permission) => (
+                <Switch
+                    checked={selectedPermissionIds.has(record.PermissionID)}
+                    onChange={(checked) => handleTogglePermission(record.PermissionID, checked)}
+                    checkedChildren={<CheckCircleOutlined />}
+                    unCheckedChildren={<StopOutlined />}
+                />
+            ),
+        },
+        {
+            title: 'نام دسترسی',
+            key: 'title',
+            align: 'center',
+            render: (_, record: Permission) => (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 260, justifyContent: 'flex-start' }}>
+                    <KeyOutlined style={{ color: '#722ed1', fontSize: 16 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
+                        <Text strong>{record.PermissionName}</Text>
+                        {record.Description && (
+                            <Text type="secondary" style={{ fontSize: 11 }}>{record.Description}</Text>
+                        )}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            title: 'گروه',
+            dataIndex: 'PermissionGroup',
+            key: 'PermissionGroup',
+            width: 140,
+            align: 'center',
+            render: (g: string) => <Tag color="purple" style={{ borderRadius: 6 }}>{g}</Tag>,
+        },
+        {
+            title: 'کد',
+            dataIndex: 'PermissionCode',
+            key: 'PermissionCode',
+            width: 200,
+            align: 'center',
+            render: (c: string) => <Text code style={{ fontSize: 11 }}>{c}</Text>,
+        },
+    ];
+
     return (
         <MainLayout>
             <PageHeader
@@ -351,6 +435,7 @@ export default function RolePermissions() {
                 stats={[
                     { icon: <AppstoreOutlined />, label: 'منوهای فعال', value: `${selectedMenuIds.size} از ${menus.length}` },
                     { icon: <BarChartOutlined />, label: 'گزارشات فعال', value: `${selectedReportIds.size} از ${reports.length}` },
+                    { icon: <KeyOutlined />, label: 'دسترسی‌های عملیاتی', value: `${selectedPermissionIds.size} از ${permissions.length}` },
                 ]}
                 actions={
                     <Button
@@ -504,6 +589,63 @@ export default function RolePermissions() {
                                         dataSource={filteredReports}
                                         customColumns={reportColumns}
                                         rowKey="ReportID"
+                                        showRowNumber={false}
+                                        showColumnSearch={false}
+                                        pageSize={15}
+                                    />
+                                </>
+                            ),
+                        },
+                        {
+                            key: 'permissions',
+                            label: (
+                                <span>
+                                    <KeyOutlined />
+                                    دسترسی‌های عملیاتی ({selectedPermissionIds.size}/{permissions.length})
+                                </span>
+                            ),
+                            children: (
+                                <>
+                                    <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
+                                        <Col xs={24} md={14}>
+                                            <Input
+                                                placeholder="جستجوی زنده در دسترسی‌ها..."
+                                                prefix={<SearchOutlined />}
+                                                value={searchText}
+                                                onChange={(e) => setSearchText(e.target.value)}
+                                                allowClear
+                                                size="large"
+                                            />
+                                        </Col>
+                                        <Col xs={24} md={10}>
+                                            <Space>
+                                                <Button
+                                                    icon={<CheckSquareOutlined />}
+                                                    onClick={() => handleSelectAllPermissions(true)}
+                                                    disabled={allPermissionsSelected}
+                                                    style={{ background: THEME.success, borderColor: THEME.success, color: '#fff' }}
+                                                    size="large"
+                                                >
+                                                    انتخاب همه
+                                                </Button>
+                                                <Button
+                                                    icon={<BorderOutlined />}
+                                                    onClick={() => handleSelectAllPermissions(false)}
+                                                    disabled={!somePermissionsSelected}
+                                                    danger
+                                                    size="large"
+                                                >
+                                                    برداشتن همه
+                                                </Button>
+                                            </Space>
+                                        </Col>
+                                    </Row>
+
+                                    <DataGrid
+                                        columns={[]}
+                                        dataSource={filteredPermissions}
+                                        customColumns={permissionColumns}
+                                        rowKey="PermissionID"
                                         showRowNumber={false}
                                         showColumnSearch={false}
                                         pageSize={15}

@@ -29,6 +29,7 @@ import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
+import PersianDateInput from '../../Components/PersianDateInput';
 import { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 
@@ -84,6 +85,7 @@ export default function MessageCreate() {
         RecipientUserIDs: [] as number[],
         CopyUserIDs: [] as number[],
         CopyDescription: '',
+        DueDate: null as string | null,
         attachments: [] as File[],
     });
 
@@ -151,6 +153,10 @@ export default function MessageCreate() {
     const handleTypeChange = (typeId: number) => {
         setData('MessageTypeID', typeId);
         setData('RecipientUserIDs', []);
+        const nextType = messageTypes?.find((t: MessageType) => t.MessageTypeID === typeId);
+        if (nextType?.MessageTypeName !== 'وظیفه') {
+            setData('DueDate', null);
+        }
     };
 
     const beforeUpload = () => false;
@@ -318,6 +324,18 @@ export default function MessageCreate() {
                                 </Form.Item>
                             </Col>
                         )}
+
+                        {isTask ? (
+                            <Col xs={24} md={8}>
+                                <Form.Item label="مهلت اجرا (اختیاری)">
+                                    <PersianDateInput
+                                        value={data.DueDate}
+                                        onChange={(v) => setData('DueDate', v)}
+                                        placeholder="بدون مهلت"
+                                    />
+                                </Form.Item>
+                            </Col>
+                        ) : null}
 
                         {!isTask && data.RecipientType === 1 ? (
                             <Col span={24}>

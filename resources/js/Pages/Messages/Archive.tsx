@@ -26,6 +26,7 @@ import MainLayout from '../../Layouts/MainLayout';
 import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DataGrid from '../../Components/DataGrid';
+import DueDateBadge from '../../Components/DueDateBadge';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
 import type { ColumnsType } from 'antd/es/table';
@@ -45,6 +46,7 @@ interface Message {
     SenderUserID: number;
     SenderName: string;
     CreateDate: string;
+    DueDate: string | null;
     MessageStatusID: number;
     MessageStatusName: string;
     IsCopy: boolean | number;
@@ -286,6 +288,14 @@ export default function MessageArchive() {
                     {name}
                 </Tag>
             ),
+        },
+        {
+            title: 'مهلت اجرا',
+            dataIndex: 'DueDate',
+            key: 'DueDate',
+            width: 160,
+            align: 'center',
+            render: (d: string | null) => <DueDateBadge value={d} />,
         },
         {
             title: 'عملیات',

@@ -100,18 +100,15 @@ export default function ProjectFormModal({
                 };
                 setData(d);
                 form.setFieldsValue({
-                    ProjectCode: d.ProjectCode,
                     ProjectTitle: d.ProjectTitle,
                     Description: d.Description,
-                    ProjectStatusID: d.ProjectStatusID,
-                    ProjectPriorityID: d.ProjectPriorityID,
                     ProgressPercent: d.ProgressPercent,
                     IsActive: d.IsActive,
                 });
             } else {
                 reset();
                 form.resetFields();
-                form.setFieldsValue({ ProjectStatusID: 2, IsActive: true });
+                form.setFieldsValue({ IsActive: true });
             }
             setCodeError('');
             clearErrors();
@@ -178,17 +175,17 @@ export default function ProjectFormModal({
                     <Col xs={24} md={8}>
                         <Form.Item
                             label="کد پروژه"
-                            extra="کد یکتا (مثلاً PRJ-001)"
-                            validateStatus={errors.ProjectCode || codeError ? 'error' : ''}
-                            help={errors.ProjectCode || codeError}
+                            extra={isEdit ? 'کد پروژه پس از ایجاد تغییر نمی‌کند' : 'به‌صورت خودکار ساخته می‌شود (مثل PRJ-1405-0001)'}
+                            validateStatus={errors.ProjectCode ? 'error' : ''}
+                            help={errors.ProjectCode}
                         >
                             <Input
                                 prefix={<IdcardOutlined style={{ color: '#bfbfbf' }} />}
-                                placeholder="PRJ-001"
+                                placeholder="به‌صورت خودکار پس از ذخیره"
                                 value={data.ProjectCode}
-                                onChange={(e) => setData('ProjectCode', e.target.value)}
                                 size="large"
-                                disabled={processing}
+                                readOnly
+                                disabled
                             />
                         </Form.Item>
                     </Col>
@@ -231,8 +228,9 @@ export default function ProjectFormModal({
                     <Col xs={24} md={6}>
                         <Form.Item
                             label="وضعیت پروژه"
-                            name="ProjectStatusID"
-                            rules={[{ required: true, message: 'وضعیت را انتخاب کنید' }]}
+                            required
+                            validateStatus={errors.ProjectStatusID ? 'error' : ''}
+                            help={errors.ProjectStatusID}
                         >
                             <Select
                                 placeholder="انتخاب وضعیت"
@@ -246,7 +244,7 @@ export default function ProjectFormModal({
                     </Col>
 
                     <Col xs={24} md={6}>
-                        <Form.Item label="اولویت پروژه" name="ProjectPriorityID">
+                        <Form.Item label="اولویت پروژه">
                             <Select
                                 placeholder="انتخاب اولویت"
                                 allowClear

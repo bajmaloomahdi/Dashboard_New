@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Input, Select, Button, Typography, Space, Alert } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from './NotificationModal';
+import PersianDateInput from './PersianDateInput';
 import { getUserDisplayName } from '../Utils/userHelpers';
 
 interface Member {
@@ -43,6 +44,7 @@ export default function ProjectTaskCreateModal({
 }: ProjectTaskCreateModalProps) {
     const [text, setText] = useState('');
     const [priorityId, setPriorityId] = useState<number | null>(null);
+    const [dueDate, setDueDate] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -54,6 +56,7 @@ export default function ProjectTaskCreateModal({
         if (open) {
             setText('');
             setPriorityId(null);
+            setDueDate(null);
         }
     }, [open, member]);
 
@@ -81,7 +84,7 @@ export default function ProjectTaskCreateModal({
                     'Content-Type': 'application/json',
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({ ToUserID: member.UserID, msgPriorityID: priorityId, MessageText: text }),
+                body: JSON.stringify({ ToUserID: member.UserID, msgPriorityID: priorityId, MessageText: text, DueDate: dueDate }),
             });
             const data = await res.json().catch(() => ({}));
             if (data.success) {
@@ -148,6 +151,17 @@ export default function ProjectTaskCreateModal({
                             onChange={(v) => setPriorityId(v)}
                             options={(priorities || []).map((p) => ({ value: p.msgPriorityID, label: p.Name }))}
                         />
+                    </div>
+
+                    <div>
+                        <Typography.Text strong>مهلت اجرا (اختیاری)</Typography.Text>
+                        <div style={{ marginTop: 6 }}>
+                            <PersianDateInput
+                                value={dueDate}
+                                onChange={(v) => setDueDate(v)}
+                                placeholder="بدون مهلت"
+                            />
+                        </div>
                     </div>
 
                     <div>

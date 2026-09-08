@@ -29,6 +29,7 @@ import ProjectTaskCreateModal from '../../Components/ProjectTaskCreateModal';
 import ProjectComments from '../../Components/ProjectComments';
 import { THEME, STYLES } from '../../theme';
 import { gregorianToJalaliDisplay, gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
+import DueDateBadge from '../../Components/DueDateBadge';
 import { getUserDisplayName } from '../../Utils/userHelpers';
 import { toBool } from '../../Utils/bool';
 import type { ColumnsType } from 'antd/es/table';
@@ -84,6 +85,7 @@ interface ProjectTask {
     MessageNumber: string;
     Subject: string;
     MessageText: string | null;
+    DueDate: string | null;
     CreateDate: string;
     SenderName: string;
     RecipientName: string | null;
@@ -203,6 +205,14 @@ export default function ProjectShow() {
             width: 130,
             align: 'center',
             render: (name: string | null) => (name ? <Tag color="cyan" style={{ borderRadius: 6 }}>{name}</Tag> : '—'),
+        },
+        {
+            title: 'مهلت اجرا',
+            dataIndex: 'DueDate',
+            key: 'DueDate',
+            width: 170,
+            align: 'center',
+            render: (d: string | null) => <DueDateBadge value={d} />,
         },
         {
             title: 'تاریخ ایجاد',

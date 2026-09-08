@@ -36,6 +36,7 @@ import MainLayout from '../../Layouts/MainLayout';
 import PageHeader from '../../Components/PageHeader';
 import ChipTabs from '../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
+import DueDateBadge from '../../Components/DueDateBadge';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -62,6 +63,7 @@ interface MessageHeader {
     PriorityDescription?: string | null;
     SenderName: string;
     CreateDate: string;
+    DueDate: string | null;
 }
 
 interface MessageDetail {
@@ -376,6 +378,13 @@ export default function MessageShow() {
                 stats={[
                     { icon: <UserOutlined />, label: 'فرستنده', value: msg.SenderName },
                     { icon: <ClockCircleOutlined />, label: 'تاریخ ارسال', value: new Date(msg.CreateDate).toLocaleString('fa-IR') },
+                    ...(isTask && msg.DueDate
+                        ? [{
+                            icon: <ClockCircleOutlined />,
+                            label: 'مهلت اجرا',
+                            value: <DueDateBadge value={msg.DueDate} />,
+                        }]
+                        : []),
                 ]}
             />
 

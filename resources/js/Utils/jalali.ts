@@ -47,6 +47,26 @@ export const dateToGregorianISO = (date: Date | null): string | null => {
     return `${y}-${m}-${d}`;
 };
 
+/** اختلاف روزِ تقویمی بین امروز و یک تاریخ (بدون در نظر گرفتن ساعت). منفی = گذشته */
+export const daysUntilDate = (value: Date | string | null): number | null => {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (isNaN(date.getTime())) return null;
+    const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target.getTime() - today.getTime()) / 86400000);
+};
+
+/** برچسب فارسیِ فاصله تا مهلت: «امروز» / «۳ روز مانده» / «۲ روز گذشته» */
+export const dueDateRelativeLabel = (value: Date | string | null): string => {
+    const diff = daysUntilDate(value);
+    if (diff === null) return '';
+    if (diff < 0) return `${toEnglishDigits(String(Math.abs(diff)))} روز گذشته`;
+    if (diff === 0) return 'امروز';
+    return `${toEnglishDigits(String(diff))} روز مانده`;
+};
+
 /** تبدیل رشته شمسی (به‌صورت رقم پیوسته یا با اسلش) به Date جاوااسکریپت */
 export const parseJalaliString = (str: string): Date | null => {
     const digits = toEnglishDigits(str).replace(/\D/g, '');

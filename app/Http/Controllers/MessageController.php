@@ -130,6 +130,7 @@ class MessageController extends Controller
             'CopyUserIDs' => 'nullable|array',
             'CopyUserIDs.*' => 'integer',
             'CopyDescription' => 'nullable|string|max:1000',
+            'DueDate' => 'nullable|date',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240',
         ], [
@@ -142,7 +143,7 @@ class MessageController extends Controller
             'EXEC sp_InsertMessage
                 @MessageTypeID = ?, @msgPriorityID = ?, @Subject = ?, @MessageText = ?,
                 @RecipientType = ?, @RecipientUserIDs = ?, @CopyUserIDs = ?,
-                @CopyDescription = ?, @SenderUserID = ?, @Year = ?, @CreateUser = ?',
+                @CopyDescription = ?, @SenderUserID = ?, @Year = ?, @CreateUser = ?, @DueDate = ?',
             [
                 $validated['MessageTypeID'],
                 $validated['msgPriorityID'],
@@ -155,6 +156,7 @@ class MessageController extends Controller
                 Auth::id(),
                 $jalaliYear,
                 Auth::id(),
+                $validated['DueDate'] ?? null,
             ]
         );
 

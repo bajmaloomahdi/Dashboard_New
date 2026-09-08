@@ -235,6 +235,7 @@ class ProjectsController extends Controller
             'ToUserID'      => 'required|integer',
             'msgPriorityID' => 'required|integer',
             'MessageText'   => 'nullable|string',
+            'DueDate'       => 'nullable|date',
         ]);
 
         $projects = DB::select(
@@ -255,7 +256,7 @@ class ProjectsController extends Controller
         $result = DB::select(
             'EXEC sp_InsertProjectTask
                 @ProjectID = ?, @Subject = ?, @MessageText = ?, @ToUserID = ?, @msgPriorityID = ?,
-                @SenderUserID = ?, @Year = ?, @CreateUser = ?',
+                @SenderUserID = ?, @Year = ?, @CreateUser = ?, @DueDate = ?',
             [
                 $id,
                 $subject,
@@ -265,6 +266,7 @@ class ProjectsController extends Controller
                 Auth::id(),
                 $this->getJalaliYear(now()),
                 Auth::id(),
+                $validated['DueDate'] ?? null,
             ]
         );
 
@@ -307,7 +309,7 @@ class ProjectsController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'ProjectCode'      => 'required|string|max:50',
+            'ProjectCode'      => 'nullable|string|max:50',
             'ProjectTitle'     => 'required|string|max:250',
             'Description'      => 'nullable|string',
             'StartDate'        => 'nullable|date',
@@ -326,9 +328,9 @@ class ProjectsController extends Controller
             'EXEC sp_InsertProject
                 @ProjectCode = ?, @ProjectTitle = ?, @Description = ?, @StartDate = ?,
                 @PlannedEndDate = ?, @ActualEndDate = ?, @ProjectStatusID = ?, @ProjectPriorityID = ?,
-                @ProgressPercent = ?, @IsActive = ?, @ResponsibleUserID = ?, @MemberUserIDs = ?, @CreateUser = ?',
+                @ProgressPercent = ?, @IsActive = ?, @ResponsibleUserID = ?, @MemberUserIDs = ?, @CreateUser = ?, @Year = ?',
             [
-                $validated['ProjectCode'],
+                $validated['ProjectCode'] ?? null,
                 $validated['ProjectTitle'],
                 $validated['Description'] ?? null,
                 $validated['StartDate'] ?? null,
@@ -341,6 +343,7 @@ class ProjectsController extends Controller
                 $validated['ResponsibleUserID'],
                 isset($validated['MemberUserIDs']) ? implode(',', $validated['MemberUserIDs']) : null,
                 Auth::id(),
+                $this->getJalaliYear(now()),
             ]
         );
 

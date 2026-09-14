@@ -22,6 +22,13 @@ use Inertia\Inertia;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\MsgPriorityController;
 use App\Http\Controllers\ProjectsController;
+use App\Http\Controllers\Process\ProcessDefinitionController;
+use App\Http\Controllers\Process\ProcessInstanceController;
+use App\Http\Controllers\Process\ProcessVersionController;
+use App\Http\Controllers\Workflow\WorkflowDefinitionController;
+use App\Http\Controllers\Workflow\WorkflowRuntimeController;
+use App\Http\Controllers\Workflow\WorkflowTaskController;
+use App\Http\Controllers\Workflow\WorkflowVersionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -213,6 +220,76 @@ Route::middleware('auth')->group(function () {
     Route::delete('/calendar/events/{id}', [CalendarController::class, 'destroy'])->name('calendar.events.destroy');
     Route::post('/calendar/events/{id}/respond', [CalendarController::class, 'respond'])->name('calendar.events.respond');
     Route::post('/calendar/events/{id}/reminder', [CalendarController::class, 'saveMyEventReminder'])->name('calendar.events.reminder');
+
+    // ───────────────────────── موتورِ فرایند (Workflow API) ─────────────────────────
+    Route::prefix('workflow')->name('workflow.')->group(function () {
+
+        // --- تعریفِ فرایندها ---
+        Route::get('definitions', [WorkflowDefinitionController::class, 'index'])->name('definitions.index');
+        Route::post('definitions', [WorkflowDefinitionController::class, 'store'])->name('definitions.store');
+        Route::get('definitions/{definitionId}', [WorkflowDefinitionController::class, 'show'])
+            ->whereNumber('definitionId')->name('definitions.show');
+        Route::post('definitions/{definitionId}/toggle', [WorkflowDefinitionController::class, 'toggleActive'])
+            ->whereNumber('definitionId')->name('definitions.toggle');
+        Route::post('definitions/{definitionId}/versions', [WorkflowVersionController::class, 'createDraft'])
+            ->whereNumber('definitionId')->name('versions.draft');
+
+        // --- نسخه‌ها ---
+        Route::prefix('versions/{versionId}')->whereNumber('versionId')->name('versions.')->group(function () {
+            Route::get('/', [WorkflowVersionController::class, 'show'])->name('show');
+            Route::get('graph', [WorkflowVersionController::class, 'graph'])->name('graph');
+            Route::get('steps', [WorkflowVersionController::class, 'steps'])->name('steps');
+            Route::get('actions', [WorkflowVersionController::class, 'actions'])->name('actions');
+            Route::get('assignments', [WorkflowVersionController::class, 'assignments'])->name('assignments');
+            Route::get('transitions', [WorkflowVersionController::class, 'transitions'])->name('transitions');
+            Route::put('graph', [WorkflowVersionController::class, 'saveGraph'])->name('graph.save');
+            Route::post('validate', [WorkflowVersionController::class, 'validateGraph'])->name('validate');
+            Route::post('clone', [WorkflowVersionController::class, 'clone'])->name('clone');
+            Route::post('publish', [WorkflowVersionController::class, 'publish'])->name('publish');
+        });
+
+        // --- زمانِ اجرا ---
+        Route::post('instances', [WorkflowRuntimeController::class, 'start'])->name('instances.start');
+        Route::get('instances/{instanceId}', [WorkflowRuntimeController::class, 'show'])
+            ->whereNumber('instanceId')->name('instances.show');
+        Route::get('instances/{instanceId}/history', [WorkflowRuntimeController::class, 'history'])
+            ->whereNumber('instanceId')->name('instances.history');
+
+        // --- چرخهٔ حیاتِ Instance ---
+        Route::post('instances/{instanceId}/cancel', [WorkflowRuntimeController::class, 'cancel'])
+            ->whereNumber('instanceId')->name('instances.cancel');
+        Route::post('instances/{instanceId}/suspend', [WorkflowRuntimeController::class, 'suspend'])
+            ->whereNumber('instanceId')->name('instances.suspend');
+        Route::post('instances/{instanceId}/resume', [WorkflowRuntimeController::class, 'resume'])
+            ->whereNumber('instanceId')->name('instances.resume');
+
+        // --- تسکِ مرحله (بر مبنای MessageID) — کارتابل از /messages می‌آید، اینجا فقط نمای workflow ---
+        Route::get('messages/{messageId}', [WorkflowTaskController::class, 'show'])
+            ->whereNumber('messageId')->name('messages.show');
+        Route::post('messages/{messageId}/actions', [WorkflowTaskController::class, 'act'])
+            ->whereNumber('messageId')->name('messages.act');
+        Route::post('messages/{messageId}/forward', [WorkflowTaskController::class, 'forward'])
+            ->whereNumber('messageId')->name('messages.forward');
+        Route::post('messages/{messageId}/delegate', [WorkflowTaskController::class, 'delegate'])
+            ->whereNumber('messageId')->name('messages.delegate');
+        Route::post('messages/{messageId}/revoke-delegation', [WorkflowTaskController::class, 'revokeDelegation'])
+            ->whereNumber('messageId')->name('messages.revoke-delegation');
+    });
+
+    // ───────────────────────── موتورِ فرایند (صفحاتِ Inertia) ─────────────────────────
+    // عمداً پیشوندی جدا از workflow/* دارد؛ آن مسیر همیشه JSON است (shouldRenderJsonWhen
+    // در bootstrap/app.php) و برایِ رندرِ صفحه مناسب نیست. اکشن‌ها (Cancel/Suspend/Resume/…)
+    // همچنان از سمتِ کلاینت مستقیماً به همان /workflow/* می‌روند.
+    Route::prefix('process')->name('process.')->group(function () {
+        Route::get('definitions', [ProcessDefinitionController::class, 'index'])->name('definitions.index');
+        Route::get('definitions/{definitionId}', [ProcessDefinitionController::class, 'show'])
+            ->whereNumber('definitionId')->name('definitions.show');
+        Route::get('instances', [ProcessInstanceController::class, 'index'])->name('instances.index');
+        Route::get('instances/{instanceId}', [ProcessInstanceController::class, 'show'])
+            ->whereNumber('instanceId')->name('instances.show');
+        Route::get('versions/{versionId}', [ProcessVersionController::class, 'show'])
+            ->whereNumber('versionId')->name('versions.show');
+    });
 
     // تنظیمات شرکت
     Route::get('company', [CompanyController::class, 'index'])->name('company.index');

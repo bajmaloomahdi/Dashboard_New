@@ -37,6 +37,7 @@ import PageHeader from '../../Components/PageHeader';
 import ChipTabs from '../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DueDateBadge from '../../Components/DueDateBadge';
+import WorkflowTaskCard from '../../Components/Workflow/WorkflowTaskCard';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -132,7 +133,10 @@ export default function MessageShow() {
         priorities,
         isLastRecipient,
         isTask,
+        isWfTask,
+        workflowPermissions,
         canComment,
+        currentUserId,
         flash,
     } = usePage().props as any;
 
@@ -392,8 +396,20 @@ export default function MessageShow() {
 
             {activeTab === 'message' && (
                 <>
-                    {/* تغییر وضعیت وظیفه — فقط برای آخرین گیرنده */}
-                    {isTask && isLastRecipient ? (
+                    {/* کارتِ Workflow — فقط وقتی sp_GetMessageHeader گفته این پیام واقعاً به یک
+                        StepInstanceِ Workflow متصل است (isWfTask). برایِ وظیفهٔ عادی/پروژه (isTask
+                        بدونِ isWfTask) هیچ fetchای به /workflow/messages/{id} زده نمی‌شود. */}
+                    <WorkflowTaskCard
+                        messageId={msg.MessageID}
+                        isWfTask={!!isWfTask}
+                        currentUserId={Number(currentUserId)}
+                        users={userList}
+                        permissions={workflowPermissions || []}
+                    />
+
+                    {/* تغییر وضعیت وظیفه — فقط برای آخرین گیرنده، و فقط اگر تسکِ Workflow نباشد
+                        (برایِ تسکِ Workflow، WorkflowTaskCard بالا جایگزینِ کاملِ این فرم است) */}
+                    {isTask && isLastRecipient && !isWfTask ? (
                 <Card
                     title={whiteTitle(
                         <Space>

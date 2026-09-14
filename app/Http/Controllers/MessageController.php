@@ -232,6 +232,7 @@ class MessageController extends Controller
 
         $isLastRecipient = $lastDetail && (int) $lastDetail->ToUserID === (int) $currentUserId;
         $isTask = $message->MessageTypeName === 'وظیفه';
+        $isWfTask = (bool) ($message->IsWfTask ?? false);
 
         $perm = DB::select('EXEC sp_CheckMessageCommentPermission @MessageID = ?, @UserID = ?', [$id, $currentUserId]);
         $canComment = !empty($perm) && (int) ($perm[0]->CanComment ?? 0) === 1;
@@ -248,8 +249,25 @@ class MessageController extends Controller
             'currentUserId' => $currentUserId,
             'isLastRecipient' => $isLastRecipient,
             'isTask' => $isTask,
+            'isWfTask' => $isWfTask,
+            // فقط کدهایِ WORKFLOW_* — همان الگویِ CalendarController::calendarPermissions().
+            // Frontend فقط برایِ UX (پنهان‌کردنِ دکمه‌هایِ Forward/Delegate) از این استفاده می‌کند؛
+            // مرجعِ نهاییِ ۴۰۳ همچنان WorkflowApiController::authorizeWorkflow() سمتِ Backend است.
+            'workflowPermissions' => $isWfTask ? $this->workflowPermissions($currentUserId) : [],
             'canComment' => $canComment,
         ]);
+    }
+
+    /** @return string[] کدهایِ WORKFLOW_* که کاربرِ جاری دارد (سمتِ UX — نه مرجعِ Authorization) */
+    private function workflowPermissions(int $userId): array
+    {
+        $rows = DB::select('EXEC sp_GetUserPermissions @UserID = ?', [$userId]);
+
+        return collect($rows)
+            ->pluck('PermissionCode')
+            ->filter(fn ($code) => str_starts_with($code, 'WORKFLOW_'))
+            ->values()
+            ->all();
     }
 
     /**

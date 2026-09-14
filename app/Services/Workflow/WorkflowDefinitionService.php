@@ -20,9 +20,9 @@ class WorkflowDefinitionService
     ) {
     }
 
-    public function list(?string $search = null, ?bool $isActive = null): array
+    public function list(?string $search = null, ?bool $isActive = null, ?int $categoryId = null): array
     {
-        return $this->store->getDefinitions($search, $isActive);
+        return $this->store->getDefinitions($search, $isActive, $categoryId);
     }
 
     public function show(int $definitionId): array
@@ -44,8 +44,33 @@ class WorkflowDefinitionService
             'description'  => $input['description'] ?? null,
             'entityType'   => $entityType,
             'isActive'     => (int) ($input['isActive'] ?? 1),
+            'categoryId'   => $input['categoryId'] ?? null,
             'userId'       => $userId,
         ]);
+    }
+
+    /* ---------- دسته‌بندیِ فرایندها ---------- */
+
+    public function listCategories(?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getCategories($search, $isActive);
+    }
+
+    public function saveCategory(array $input, int $userId): object
+    {
+        return $this->store->saveCategory([
+            'categoryId'  => $input['categoryId'] ?? null,
+            'code'        => trim($input['code'] ?? ''),
+            'name'        => trim($input['name'] ?? ''),
+            'description' => $input['description'] ?? null,
+            'sortOrder'   => $input['sortOrder'] ?? 0,
+            'userId'      => $userId,
+        ]);
+    }
+
+    public function toggleCategoryActive(int $categoryId, int $userId): object
+    {
+        return $this->store->toggleCategoryActive($categoryId, $userId);
     }
 
     public function createDraft(int $definitionId, int $userId): object

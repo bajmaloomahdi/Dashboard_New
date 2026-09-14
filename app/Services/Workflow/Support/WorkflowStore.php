@@ -32,9 +32,12 @@ class WorkflowStore
 
     /* ---------- Definition / Version ---------- */
 
-    public function getDefinitions(?string $search = null, ?bool $isActive = null): array
+    public function getDefinitions(?string $search = null, ?bool $isActive = null, ?int $categoryId = null): array
     {
-        return DB::select('EXEC dbo.sp_Wf_GetDefinitions @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+        return DB::select(
+            'EXEC dbo.sp_Wf_GetDefinitions @SearchText = ?, @IsActive = ?, @CategoryID = ?',
+            [$search, $isActive, $categoryId]
+        );
     }
 
     /** @return array{definition:?object, versions:array} */
@@ -52,8 +55,34 @@ class WorkflowStore
     public function saveDefinition(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Wf_SaveDefinition @DefinitionID = ?, @Code = ?, @Name = ?, @Description = ?, @EntityType = ?, @IsActive = ?, @UserID = ?',
-            [$p['definitionId'] ?? null, $p['code'], $p['name'], $p['description'] ?? null, $p['entityType'], $p['isActive'] ?? 1, $p['userId']]
+            'EXEC dbo.sp_Wf_SaveDefinition @DefinitionID = ?, @Code = ?, @Name = ?, @Description = ?, @EntityType = ?, @IsActive = ?, @CategoryID = ?, @UserID = ?',
+            [
+                $p['definitionId'] ?? null, $p['code'], $p['name'], $p['description'] ?? null, $p['entityType'],
+                $p['isActive'] ?? 1, $p['categoryId'] ?? null, $p['userId'],
+            ]
+        );
+    }
+
+    /* ---------- دسته‌بندیِ فرایندها (WorkflowCategories) ---------- */
+
+    public function getCategories(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Wf_GetCategories @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    public function saveCategory(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_SaveCategory @CategoryID = ?, @Code = ?, @Name = ?, @Description = ?, @SortOrder = ?, @UserID = ?',
+            [$p['categoryId'] ?? null, $p['code'], $p['name'], $p['description'] ?? null, $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleCategoryActive(int $categoryId, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_ToggleCategoryActive @CategoryID = ?, @UserID = ?',
+            [$categoryId, $userId]
         );
     }
 

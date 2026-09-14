@@ -25,6 +25,7 @@ use App\Http\Controllers\ProjectsController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
 use App\Http\Controllers\Process\ProcessInstanceController;
 use App\Http\Controllers\Process\ProcessVersionController;
+use App\Http\Controllers\Workflow\WorkflowCategoryController;
 use App\Http\Controllers\Workflow\WorkflowDefinitionController;
 use App\Http\Controllers\Workflow\WorkflowRuntimeController;
 use App\Http\Controllers\Workflow\WorkflowTaskController;
@@ -233,6 +234,12 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('definitionId')->name('definitions.toggle');
         Route::post('definitions/{definitionId}/versions', [WorkflowVersionController::class, 'createDraft'])
             ->whereNumber('definitionId')->name('versions.draft');
+
+        // --- دسته‌بندیِ فرایندها ---
+        Route::get('categories', [WorkflowCategoryController::class, 'index'])->name('categories.index');
+        Route::post('categories', [WorkflowCategoryController::class, 'store'])->name('categories.store');
+        Route::post('categories/{categoryId}/toggle', [WorkflowCategoryController::class, 'toggleActive'])
+            ->whereNumber('categoryId')->name('categories.toggle');
 
         // --- نسخه‌ها ---
         Route::prefix('versions/{versionId}')->whereNumber('versionId')->name('versions.')->group(function () {

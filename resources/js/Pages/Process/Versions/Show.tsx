@@ -42,6 +42,8 @@ interface VersionMeta {
     DefinitionCode: string;
     DefinitionName: string;
     EntityType: string;
+    CategoryID: number | null;
+    CategoryName: string | null;
 }
 
 interface LookupOption {
@@ -204,6 +206,7 @@ export default function ProcessVersionShow() {
                     { label: statusTag[meta.Status]?.label ?? meta.Status, color: meta.Status === 'ACTIVE' ? THEME.success : meta.Status === 'ARCHIVED' ? undefined : undefined },
                     { label: meta.DefinitionCode },
                     { label: meta.EntityType },
+                    ...(meta.CategoryName ? [{ label: meta.CategoryName, color: THEME.info }] : []),
                 ]}
                 actions={
                     <Space wrap>

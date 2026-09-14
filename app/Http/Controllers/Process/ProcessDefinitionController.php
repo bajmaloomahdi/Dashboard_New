@@ -30,21 +30,25 @@ class ProcessDefinitionController extends Controller
         $permissions = $this->authorizeView();
 
         $validated = $request->validate([
-            'search'   => 'nullable|string|max:200',
-            'isActive' => 'nullable|boolean',
+            'search'     => 'nullable|string|max:200',
+            'isActive'   => 'nullable|boolean',
+            'categoryId' => 'nullable|integer',
         ]);
 
         $items = $this->defs->list(
             $validated['search'] ?? null,
             array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+            $validated['categoryId'] ?? null,
         );
 
         return Inertia::render('Process/Definitions/Index', [
             'definitions' => $items,
             'filters'     => [
-                'search'   => $validated['search'] ?? null,
-                'isActive' => $validated['isActive'] ?? null,
+                'search'     => $validated['search'] ?? null,
+                'isActive'   => $validated['isActive'] ?? null,
+                'categoryId' => $validated['categoryId'] ?? null,
             ],
+            'categories'  => $this->defs->listCategories(),
             'permissions' => $permissions,
         ]);
     }
@@ -60,6 +64,7 @@ class ProcessDefinitionController extends Controller
         return Inertia::render('Process/Definitions/Show', [
             'definition'  => $data['definition'],
             'versions'    => $data['versions'],
+            'categories'  => $this->defs->listCategories(),
             'permissions' => $permissions,
         ]);
     }

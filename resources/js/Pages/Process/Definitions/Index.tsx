@@ -12,6 +12,7 @@ import {
     LoadingOutlined,
     BranchesOutlined,
     PlayCircleOutlined,
+    TagsOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import type { ColumnsType } from 'antd/es/table';
@@ -20,6 +21,7 @@ import PageHeader from '../../../Components/PageHeader';
 import DataGrid from '../../../Components/DataGrid';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DefinitionFormModal from './DefinitionFormModal';
+import CategoryManagerModal, { type WorkflowCategory } from './CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
 import { THEME, STYLES } from '../../../theme';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
@@ -34,6 +36,8 @@ interface Definition {
     Description: string | null;
     EntityType: string;
     IsActive: boolean | number | string;
+    CategoryID: number | null;
+    CategoryName: string | null;
     Date_InsertFirst: string;
     CreatedByName: string | null;
     VersionCount: number;
@@ -42,18 +46,22 @@ interface Definition {
 }
 
 export default function ProcessDefinitionsIndex() {
-    const { definitions, filters, permissions } = usePage().props as unknown as {
+    const { definitions, filters, categories, permissions } = usePage().props as unknown as {
         definitions: Definition[];
-        filters: { search: string | null; isActive: boolean | null };
+        filters: { search: string | null; isActive: boolean | null; categoryId: number | null };
+        categories: WorkflowCategory[];
         permissions: string[];
     };
 
     const canDesign = (permissions || []).includes('WORKFLOW_DESIGN');
+    const canManageCategories = (permissions || []).includes('WORKFLOW_MANAGE_CATEGORIES');
 
     const [searchText, setSearchText] = useState(filters?.search || '');
     const [statusFilter, setStatusFilter] = useState<string | null>(
         filters?.isActive === null || filters?.isActive === undefined ? null : filters.isActive ? '1' : '0'
     );
+    const [categoryFilter, setCategoryFilter] = useState<number | null>(filters?.categoryId ?? null);
+    const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
     const [searching, setSearching] = useState(false);
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -83,7 +91,11 @@ export default function ProcessDefinitionsIndex() {
         searchTimeoutRef.current = setTimeout(() => {
             router.get(
                 '/process/definitions',
-                { search: searchText || undefined, isActive: statusFilter !== null ? statusFilter : undefined },
+                {
+                    search: searchText || undefined,
+                    isActive: statusFilter !== null ? statusFilter : undefined,
+                    categoryId: categoryFilter !== null ? categoryFilter : undefined,
+                },
                 { preserveState: true, preserveScroll: true, replace: true, only: ['definitions', 'filters'], onFinish: () => setSearching(false) }
             );
         }, 300);
@@ -91,11 +103,16 @@ export default function ProcessDefinitionsIndex() {
         return () => {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         };
-    }, [searchText, statusFilter]);
+    }, [searchText, statusFilter, categoryFilter]);
 
     const handleReset = () => {
         setSearchText('');
         setStatusFilter(null);
+        setCategoryFilter(null);
+    };
+
+    const handleCategoriesChanged = () => {
+        router.reload({ only: ['categories', 'definitions'] });
     };
 
     const handleCreate = () => {
@@ -112,7 +129,9 @@ export default function ProcessDefinitionsIndex() {
         setModalOpen(false);
         setEditingDefinition(null);
         showNotification('success', message);
-        router.reload({ only: ['definitions'] });
+        // 'categories' هم Reload می‌شود چون DefinitionCountِ هر دسته (در CategoryManagerModal)
+        // با تغییرِ CategoryIDِ این Definition ممکن است عوض شده باشد.
+        router.reload({ only: ['definitions', 'categories'] });
     };
 
     const handleToggle = async (def: Definition) => {
@@ -148,6 +167,18 @@ export default function ProcessDefinitionsIndex() {
                     {record.Description ? <Text type="secondary" style={{ fontSize: 11 }}>{record.Description}</Text> : null}
                 </div>
             ),
+        },
+        {
+            title: 'دسته‌بندی',
+            key: 'category',
+            width: 130,
+            align: 'center',
+            render: (_, record) =>
+                record.CategoryName ? (
+                    <Tag color="geekblue" style={{ borderRadius: 6 }}>{record.CategoryName}</Tag>
+                ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>بدونِ دسته</Text>
+                ),
         },
         {
             title: 'نوعِ موجودیت',
@@ -263,17 +294,24 @@ export default function ProcessDefinitionsIndex() {
                     { icon: <PlayCircleOutlined />, label: 'نمونه‌هایِ ساخته‌شده', value: `${runningInstances} نمونه` },
                 ]}
                 actions={
-                    canDesign ? (
-                        <Button type="primary" icon={<PlusOutlined />} size="large" style={STYLES.primaryButton} onClick={handleCreate}>
-                            فرایندِ جدید
-                        </Button>
-                    ) : undefined
+                    <Space>
+                        {canManageCategories && (
+                            <Button icon={<TagsOutlined />} size="large" onClick={() => setCategoryManagerOpen(true)}>
+                                مدیریتِ دسته‌بندی‌ها
+                            </Button>
+                        )}
+                        {canDesign && (
+                            <Button type="primary" icon={<PlusOutlined />} size="large" style={STYLES.primaryButton} onClick={handleCreate}>
+                                فرایندِ جدید
+                            </Button>
+                        )}
+                    </Space>
                 }
             />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">
-                    <Col xs={24} sm={12} md={12}>
+                    <Col xs={24} sm={12} md={9}>
                         <Input
                             placeholder="جستجو در نام، کد، نوعِ موجودیت..."
                             prefix={searching ? <LoadingOutlined style={{ color: THEME.primary }} /> : <SearchOutlined />}
@@ -283,7 +321,7 @@ export default function ProcessDefinitionsIndex() {
                             size="large"
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={8}>
+                    <Col xs={24} sm={12} md={5}>
                         <Select
                             placeholder="فیلترِ وضعیت"
                             style={{ width: '100%' }}
@@ -297,7 +335,20 @@ export default function ProcessDefinitionsIndex() {
                             ]}
                         />
                     </Col>
-                    <Col xs={24} sm={24} md={4}>
+                    <Col xs={24} sm={12} md={6}>
+                        <Select
+                            placeholder="فیلترِ دسته‌بندی"
+                            style={{ width: '100%' }}
+                            size="large"
+                            value={categoryFilter ?? undefined}
+                            onChange={(value) => setCategoryFilter(value ?? null)}
+                            allowClear
+                            showSearch
+                            optionFilterProp="label"
+                            options={(categories || []).map((c) => ({ value: c.CategoryID, label: c.Name }))}
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={4}>
                         <Button icon={<ReloadOutlined />} onClick={handleReset} size="large" block>
                             بازنشانی
                         </Button>
@@ -325,7 +376,15 @@ export default function ProcessDefinitionsIndex() {
                     setEditingDefinition(null);
                 }}
                 editingDefinition={editingDefinition}
+                categories={categories || []}
                 onSuccess={handleModalSuccess}
+            />
+
+            <CategoryManagerModal
+                open={categoryManagerOpen}
+                onClose={() => setCategoryManagerOpen(false)}
+                categories={categories || []}
+                onChanged={handleCategoriesChanged}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={closeNotification} />

@@ -20,14 +20,16 @@ class WorkflowDefinitionController extends WorkflowApiController
         $this->authorizeWorkflow('WORKFLOW_VIEW');
 
         $validated = $request->validate([
-            'search'   => 'nullable|string|max:200',
-            'isActive' => 'nullable|boolean',
+            'search'     => 'nullable|string|max:200',
+            'isActive'   => 'nullable|boolean',
+            'categoryId' => 'nullable|integer',
         ]);
 
         return $this->runWorkflow(fn () => [
             'items' => $this->defs->list(
                 $validated['search'] ?? null,
                 array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+                $validated['categoryId'] ?? null,
             ),
         ]);
     }
@@ -65,6 +67,7 @@ class WorkflowDefinitionController extends WorkflowApiController
             'description'  => 'nullable|string|max:1000',
             'entityType'   => 'required|string|max:64',
             'isActive'     => 'nullable|boolean',
+            'categoryId'   => 'nullable|integer|exists:WorkflowCategories,CategoryID',
         ]);
 
         return $this->runWorkflow(function () use ($validated) {
@@ -75,6 +78,7 @@ class WorkflowDefinitionController extends WorkflowApiController
                 'description'  => $validated['description'] ?? null,
                 'entityType'   => $validated['entityType'],
                 'isActive'     => (int) ($validated['isActive'] ?? 1),
+                'categoryId'   => $validated['categoryId'] ?? null,
             ], $this->actorId());
 
             return [
@@ -111,6 +115,7 @@ class WorkflowDefinitionController extends WorkflowApiController
                 'description'  => $current->Description,
                 'entityType'   => $current->EntityType,
                 'isActive'     => (int) $newIsActive,
+                'categoryId'   => $current->CategoryID ?? null,
             ], $this->actorId());
 
             return [

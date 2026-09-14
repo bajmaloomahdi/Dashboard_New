@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Switch, Row, Col, Button, Typography, Alert, Space } from 'antd';
+import { Modal, Form, Input, Switch, Select, Row, Col, Button, Typography, Alert, Space } from 'antd';
 import { ApartmentOutlined, SaveOutlined, CloseOutlined, CodeOutlined, TagOutlined } from '@ant-design/icons';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
 import { toBool } from '../../../Utils/bool';
+import type { WorkflowCategory } from './CategoryManagerModal';
 
 const { Text } = Typography;
 
@@ -13,17 +14,19 @@ interface Definition {
     Description: string | null;
     EntityType: string;
     IsActive: boolean | number | string;
+    CategoryID: number | null;
 }
 
 interface DefinitionFormModalProps {
     open: boolean;
     onClose: () => void;
     editingDefinition: Definition | null;
+    categories: WorkflowCategory[];
     /** بعد از ذخیرهٔ موفق — والد پیامِ موفقیت را نمایش و لیست را Refresh می‌کند */
     onSuccess: (message: string) => void;
 }
 
-const emptyValues = { code: '', name: '', description: '', entityType: '', isActive: true };
+const emptyValues = { code: '', name: '', description: '', entityType: '', isActive: true, categoryId: null as number | null };
 
 /**
  * فرمِ ایجاد/ویرایشِ WorkflowDefinition — هر دو از همان یک endpointِ Upsertِ
@@ -33,7 +36,7 @@ const emptyValues = { code: '', name: '', description: '', entityType: '', isAct
  * useForm استفاده نمی‌شود — همان الگویِ wfApi که در WorkflowReassignModal
  * ساخته شد.
  */
-export default function DefinitionFormModal({ open, onClose, editingDefinition, onSuccess }: DefinitionFormModalProps) {
+export default function DefinitionFormModal({ open, onClose, editingDefinition, categories, onSuccess }: DefinitionFormModalProps) {
     const [form] = Form.useForm();
     const isEdit = !!editingDefinition;
 
@@ -52,6 +55,7 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                   description: editingDefinition.Description || '',
                   entityType: editingDefinition.EntityType || '',
                   isActive: toBool(editingDefinition.IsActive),
+                  categoryId: editingDefinition.CategoryID ?? null,
               }
             : emptyValues;
 
@@ -80,6 +84,7 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                 description: values.description.trim() || undefined,
                 entityType: values.entityType,
                 isActive: values.isActive,
+                categoryId: values.categoryId ?? undefined,
             });
 
             setProcessing(false);
@@ -210,6 +215,22 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                         onChange={(e) => setValues((v) => ({ ...v, entityType: e.target.value }))}
                         size="large"
                         dir="ltr"
+                    />
+                </Form.Item>
+
+                <Form.Item label="دسته‌بندی" name="categoryId" help="فقط دسته‌هایِ فعال قابلِ انتخاب‌اند.">
+                    <Select
+                        allowClear
+                        placeholder="بدونِ دسته‌بندی"
+                        value={values.categoryId ?? undefined}
+                        onChange={(v) => setValues((s) => ({ ...s, categoryId: v ?? null }))}
+                        size="large"
+                        options={categories
+                            .filter((c) => toBool(c.IsActive) || c.CategoryID === editingDefinition?.CategoryID)
+                            .map((c) => ({
+                                value: c.CategoryID,
+                                label: toBool(c.IsActive) ? c.Name : `${c.Name} (غیرفعال)`,
+                            }))}
                     />
                 </Form.Item>
 

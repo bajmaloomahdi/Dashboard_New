@@ -16,6 +16,7 @@ import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DefinitionFormModal from './DefinitionFormModal';
+import type { WorkflowCategory } from './CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
 import { THEME, STYLES } from '../../../theme';
 import { gregorianToJalaliDateTimeDisplay } from '../../../Utils/jalali';
@@ -33,6 +34,8 @@ interface Definition {
     Description: string | null;
     EntityType: string;
     IsActive: boolean | number | string;
+    CategoryID: number | null;
+    CategoryName: string | null;
     Date_InsertFirst: string;
     Date_LastUpdate: string | null;
 }
@@ -57,7 +60,12 @@ const versionStatusTag: Record<string, { color: string; label: string }> = {
 };
 
 export default function ProcessDefinitionShow() {
-    const props = usePage().props as unknown as { definition: Definition; versions: VersionRow[]; permissions: string[] };
+    const props = usePage().props as unknown as {
+        definition: Definition;
+        versions: VersionRow[];
+        categories: WorkflowCategory[];
+        permissions: string[];
+    };
 
     const [data, setData] = useState({ definition: props.definition, versions: props.versions || [] });
     const [modalOpen, setModalOpen] = useState(false);
@@ -197,6 +205,7 @@ export default function ProcessDefinitionShow() {
                 tags={[
                     { label: isActive ? 'فعال' : 'غیرفعال', color: isActive ? THEME.success : THEME.textLight },
                     { label: def.EntityType },
+                    ...(def.CategoryName ? [{ label: def.CategoryName, color: THEME.info }] : []),
                 ]}
                 stats={[
                     { icon: <ClockCircleOutlined />, label: 'تاریخِ ایجاد', value: gregorianToJalaliDateTimeDisplay(def.Date_InsertFirst) },
@@ -236,6 +245,9 @@ export default function ProcessDefinitionShow() {
                     <Descriptions.Item label="کد">{def.Code}</Descriptions.Item>
                     <Descriptions.Item label="نام">{def.Name}</Descriptions.Item>
                     <Descriptions.Item label="نوعِ موجودیت">{def.EntityType}</Descriptions.Item>
+                    <Descriptions.Item label="دسته‌بندی">
+                        {def.CategoryName ? <Tag color="geekblue" style={{ borderRadius: 6 }}>{def.CategoryName}</Tag> : <Text type="secondary">بدونِ دسته</Text>}
+                    </Descriptions.Item>
                     <Descriptions.Item label="وضعیت">
                         <Tag icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />} color={isActive ? 'success' : 'default'} style={{ borderRadius: 6 }}>
                             {isActive ? 'فعال' : 'غیرفعال'}
@@ -266,7 +278,13 @@ export default function ProcessDefinitionShow() {
                 )}
             </Card>
 
-            <DefinitionFormModal open={modalOpen} onClose={() => setModalOpen(false)} editingDefinition={def} onSuccess={handleModalSuccess} />
+            <DefinitionFormModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                editingDefinition={def}
+                categories={props.categories || []}
+                onSuccess={handleModalSuccess}
+            />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((prev) => ({ ...prev, open: false }))} />
         </MainLayout>

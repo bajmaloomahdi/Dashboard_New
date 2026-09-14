@@ -9,6 +9,7 @@ import {
     CopyOutlined,
     BranchesOutlined,
     ClockCircleOutlined,
+    EyeOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import type { ColumnsType } from 'antd/es/table';
@@ -93,6 +94,7 @@ export default function ProcessDefinitionShow() {
     };
 
     const handleModalSuccess = async (message: string) => {
+        // این صفحه همیشه در حالتِ ویرایشِ همان Definitionِ فعلی باز می‌شود (isNew همیشه false است).
         setModalOpen(false);
         notify('success', message);
         await refresh();
@@ -177,20 +179,26 @@ export default function ProcessDefinitionShow() {
         {
             title: 'عملیات',
             key: 'actions',
-            width: 100,
+            width: 190,
             align: 'center',
-            render: (_, record) =>
-                canDesign ? (
-                    <Button
-                        size="small"
-                        icon={<CopyOutlined />}
-                        loading={cloningId === record.VersionID}
-                        disabled={cloningId !== null && cloningId !== record.VersionID}
-                        onClick={() => handleClone(record.VersionID)}
-                    >
-                        Clone
+            render: (_, record) => (
+                <Space>
+                    <Button size="small" icon={<EyeOutlined />} onClick={() => router.visit(`/process/versions/${record.VersionID}`)}>
+                        باز کردن
                     </Button>
-                ) : null,
+                    {canDesign && (
+                        <Button
+                            size="small"
+                            icon={<CopyOutlined />}
+                            loading={cloningId === record.VersionID}
+                            disabled={cloningId !== null && cloningId !== record.VersionID}
+                            onClick={() => handleClone(record.VersionID)}
+                        >
+                            Clone
+                        </Button>
+                    )}
+                </Space>
+            ),
         },
     ];
 

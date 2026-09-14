@@ -53,6 +53,40 @@ class ProcessDefinitionController extends Controller
         ]);
     }
 
+    /**
+     * GET process/definitions/{definitionId}/open — تصمیم‌گیری و Redirectِ خودکار به
+     * Canvasِ نسخهٔ مناسب (بدونِ صفحهٔ واسطِ اجباری). این Route فقط Read/Redirect است؛
+     * **هیچ نوشتنی رویِ Database انجام نمی‌دهد** (یک درخواستِ GET هرگز نباید عارضهٔ
+     * نوشتاری داشته باشد — طبقِ بررسیِ امنیتیِ تأییدشده):
+     *   ۱) اگر نسخهٔ DRAFT دارد → همان (ادامهٔ ویرایش).
+     *   ۲) وگرنه اگر نسخهٔ ACTIVE دارد → همان (نمایشِ Read-only).
+     *   ۳) در غیرِ این صورت (بدونِ هیچ نسخه‌ای، یا فقط نسخه‌هایِ Archived) → Redirect به
+     *      همان صفحهٔ میانیِ تاریخچه (Definitions/Show)؛ ساختِ Draft از آنجا فقط با یک
+     *      اقدامِ صریحِ POST (دکمهٔ موجودِ «نسخهٔ پیش‌نویسِ جدید») ممکن است، که خودش
+     *      WORKFLOW_DESIGN را چک می‌کند — نه از داخلِ این GET.
+     */
+    public function open(int $definitionId)
+    {
+        $this->authorizeView();
+
+        $data = $this->defs->show($definitionId);
+        abort_if(! $data['definition'], 404, 'فرایند یافت نشد.');
+
+        $versions = collect($data['versions']); // از قبل ORDER BY VersionNo DESC
+
+        $draft = $versions->firstWhere('Status', 'DRAFT');
+        if ($draft) {
+            return redirect("/process/versions/{$draft->VersionID}");
+        }
+
+        $active = $versions->firstWhere('Status', 'ACTIVE');
+        if ($active) {
+            return redirect("/process/versions/{$active->VersionID}");
+        }
+
+        return redirect("/process/definitions/{$definitionId}");
+    }
+
     /** GET process/definitions/{definitionId} → Pages/Process/Definitions/Show.tsx */
     public function show(int $definitionId)
     {

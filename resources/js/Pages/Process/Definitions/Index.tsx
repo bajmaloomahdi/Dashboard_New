@@ -125,10 +125,26 @@ export default function ProcessDefinitionsIndex() {
         setModalOpen(true);
     };
 
-    const handleModalSuccess = (message: string) => {
+    const handleModalSuccess = async (message: string, definitionId: number, isNew: boolean) => {
         setModalOpen(false);
         setEditingDefinition(null);
         showNotification('success', message);
+
+        // برایِ Definitionِ تازه‌ایجادشده، بلافاصله یک نسخهٔ Draft می‌سازیم (همان
+        // Endpointِ POST موجود که WORKFLOW_DESIGN را چک می‌کند — دقیقاً همان مسیری
+        // که دکمهٔ «نسخهٔ پیش‌نویسِ جدید» در صفحهٔ تاریخچه از قبل استفاده می‌کند) و
+        // مستقیم به Canvas می‌رویم. این یک POST/Write است، نه بخشی از GET /open.
+        if (isNew) {
+            const draftRes = await wfApi(`/workflow/definitions/${definitionId}/versions`, 'POST');
+            if (draftRes.ok && draftRes.success) {
+                router.visit(`/process/versions/${draftRes.versionId}`);
+            } else {
+                // بدونِ WORKFLOW_DESIGN یا هر خطایِ دیگر: به صفحهٔ تاریخچهٔ همان Definition می‌رویم
+                router.visit(`/process/definitions/${definitionId}`);
+            }
+            return;
+        }
+
         // 'categories' هم Reload می‌شود چون DefinitionCountِ هر دسته (در CategoryManagerModal)
         // با تغییرِ CategoryIDِ این Definition ممکن است عوض شده باشد.
         router.reload({ only: ['definitions', 'categories'] });
@@ -245,8 +261,8 @@ export default function ProcessDefinitionsIndex() {
                 const isActive = toBool(record.IsActive);
                 return (
                     <Space>
-                        <Tooltip title="مشاهده">
-                            <Button type="text" icon={<EyeOutlined />} style={{ color: THEME.primary }} onClick={() => router.visit(`/process/definitions/${record.DefinitionID}`)} />
+                        <Tooltip title="باز کردن">
+                            <Button type="text" icon={<EyeOutlined />} style={{ color: THEME.primary }} onClick={() => router.visit(`/process/definitions/${record.DefinitionID}/open`)} />
                         </Tooltip>
                         {canDesign && (
                             <>

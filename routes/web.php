@@ -289,6 +289,8 @@ Route::middleware('auth')->group(function () {
     // همچنان از سمتِ کلاینت مستقیماً به همان /workflow/* می‌روند.
     Route::prefix('process')->name('process.')->group(function () {
         Route::get('definitions', [ProcessDefinitionController::class, 'index'])->name('definitions.index');
+        Route::get('definitions/{definitionId}/open', [ProcessDefinitionController::class, 'open'])
+            ->whereNumber('definitionId')->name('definitions.open');
         Route::get('definitions/{definitionId}', [ProcessDefinitionController::class, 'show'])
             ->whereNumber('definitionId')->name('definitions.show');
         Route::get('instances', [ProcessInstanceController::class, 'index'])->name('instances.index');

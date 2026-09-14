@@ -22,8 +22,12 @@ interface DefinitionFormModalProps {
     onClose: () => void;
     editingDefinition: Definition | null;
     categories: WorkflowCategory[];
-    /** بعد از ذخیرهٔ موفق — والد پیامِ موفقیت را نمایش و لیست را Refresh می‌کند */
-    onSuccess: (message: string) => void;
+    /**
+     * بعد از ذخیرهٔ موفق — والد پیامِ موفقیت را نمایش می‌دهد و لیست/Meta را Refresh می‌کند.
+     * `definitionId` و `isNew` هم پاس داده می‌شوند تا فراخواننده (مثلاً لیستِ فرایندها) در
+     * حالتِ ایجادِ Definitionِ جدید بتواند کاربر را مستقیماً به Canvas هدایت کند.
+     */
+    onSuccess: (message: string, definitionId: number, isNew: boolean) => void;
 }
 
 const emptyValues = { code: '', name: '', description: '', entityType: '', isActive: true, categoryId: null as number | null };
@@ -102,7 +106,7 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
             }
 
             form.resetFields();
-            onSuccess(res.message);
+            onSuccess(res.message, res.definitionId, !editingDefinition);
         });
     };
 

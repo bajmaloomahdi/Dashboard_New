@@ -9,12 +9,15 @@ import {
     CopyOutlined,
     NodeIndexOutlined,
     WarningOutlined,
+    EditOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DesignerCanvas from './Designer/DesignerCanvas';
+import DefinitionFormModal from '../Definitions/DefinitionFormModal';
+import type { WorkflowCategory } from '../Definitions/CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
 import { THEME, STYLES } from '../../../theme';
 import {
@@ -51,11 +54,23 @@ interface LookupOption {
     FullName?: string; RoleName?: string; PositionName?: string; UnitName?: string;
 }
 
+/** شکلِ کاملِ Definition — همان چیزی که DefinitionFormModal برایِ ویرایش نیاز دارد. */
+interface FullDefinition {
+    DefinitionID: number;
+    Code: string;
+    Name: string;
+    Description: string | null;
+    EntityType: string;
+    IsActive: boolean | number | string;
+    CategoryID: number | null;
+}
+
 interface PageProps {
     meta: VersionMeta;
     steps: any[]; actions: any[]; assignments: any[]; transitions: any[];
     permissions: string[];
     users: LookupOption[]; roles: LookupOption[]; positions: LookupOption[]; units: LookupOption[];
+    categories: WorkflowCategory[];
 }
 
 const statusTag: Record<string, { color: string; label: string }> = {
@@ -90,6 +105,10 @@ export default function ProcessVersionShow() {
     const [cloning, setCloning] = useState(false);
     const [reloading, setReloading] = useState(false);
     const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+
+    const [definitionModalOpen, setDefinitionModalOpen] = useState(false);
+    const [editingDefinitionData, setEditingDefinitionData] = useState<FullDefinition | null>(null);
+    const [loadingDefinition, setLoadingDefinition] = useState(false);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false, type: 'success', message: '',
@@ -194,6 +213,30 @@ export default function ProcessVersionShow() {
         router.visit(`/process/versions/${res.versionId}`);
     };
 
+    /**
+     * ویرایشِ اطلاعاتِ Definition (نام/EntityType/Category/توضیحات) از همینجا، بدونِ
+     * ترکِ صفحهٔ Canvas. چون metaِ همین صفحه (sp_Wf_GetVersionMeta) شاملِ Description/IsActive
+     * نیست (فقط Code/Name/EntityType/Category)، برایِ جلوگیری از هرگونه از‌دست‌رفتنِ داده
+     * هنگامِ Submit، اطلاعاتِ کاملِ Definition را از همان Endpointِ JSONِ موجود
+     * (GET /workflow/definitions/{id}) می‌خوانیم — بدونِ هیچ SP/Endpointِ جدید.
+     */
+    const openDefinitionEditor = async () => {
+        setLoadingDefinition(true);
+        const res = await wfApi(`/workflow/definitions/${meta.DefinitionID}`);
+        setLoadingDefinition(false);
+
+        if (!res.ok || !res.success) { notify('error', res.message); return; }
+        setEditingDefinitionData(res.definition);
+        setDefinitionModalOpen(true);
+    };
+
+    const handleDefinitionModalSuccess = async (message: string) => {
+        setDefinitionModalOpen(false);
+        setEditingDefinitionData(null);
+        notify('success', message);
+        await reloadGraph(); // meta (Name/EntityType/CategoryName) را هم تازه می‌کند
+    };
+
     return (
         <MainLayout>
             <PageHeader
@@ -210,6 +253,11 @@ export default function ProcessVersionShow() {
                 ]}
                 actions={
                     <Space wrap>
+                        {isEditable && (
+                            <Button icon={<EditOutlined />} loading={loadingDefinition} onClick={openDefinitionEditor}>
+                                ویرایشِ اطلاعاتِ فرایند
+                            </Button>
+                        )}
                         {isEditable && (
                             <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave} style={STYLES.primaryButton}>
                                 ذخیرهٔ گراف {dirty ? '●' : ''}
@@ -339,6 +387,14 @@ export default function ProcessVersionShow() {
                     description="این نسخه ACTIVE می‌شود و نسخهٔ ACTIVEِ فعلیِ همین فرایند (اگر وجود داشته باشد) به‌طورِ خودکار ARCHIVED خواهد شد."
                 />
             </Modal>
+
+            <DefinitionFormModal
+                open={definitionModalOpen}
+                onClose={() => { setDefinitionModalOpen(false); setEditingDefinitionData(null); }}
+                editingDefinition={editingDefinitionData}
+                categories={props.categories || []}
+                onSuccess={handleDefinitionModalSuccess}
+            />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((prev) => ({ ...prev, open: false }))} />
         </MainLayout>

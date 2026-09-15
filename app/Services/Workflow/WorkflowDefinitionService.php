@@ -14,9 +14,15 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowDefinitionService
 {
+    /** الگویِ مجازِ Codeِ فیلدِ شرط — کلیدِ JSON در RuleJson/ContextJson، پس باید Injection-safe باشد. */
+    private const CONDITION_FIELD_CODE_PATTERN = '/^[A-Z][A-Z0-9_]{1,49}$/';
+
+    private const CONDITION_FIELD_DATA_TYPES = ['STRING', 'INTEGER', 'DECIMAL', 'DATE', 'BOOLEAN', 'SELECT', 'USER', 'UNIT'];
+
     public function __construct(
         private WorkflowStore $store,
         private EntityResolverRegistry $entities,
+        private ConditionRuleValidator $ruleValidator,
     ) {
     }
 
@@ -73,6 +79,92 @@ class WorkflowDefinitionService
         return $this->store->toggleCategoryActive($categoryId, $userId);
     }
 
+    /* ---------- فیلدهایِ شرط (WorkflowConditionFields) — Definition-level ---------- */
+
+    public function listConditionFields(int $definitionId, bool $includeInactive = false): array
+    {
+        return $this->store->getConditionFields($definitionId, $includeInactive);
+    }
+
+    /**
+     * ایجاد/ویرایشِ یک فیلدِ شرط. Code پس از اولین استفاده در هر RuleJsonی (در هر
+     * نسخه‌ای، حتی Archived) Immutable می‌شود — تا Ruleهایِ Snapshotشده هرگز با
+     * تغییرِ نام خراب نشوند (طبقِ اصلِ Immutabilityِ Final Design).
+     */
+    public function saveConditionField(array $input, int $userId): object
+    {
+        $definitionId = (int) ($input['definitionId'] ?? 0);
+        $code = trim($input['code'] ?? '');
+        $dataType = $input['dataType'] ?? '';
+        $sourceType = $input['sourceType'] ?? '';
+        $fieldId = isset($input['fieldId']) ? (int) $input['fieldId'] : null;
+
+        if (! preg_match(self::CONDITION_FIELD_CODE_PATTERN, $code)) {
+            throw new WorkflowValidationException('کدِ فیلد باید با حرفِ بزرگِ لاتین شروع شود و فقط شاملِ حروفِ بزرگ/عدد/Underscore باشد (حداکثر ۵۰ کاراکتر).');
+        }
+        if (! in_array($dataType, self::CONDITION_FIELD_DATA_TYPES, true)) {
+            throw new WorkflowValidationException("نوعِ دادهٔ «{$dataType}» شناخته‌شده نیست.");
+        }
+        if ($sourceType !== 'START_CONTEXT') {
+            throw new WorkflowValidationException('در فاز ۱ فقط SourceType=START_CONTEXT پشتیبانی می‌شود.');
+        }
+        if (trim($input['sourceKey'] ?? '') === '') {
+            throw new WorkflowValidationException('SourceKey الزامی است.');
+        }
+
+        $allowedValuesJson = null;
+        if ($dataType === 'SELECT') {
+            $allowedValues = $input['allowedValues'] ?? null;
+            if (! is_array($allowedValues) || $allowedValues === [] || ! array_is_list($allowedValues)) {
+                throw new WorkflowValidationException('برایِ DataType=SELECT فهرستِ گزینه‌هایِ مجاز (allowedValues) الزامی است.');
+            }
+            $allowedValuesJson = json_encode(array_values(array_map('strval', $allowedValues)), JSON_UNESCAPED_UNICODE);
+        }
+
+        if ($fieldId !== null) {
+            $existing = collect($this->store->getConditionFields($definitionId, includeInactive: true))
+                ->firstWhere('FieldID', $fieldId);
+
+            if ($existing && $existing->Code !== $code && $this->isConditionFieldCodeInUse($definitionId, $existing->Code)) {
+                throw new WorkflowValidationException("فیلدِ «{$existing->Code}» در یک یا چند Rule استفاده شده است؛ Code آن قابلِ‌تغییر نیست.");
+            }
+        }
+
+        return $this->store->saveConditionField([
+            'fieldId'           => $fieldId,
+            'definitionId'      => $definitionId,
+            'code'              => $code,
+            'displayName'       => trim($input['displayName'] ?? ''),
+            'dataType'          => $dataType,
+            'sourceType'        => $sourceType,
+            'sourceKey'         => trim($input['sourceKey'] ?? ''),
+            'allowedValuesJson' => $allowedValuesJson,
+            'sortOrder'         => $input['sortOrder'] ?? 0,
+            'userId'            => $userId,
+        ]);
+    }
+
+    public function toggleConditionFieldActive(int $fieldId, int $userId): object
+    {
+        return $this->store->toggleConditionFieldActive($fieldId, $userId);
+    }
+
+    /** آیا Codeِ داده‌شده در RuleJsonِ هر Transitionی، در هر نسخه‌ای از این Definition، ارجاع شده؟ */
+    private function isConditionFieldCodeInUse(int $definitionId, string $code): bool
+    {
+        foreach ($this->store->getDefinitionRuleJsons($definitionId) as $row) {
+            $rule = json_decode((string) $row->RuleJson, true);
+            if (! is_array($rule)) {
+                continue;
+            }
+            if (in_array($code, $this->ruleValidator->extractFieldCodes($rule), true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function createDraft(int $definitionId, int $userId): object
     {
         return $this->store->createDraftVersion($definitionId, $userId);
@@ -111,6 +203,10 @@ class WorkflowDefinitionService
         $g = $this->store->getVersionGraph($versionId);
         $errors = [];
         $warnings = [];
+
+        $fieldsByCode = collect($this->store->getConditionFields((int) $meta->DefinitionID, includeInactive: true))
+            ->keyBy('Code')
+            ->all();
 
         $steps = $g['steps'];
         $byId = [];
@@ -181,8 +277,47 @@ class WorkflowDefinitionService
             if (($s->AssignPolicy ?? 'ANY') === 'N_OF_M' && (int) ($s->RequiredApprovals ?? 0) < 1) {
                 $errors[] = "مرحلهٔ «{$s->Name}» با سیاستِ N_OF_M نیازمندِ «تعداد تأییدِ لازم» است.";
             }
-            if (in_array($type, ['CONDITION', 'AUTOMATIC', 'NOTIFICATION', 'PARALLEL_SPLIT', 'PARALLEL_JOIN', 'SUBPROCESS'], true)) {
+            if (in_array($type, ['AUTOMATIC', 'NOTIFICATION', 'PARALLEL_SPLIT', 'PARALLEL_JOIN', 'SUBPROCESS'], true)) {
                 $warnings[] = "مرحلهٔ «{$s->Name}» از نوعِ «{$type}» است؛ اجرای این نوع در فاز ۱ پشتیبانی نمی‌شود.";
+            }
+
+            if ($type === 'CONDITION') {
+                $outgoing = $outByStep[$id] ?? [];
+                $defaults = array_values(array_filter($outgoing, fn ($t) => (int) $t->IsDefault === 1));
+                if (count($defaults) === 0) {
+                    $errors[] = "مرحلهٔ «{$s->Name}» (CONDITION) هیچ گذارِ پیش‌فرض (Else) ندارد؛ در نبودِ آن، Runtime ممکن است بن‌بست شود.";
+                } elseif (count($defaults) > 1) {
+                    $errors[] = "مرحلهٔ «{$s->Name}» (CONDITION) بیش از یک گذارِ پیش‌فرض دارد.";
+                }
+            }
+        }
+
+        // اعتبارسنجیِ RuleJson: فقط رویِ گذارهایِ خروجیِ Stepِ CONDITION مجاز است.
+        foreach ($g['transitions'] as $t) {
+            if (empty($t->RuleJson)) {
+                continue;
+            }
+
+            if ((int) $t->IsDefault === 1) {
+                $errors[] = "گذارِ «{$t->Code}» پیش‌فرض است و نباید هم‌زمان دارایِ شرط (RuleJson) باشد.";
+            }
+
+            $fromStep = $byId[(int) $t->FromStepID] ?? null;
+            if (! $fromStep || $fromStep->StepType !== 'CONDITION') {
+                $errors[] = "گذارِ «{$t->Code}» دارایِ Rule است ولی مبدأِ آن از نوعِ CONDITION نیست.";
+
+                continue;
+            }
+
+            $rule = json_decode((string) $t->RuleJson, true);
+            if (! is_array($rule)) {
+                $errors[] = "گذارِ «{$t->Code}»: RuleJson قابلِ‌خواندن نیست.";
+
+                continue;
+            }
+
+            foreach ($this->ruleValidator->validate($rule, $fieldsByCode) as $ruleError) {
+                $errors[] = "گذارِ «{$t->Code}»: {$ruleError}";
             }
         }
 

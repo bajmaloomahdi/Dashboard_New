@@ -7,17 +7,21 @@ use App\Services\Workflow\Exceptions\WorkflowStateException;
 /**
  * انتخابِ گذارِ (Transition) بعدی از یک مرحله.
  *
- * فاز ۱: بدونِ شرط (ConditionJson). انتخاب فقط بر اساسِ:
+ * برایِ مراحلِ عادی (USER_TASK/APPROVAL/START): بدونِ شرط، فقط بر اساسِ:
  *   ۱) تطابقِ کدِ Action ای که کاربر انجام داده با TriggerActionID گذار
  *   ۲) در نبودِ تطابق، گذارِ پیش‌فرض (IsDefault = 1)
  *   ۳) در مراحلِ خودکار/شروع (بدونِ Action)، تنها گذارِ خروجی یا گذارِ پیش‌فرض
  * در هر گروه، مرتب‌سازی بر Priority صعودی و انتخابِ اولی.
  *
- * Condition Builder در این کلاس پیاده نشده و ساختار طوری است که افزودنِ آن
- * (یک مرحلهٔ فیلترِ اضافه قبل از انتخاب) موتور را بازنویسی نمی‌کند.
+ * برایِ مراحلِ CONDITION: resolveConditional() — طبقِ Final Designِ Condition
+ * Engine (اولین Ruleِ TRUE بر اساسِ Priority، Short-circuit، سپس IsDefault).
  */
 class TransitionResolver
 {
+    public function __construct(private ConditionEvaluator $evaluator)
+    {
+    }
+
     /**
      * @param  array<int,object>  $transitions  همهٔ گذارهای نسخه
      * @param  array<int,object>  $actions      همهٔ Actionهای نسخه (برای نگاشتِ Code → ActionID)
@@ -71,5 +75,43 @@ class TransitionResolver
                 ? "برای اقدامِ «{$actionCode}» هیچ گذارِ متناظری در این مرحله تعریف نشده است."
                 : 'برای این مرحلهٔ خودکار هیچ گذارِ پیش‌فرضی تعریف نشده است.'
         );
+    }
+
+    /**
+     * گذارِ خروجیِ یک Stepِ CONDITION را انتخاب می‌کند:
+     *   ۱) فقط گذارهایِ دارایِ RuleJson (مرتب بر Priority صعودی، سپس TransitionID)
+     *   ۲) اولین Ruleی که TRUE شود برنده است (Short-circuit — بقیه ارزیابی نمی‌شوند)
+     *   ۳) اگر هیچ‌کدام TRUE نشد، گذارِ IsDefault=1 (اگر باشد)
+     *   ۴) اگر آن هم نبود، null (فراخوان باید Controlled Failure اعمال کند)
+     *
+     * هرگز WorkflowConditionFields را نمی‌خواند — فقط RuleJsonِ Snapshotشده و Context.
+     *
+     * @param  array<int,object>    $transitions
+     * @param  array<string,mixed>  $context
+     */
+    public function resolveConditional(array $transitions, int $fromStepId, array $context): ?object
+    {
+        $outgoing = array_values(array_filter(
+            $transitions,
+            fn ($t) => (int) $t->FromStepID === $fromStepId
+        ));
+
+        $ruled = array_values(array_filter($outgoing, fn ($t) => ! empty($t->RuleJson)));
+        usort($ruled, fn ($a, $b) => ($a->Priority <=> $b->Priority) ?: ($a->TransitionID <=> $b->TransitionID));
+
+        foreach ($ruled as $t) {
+            $rule = json_decode((string) $t->RuleJson, true);
+            if (is_array($rule) && $this->evaluator->evaluate($rule, $context)) {
+                return $t;
+            }
+        }
+
+        foreach ($outgoing as $t) {
+            if ((int) $t->IsDefault === 1) {
+                return $t;
+            }
+        }
+
+        return null;
     }
 }

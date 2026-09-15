@@ -151,6 +151,7 @@ class WorkflowVersionController extends WorkflowApiController
             'transitions.*.isDefault'           => 'nullable|boolean',
             'transitions.*.label'               => 'nullable|string|max:100',
             'transitions.*.conditionExpression' => 'nullable|string|max:500',
+            'transitions.*.ruleJson'            => 'nullable|array',
         ]);
 
         return $this->runWorkflow(function () use ($versionId, $validated) {

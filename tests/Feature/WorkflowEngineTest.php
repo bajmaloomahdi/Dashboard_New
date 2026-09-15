@@ -1719,4 +1719,531 @@ class WorkflowEngineTest extends TestCase
             $this->assertFalse($this->inCartable($u, $messageId), "کاربر {$u} نباید تسکِ بسته‌شده را ببیند.");
         }
     }
+
+    /* ==================== Condition Engine / Gateway (Phase 1) ==================== */
+
+    /** گرافِ START → COND → END_HIGH/END_LOW/END_MID با گذارهایِ Ruleدار + یک Default. */
+    private function conditionGraph(array $ruledTransitions): array
+    {
+        $steps = [
+            ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+            ['code' => 'COND', 'name' => 'شرط', 'stepType' => 'CONDITION', 'sortOrder' => 1],
+        ];
+        $endCodes = array_unique(array_merge(
+            array_column($ruledTransitions, 'toStepCode'),
+            ['END_DEFAULT']
+        ));
+        foreach ($endCodes as $i => $endCode) {
+            $steps[] = ['code' => $endCode, 'name' => "پایانِ {$endCode}", 'stepType' => 'END', 'sortOrder' => 2 + $i];
+        }
+
+        $transitions = [
+            ['code' => 'T_START', 'fromStepCode' => 'START', 'toStepCode' => 'COND', 'isDefault' => true],
+        ];
+        foreach ($ruledTransitions as $i => $rt) {
+            $transitions[] = [
+                'code' => 'T_RULE_' . $i, 'fromStepCode' => 'COND', 'toStepCode' => $rt['toStepCode'],
+                'priority' => $rt['priority'], 'ruleJson' => $rt['rule'],
+            ];
+        }
+        $transitions[] = ['code' => 'T_DEFAULT', 'fromStepCode' => 'COND', 'toStepCode' => 'END_DEFAULT', 'priority' => 999, 'isDefault' => true];
+
+        return ['steps' => $steps, 'actions' => [], 'assignments' => [], 'transitions' => $transitions];
+    }
+
+    /** گرافِ CONDITION بدونِ هیچ گذارِ IsDefault (برایِ تستِ Validate/Failure). */
+    private function conditionGraphWithoutDefault(array $rule): array
+    {
+        return [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'COND', 'name' => 'شرط', 'stepType' => 'CONDITION', 'sortOrder' => 1],
+                ['code' => 'END_A', 'name' => 'پایانِ الف', 'stepType' => 'END', 'sortOrder' => 2],
+            ],
+            'actions' => [],
+            'assignments' => [],
+            'transitions' => [
+                ['code' => 'T_START', 'fromStepCode' => 'START', 'toStepCode' => 'COND', 'isDefault' => true],
+                ['code' => 'T_RULE', 'fromStepCode' => 'COND', 'toStepCode' => 'END_A', 'priority' => 10, 'ruleJson' => $rule],
+            ],
+        ];
+    }
+
+    /** DECIMAL دیگر float نیست: value.data باید رشتهٔ Canonical باشد، نه عددِ JSON. */
+    private function amountRule(string $fieldCode, string $operator, int $value): array
+    {
+        return [
+            'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
+            'children' => [
+                ['type' => 'CONDITION', 'field' => $fieldCode, 'operator' => $operator, 'value' => ['kind' => 'CONSTANT', 'data' => (string) $value]],
+            ],
+        ];
+    }
+
+    private function defineAmountField(int $definitionId, string $code = 'AMOUNT'): void
+    {
+        $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => $code, 'displayName' => 'مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
+        ], self::USER_A);
+    }
+
+    private function startWfWithContext(string $code, int $entityId, array $context): EngineResult
+    {
+        return $this->engine->start(new StartWorkflowRequest(
+            entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_A,
+            definitionCode: $code, context: $context,
+        ));
+    }
+
+    public function test_condition_gateway_picks_matching_rule_by_priority(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 100)],
+            ['toStepCode' => 'END_LOW', 'priority' => 20, 'rule' => $this->amountRule('AMOUNT', 'LTE', 100)],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '150']);
+
+        $this->assertSame('COMPLETED', $result->instanceStatus);
+        $this->assertSame('END_HIGH', $result->enteredStepCode);
+    }
+
+    public function test_condition_gateway_short_circuits_on_first_true_rule_by_priority(): void
+    {
+        // هر دو Ruleِ TRUE هستند؛ برنده باید همیشه Priorityِ کمتر باشد.
+        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 5, 'rule' => $this->amountRule('AMOUNT', 'GT', 10)],
+            ['toStepCode' => 'END_LOW', 'priority' => 50, 'rule' => $this->amountRule('AMOUNT', 'GT', 20)],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '1000']);
+
+        $this->assertSame('END_HIGH', $result->enteredStepCode);
+    }
+
+    public function test_condition_gateway_falls_back_to_default_when_no_rule_matches(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 1000)],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '5']);
+
+        $this->assertSame('END_DEFAULT', $result->enteredStepCode);
+    }
+
+    public function test_condition_gateway_missing_context_value_never_matches_and_uses_default(): void
+    {
+        // طبقِ قاعدهٔ NULL: غیابِ amount در Context یعنی هر مقایسه FALSE است.
+        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 1)],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), []);
+
+        $this->assertSame('END_DEFAULT', $result->enteredStepCode);
+    }
+
+    public function test_condition_gateway_controlled_failure_when_no_rule_matches_and_no_default(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        // ساختِ گرافِ بدونِ Default و Publishِ آن از طریقِ Store مستقیم (نه Service) تا
+        // Guardِ جدیدِ Validate این حالت را در Publishِ عادی رد نکند — این تست دقیقاً
+        // رفتارِ Runtime را در برابرِ دادهٔ بن‌بست می‌سنجد، نه رفتارِ Validate را (که
+        // جداگانه در تستِ Publish پوشش داده شده است).
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraphWithoutDefault(
+            $this->amountRule('AMOUNT', 'GT', 1000)
+        ), self::USER_A);
+        $this->store->publishVersion((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '5']);
+
+        $this->assertSame('FAILED', $result->instanceStatus);
+
+        $instance = $this->store->getInstance($result->instanceId)['instance'];
+        $this->assertSame('FAILED', $instance->Status);
+    }
+
+    /* ==================== Context Snapshot (Start) ==================== */
+
+    public function test_start_context_is_validated_cast_and_snapshotted(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'CTX_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Context', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'END', 'name' => 'پایان', 'stepType' => 'END', 'sortOrder' => 1],
+            ],
+            'actions' => [], 'assignments' => [],
+            'transitions' => [['code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'END', 'isDefault' => true]],
+        ], self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '150.5']);
+
+        $rawContext = $this->store->getInstanceContext($result->instanceId);
+        $this->assertNotNull($rawContext);
+        $decoded = json_decode($rawContext, true);
+        // DECIMAL دیگر float نیست — رشتهٔ Canonicalِ دقیق در ContextJson ذخیره می‌شود.
+        $this->assertSame('150.5', $decoded['AMOUNT']);
+    }
+
+    public function test_start_with_invalid_context_creates_no_instance(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'CTXBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Context بد', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'END', 'name' => 'پایان', 'stepType' => 'END', 'sortOrder' => 1],
+            ],
+            'actions' => [], 'assignments' => [],
+            'transitions' => [['code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'END', 'isDefault' => true]],
+        ], self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+
+        $countBefore = \Illuminate\Support\Facades\DB::table('WorkflowInstances')->count();
+
+        $this->expectException(WorkflowValidationException::class);
+
+        try {
+            $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => 'not-a-number']);
+        } finally {
+            $countAfter = \Illuminate\Support\Facades\DB::table('WorkflowInstances')->count();
+            $this->assertSame($countBefore, $countAfter, 'Contextِ نامعتبر نباید هیچ Instanceای بسازد.');
+        }
+    }
+
+    public function test_transition_taken_history_includes_rule_evaluation_detail(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'HIST_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'History', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 100)],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '500']);
+
+        $history = collect($this->store->getInstanceHistory($result->instanceId));
+        $ruleEvents = $history->filter(function ($h) {
+            $detail = json_decode($h->DetailJson ?? '{}', true) ?? [];
+
+            return $h->EventCode === 'TRANSITION_TAKEN' && array_key_exists('ruleMatched', $detail);
+        });
+
+        $this->assertNotEmpty($ruleEvents, 'باید یک رویدادِ TRANSITION_TAKEN با ruleMatched ثبت شده باشد.');
+        $detail = json_decode($ruleEvents->first()->DetailJson, true);
+        $this->assertTrue($detail['ruleMatched']);
+        $this->assertStringContainsString('AMOUNT', $detail['ruleSummary']);
+    }
+
+    /* ==================== Publish Validation (Condition Engine) ==================== */
+
+    public function test_publish_is_blocked_when_condition_step_has_no_default(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'NODEF_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'بدونِ Default', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraphWithoutDefault(
+            $this->amountRule('AMOUNT', 'GT', 100)
+        ), self::USER_A);
+
+        $result = $this->defs->validate((int) $version->VersionID, self::USER_A, persist: false);
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(collect($result['errors'])->contains(fn ($e) => str_contains($e, 'پیش‌فرض')));
+
+        $this->expectException(WorkflowValidationException::class);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+    }
+
+    public function test_publish_is_blocked_when_rule_references_inactive_field(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'INACT_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'فیلدِ غیرفعال', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $field = $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
+        ], self::USER_A);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 100)],
+        ]), self::USER_A);
+
+        // Save همچنان موفق است (Ruleِ اشاره‌کننده به فیلدِ غیرفعال قابلِ Save است، فقط Publish را مسدود می‌کند)
+        $this->defs->toggleConditionFieldActive((int) $field->FieldID, self::USER_A);
+
+        $result = $this->defs->validate((int) $version->VersionID, self::USER_A, persist: false);
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(collect($result['errors'])->contains(fn ($e) => str_contains($e, 'غیرفعال')));
+
+        $this->expectException(WorkflowValidationException::class);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+    }
+
+    public function test_publish_is_blocked_when_rule_json_is_on_non_condition_transition(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'MISPLACED_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'نادرست', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'END', 'name' => 'پایان', 'stepType' => 'END', 'sortOrder' => 1],
+            ],
+            'actions' => [], 'assignments' => [],
+            'transitions' => [[
+                'code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'END', 'isDefault' => true,
+                'ruleJson' => $this->amountRule('AMOUNT', 'GT', 100),
+            ]],
+        ], self::USER_A);
+
+        $result = $this->defs->validate((int) $version->VersionID, self::USER_A, persist: false);
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(collect($result['errors'])->contains(fn ($e) => str_contains($e, 'CONDITION نیست')));
+    }
+
+    /** یافتهٔ Auditِ Final: گذارِ Default نباید هم‌زمان RuleJson داشته باشد — باید Publish را مسدود کند. */
+    public function test_publish_is_blocked_when_a_default_transition_also_has_rule_json(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'DEFRULE_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Default+Rule', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'COND', 'name' => 'شرط', 'stepType' => 'CONDITION', 'sortOrder' => 1],
+                ['code' => 'END_A', 'name' => 'پایانِ الف', 'stepType' => 'END', 'sortOrder' => 2],
+            ],
+            'actions' => [], 'assignments' => [],
+            'transitions' => [
+                ['code' => 'T_START', 'fromStepCode' => 'START', 'toStepCode' => 'COND', 'isDefault' => true],
+                // این گذار هم Default است هم RuleJson دارد — دقیقاً همان پیکربندیِ مبهمی که باید رد شود.
+                ['code' => 'T_AMBIGUOUS', 'fromStepCode' => 'COND', 'toStepCode' => 'END_A', 'isDefault' => true, 'ruleJson' => $this->amountRule('AMOUNT', 'GT', 100)],
+            ],
+        ], self::USER_A);
+
+        $result = $this->defs->validate((int) $version->VersionID, self::USER_A, persist: false);
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(collect($result['errors'])->contains(
+            fn ($e) => str_contains($e, 'پیش‌فرض') && str_contains($e, 'شرط')
+        ), 'باید خطایی دربارهٔ «گذارِ پیش‌فرض نباید هم‌زمان دارایِ شرط باشد» وجود داشته باشد.');
+
+        $this->expectException(WorkflowValidationException::class);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+    }
+
+    /* ==================== DECIMAL بدونِ float (bcmath) ==================== */
+
+    /**
+     * موردِ کلاسیکِ خطایِ Precisionِ IEEE-754: 0.1 + 0.2 !== 0.3 در اکثرِ زبان‌ها.
+     * این تست مستقیماً همین دو مقدار را (به‌عنوانِ رشته) از مسیرِ واقعیِ Context/Rule
+     * عبور می‌دهد تا مطمئن شویم مقایسه هرگز از float عبور نمی‌کند.
+     */
+    public function test_decimal_comparison_is_exact_and_float_independent(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'DEC_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Decimal دقیق', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
+        ], self::USER_A);
+
+        // RuleJson عمداً غیر-Canonical است («0.300» به‌جایِ «0.3») تا اثبات شود مقایسه
+        // با bccomp (که فرمت‌هایِ هم‌ارزِ متفاوت را هم‌مقدار می‌داند) انجام می‌شود، نه
+        // با ===ِ رشته‌ایِ خام (که «0.3» !== «0.300» می‌گفت) و نه با == رویِ float.
+        $rule = [
+            'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
+            'children' => [
+                ['type' => 'CONDITION', 'field' => 'AMOUNT', 'operator' => 'EQ', 'value' => ['kind' => 'CONSTANT', 'data' => '0.300']],
+            ],
+        ];
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $rule],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+
+        // Contextِ ورودی «0.30» است — در ConditionContextBuilder به فرمِ Canonicalِ
+        // «0.3» درمی‌آید، سپس با مقدارِ غیر-Canonicalِ Ruleِ («0.300») مقایسه می‌شود.
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '0.30']);
+
+        $rawContext = $this->store->getInstanceContext($result->instanceId);
+        $this->assertSame('0.3', json_decode($rawContext, true)['AMOUNT'], 'Contextِ Canonicalشده باید بدونِ صفرِ اضافیِ انتها ذخیره شود.');
+
+        $this->assertSame('COMPLETED', $result->instanceStatus);
+        $this->assertSame('END_HIGH', $result->enteredStepCode, '«0.3» (Context) باید با «0.300» (Rule) برابر شناخته شود.');
+    }
+
+    /* ==================== Context Contract — اثباتِ End-to-End ==================== */
+
+    /**
+     * زنجیرهٔ کاملِ Mandatory:
+     * ConditionField.Code=AMOUNT، SourceKey=amount، DataType=DECIMAL
+     *   → StartWorkflowRequest.context={"amount":"1500.25"}
+     *   → ConditionContextBuilder (Cast/Canonicalize)
+     *   → WorkflowInstances.ContextJson={"AMOUNT":"1500.25"}
+     *   → ConditionEvaluator (AMOUNT > 1000)
+     *   → نتیجهٔ Runtime باید TRUE باشد (مسیرِ END_HIGH طی شود).
+     */
+    public function test_context_contract_end_to_end_chain_produces_true_result(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'E2E_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'End to End', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
+        ], self::USER_A);
+
+        $rule = [
+            'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
+            'children' => [
+                ['type' => 'CONDITION', 'field' => 'AMOUNT', 'operator' => 'GT', 'value' => ['kind' => 'CONSTANT', 'data' => '1000']],
+            ],
+        ];
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $rule],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['amount' => '1500.25']);
+
+        // زنجیره را قدم‌به‌قدم اثبات می‌کنیم، نه فقط نتیجهٔ نهایی:
+        $rawContext = $this->store->getInstanceContext($result->instanceId);
+        $this->assertSame('{"AMOUNT":"1500.25"}', $rawContext, 'ContextJson باید دقیقاً با کلیدِ Code (نه SourceKey) و مقدارِ Canonical ذخیره شده باشد.');
+
+        $this->assertSame('COMPLETED', $result->instanceStatus);
+        $this->assertSame('END_HIGH', $result->enteredStepCode, 'Ruleِ AMOUNT>1000 باید TRUE شده باشد.');
+    }
+
+    /**
+     * کلیدِ ناشناخته در Context (که به هیچ SourceKeyِ فعالی متناظر نیست) نباید
+     * Silently Ignore شود — باید Startِ فرایند را با Errorِ صریح متوقف کند.
+     */
+    public function test_context_contract_rejects_unknown_context_key(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'E2EBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'End to End Bad', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
+        ], self::USER_A);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'END', 'name' => 'پایان', 'stepType' => 'END', 'sortOrder' => 1],
+            ],
+            'actions' => [], 'assignments' => [],
+            'transitions' => [['code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'END', 'isDefault' => true]],
+        ], self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+
+        $countBefore = \Illuminate\Support\Facades\DB::table('WorkflowInstances')->count();
+
+        $this->expectException(WorkflowValidationException::class);
+
+        try {
+            $this->startWfWithContext(
+                $meta->DefinitionCode,
+                random_int(90000, 99999),
+                ['amount' => '1500.25', 'somethingUnknown' => 'abc']
+            );
+        } finally {
+            $countAfter = \Illuminate\Support\Facades\DB::table('WorkflowInstances')->count();
+            $this->assertSame($countBefore, $countAfter, 'کلیدِ ناشناخته نباید Instanceای بسازد.');
+        }
+    }
+
+    /**
+     * تستِ Mappingِ Code≠SourceKey: اثبات می‌کند Evaluator از SourceKeyِ صحیح برایِ
+     * خواندنِ Contextِ خام استفاده می‌کند (نه به‌طورِ تصادفی از خودِ Code)، درحالی‌که
+     * Rule/ContextJson با Code شناخته می‌شوند.
+     */
+    public function test_context_contract_uses_source_key_not_code_for_raw_context_lookup(): void
+    {
+        $definitionId = (int) $this->defs->save(['code' => 'MAP_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Mapping', 'entityType' => 'MESSAGE'], self::USER_A)->DefinitionID;
+        // Code و SourceKey عمداً کاملاً متفاوتند.
+        $this->defs->saveConditionField([
+            'definitionId' => $definitionId, 'code' => 'TOTAL_AMOUNT', 'displayName' => 'جمعِ مبلغ',
+            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'raw_amt_field_x',
+        ], self::USER_A);
+
+        $rule = [
+            'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
+            'children' => [
+                ['type' => 'CONDITION', 'field' => 'TOTAL_AMOUNT', 'operator' => 'GT', 'value' => ['kind' => 'CONSTANT', 'data' => '1000']],
+            ],
+        ];
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $rule],
+        ]), self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $meta = $this->store->getVersionMeta((int) $version->VersionID);
+
+        // اگر Evaluator به‌اشتباه به‌دنبالِ کلیدِ «TOTAL_AMOUNT» در Contextِ خام
+        // می‌گشت (به‌جایِ SourceKeyِ صحیح «raw_amt_field_x»)، این مقدار هرگز پیدا
+        // نمی‌شد و طبقِ قاعدهٔ NULL، Ruleِ GT همیشه FALSE می‌ماند → END_DEFAULT.
+        $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['raw_amt_field_x' => '2000']);
+
+        $rawContext = $this->store->getInstanceContext($result->instanceId);
+        $this->assertSame('{"TOTAL_AMOUNT":"2000"}', $rawContext, 'ContextJson باید با کلیدِ Code ذخیره شود، نه SourceKey.');
+        $this->assertSame('END_HIGH', $result->enteredStepCode, 'Evaluator باید از SourceKeyِ صحیح مقدار را خوانده باشد.');
+
+        // برعکسِ آزمایش: اگر کلیدِ Contextِ ورودی به‌اشتباه «TOTAL_AMOUNT» (خودِ Code) باشد
+        // نه SourceKeyِ واقعی، باید به‌عنوانِ کلیدِ ناشناخته Reject شود (طبقِ همان تستِ بالا) —
+        // یعنی سیستم هرگز به‌صورتِ نرم/Fallback بینِ Code و SourceKey سوییچ نمی‌کند.
+        $this->expectException(WorkflowValidationException::class);
+        $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['TOTAL_AMOUNT' => '2000']);
+    }
 }

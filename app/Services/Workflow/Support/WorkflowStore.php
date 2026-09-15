@@ -86,6 +86,48 @@ class WorkflowStore
         );
     }
 
+    /* ---------- فیلدهایِ شرط (WorkflowConditionFields) ---------- */
+
+    public function getConditionFields(int $definitionId, bool $includeInactive = false): array
+    {
+        return DB::select(
+            'EXEC dbo.sp_Wf_GetConditionFields @DefinitionID = ?, @IncludeInactive = ?',
+            [$definitionId, $includeInactive]
+        );
+    }
+
+    public function saveConditionField(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_SaveConditionField @FieldID = ?, @DefinitionID = ?, @Code = ?, @DisplayName = ?, @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @SortOrder = ?, @UserID = ?',
+            [
+                $p['fieldId'] ?? null, $p['definitionId'], $p['code'], $p['displayName'], $p['dataType'],
+                $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
+            ]
+        );
+    }
+
+    public function toggleConditionFieldActive(int $fieldId, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_ToggleConditionFieldActive @FieldID = ?, @UserID = ?',
+            [$fieldId, $userId]
+        );
+    }
+
+    /** همهٔ RuleJsonهایِ غیرِNull در همهٔ نسخه‌هایِ یک Definition — برایِ Guardِ Immutabilityِ Code. */
+    public function getDefinitionRuleJsons(int $definitionId): array
+    {
+        return DB::select('EXEC dbo.sp_Wf_GetDefinitionRuleJsons @DefinitionID = ?', [$definitionId]);
+    }
+
+    public function getInstanceContext(int $instanceId): ?string
+    {
+        $row = DB::selectOne('EXEC dbo.sp_Wf_GetInstanceContext @InstanceID = ?', [$instanceId]);
+
+        return $row?->ContextJson;
+    }
+
     public function createDraftVersion(int $definitionId, int $userId): object
     {
         return $this->write('EXEC dbo.sp_Wf_CreateDraftVersion @DefinitionID = ?, @UserID = ?', [$definitionId, $userId]);
@@ -154,8 +196,11 @@ class WorkflowStore
     {
         try {
             return $this->write(
-                'EXEC dbo.sp_Wf_StartInstance @DefinitionID = ?, @VersionID = ?, @EntityType = ?, @EntityID = ?, @StartedByUserID = ?, @InstanceNumber = ?',
-                [$p['definitionId'], $p['versionId'], $p['entityType'], $p['entityId'], $p['startedByUserId'] ?? null, $p['instanceNumber']]
+                'EXEC dbo.sp_Wf_StartInstance @DefinitionID = ?, @VersionID = ?, @EntityType = ?, @EntityID = ?, @StartedByUserID = ?, @InstanceNumber = ?, @ContextJson = ?',
+                [
+                    $p['definitionId'], $p['versionId'], $p['entityType'], $p['entityId'], $p['startedByUserId'] ?? null,
+                    $p['instanceNumber'], $p['contextJson'] ?? null,
+                ]
             );
         } catch (UniqueConstraintViolationException $e) {
             // بردِ از دست‌رفتهٔ Startِ هم‌زمان: ایندکسِ یکتای فیلترشدهٔ «یک RUNNING به‌ازای هر

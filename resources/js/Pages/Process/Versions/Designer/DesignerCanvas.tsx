@@ -16,15 +16,18 @@ import {
     type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider } from 'antd';
+import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider, Checkbox, Tag } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { THEME, STYLES } from '../../../../theme';
 import { designerNodeTypes, NODE_TYPE_META, type DesignerNodeData } from './nodeTypes';
+import RuleBuilder from './RuleBuilder';
+import type { ConditionField } from './ruleTypes';
 import {
     ASSIGNEE_TYPES,
     type AssigneeType,
     type AssignmentDraft,
     type GraphDraft,
+    type RuleGroup,
     type StepDraft,
     type StepType,
     type TransitionDraft,
@@ -45,6 +48,8 @@ interface DesignerCanvasProps {
     roles: LookupOption[];
     positions: LookupOption[];
     units: LookupOption[];
+    /** فیلدهایِ شرطِ همین Definition — برایِ Rule Builderِ گذارهایِ خروجیِ Stepِ CONDITION */
+    conditionFields: ConditionField[];
 }
 
 type PaletteType = keyof typeof NODE_TYPE_META;
@@ -115,6 +120,7 @@ function newTransitionDraft(code: string, fromStepCode: string, toStepCode: stri
         isDefault: false,
         label: null,
         conditionExpression: null,
+        ruleJson: null,
     };
 }
 
@@ -136,7 +142,7 @@ function lookupOptions(
     }
 }
 
-function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, positions, units }: DesignerCanvasProps) {
+function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, positions, units, conditionFields }: DesignerCanvasProps) {
     const [nodes, setNodes, onNodesChangeInternal] = useNodesState<Node<DesignerNodeData>>(
         graph.steps.map((s, i) => stepToNode(s, i))
     );
@@ -296,7 +302,10 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
         });
     };
 
-    const updateTransitionField = (code: string, patch: Partial<Pick<TransitionDraft, 'conditionExpression'>>) => {
+    const updateTransitionField = (
+        code: string,
+        patch: Partial<Pick<TransitionDraft, 'conditionExpression' | 'priority' | 'isDefault' | 'ruleJson'>>
+    ) => {
         onChange({
             ...graph,
             transitions: graph.transitions.map((t) => (t.code === code ? { ...t, ...patch } : t)),
@@ -348,6 +357,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
     };
 
     const selectedTransition = selectedEdge ? graph.transitions.find((t) => t.code === selectedEdge.id) : null;
+    const fromStepTypeOfSelectedEdge = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source)?.type : null;
 
     return (
         <div style={{ display: 'flex', gap: 12, height: 660, direction: 'rtl' }}>
@@ -567,16 +577,80 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                                 onChange={(e) => updateEdgeLabel(selectedEdge.id, e.target.value)}
                             />
                         </div>
+
+                        <Divider style={{ margin: '4px 0' }} />
+
                         <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>شرط (Condition)</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اولویتِ بررسی (Priority)</Text>
+                            <InputNumber
+                                style={{ width: '100%' }}
+                                disabled={readOnly}
+                                value={selectedTransition?.priority ?? 100}
+                                onChange={(v) => updateTransitionField(selectedEdge.id, { priority: v ?? 100 })}
+                            />
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                                عددِ کوچک‌تر زودتر بررسی می‌شود؛ در Stepِ CONDITION همین عدد ترتیبِ بررسیِ Ruleها را تعیین می‌کند.
+                            </Text>
+                        </div>
+
+                        <div>
+                            <Checkbox
+                                disabled={readOnly}
+                                checked={!!selectedTransition?.isDefault}
+                                onChange={(e) => {
+                                    const isDefault = e.target.checked;
+                                    updateTransitionField(selectedEdge.id, {
+                                        isDefault,
+                                        // Default و Rule هم‌زمان مجاز نیستند (طبقِ Validationِ Backend) — با
+                                        // فعال‌کردنِ Default، Ruleِ این گذار پاک می‌شود.
+                                        ...(isDefault ? { ruleJson: null } : {}),
+                                    });
+                                }}
+                            >
+                                گذارِ پیش‌فرض (Default / Else) است
+                            </Checkbox>
+                        </div>
+
+                        {fromStepTypeOfSelectedEdge === 'condition' && (
+                            <>
+                                <Divider style={{ margin: '4px 0' }} />
+                                <div>
+                                    <Text style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                                        <Space size={6}>
+                                            <span>Rule (شرط)</span>
+                                            {selectedTransition?.ruleJson && <Tag color="processing" style={{ margin: 0 }}>دارایِ Rule</Tag>}
+                                        </Space>
+                                    </Text>
+                                    {selectedTransition?.isDefault ? (
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            گذارهایِ پیش‌فرض نمی‌توانند Rule داشته باشند — ابتدا تیکِ «گذارِ پیش‌فرض» را بردارید.
+                                        </Text>
+                                    ) : (
+                                        <RuleBuilder
+                                            fields={conditionFields}
+                                            readOnly={readOnly}
+                                            value={selectedTransition?.ruleJson ?? null}
+                                            onChange={(rule: RuleGroup | null) => updateTransitionField(selectedEdge.id, { ruleJson: rule })}
+                                        />
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        <Divider style={{ margin: '4px 0' }} />
+                        <div>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }} type="secondary">
+                                شرطِ متنیِ قدیمی (Legacy — فقط ذخیره می‌شود، در اجرا مصرف نمی‌شود)
+                            </Text>
                             <Input.TextArea
                                 rows={2}
                                 value={selectedTransition?.conditionExpression ?? ''}
                                 disabled={readOnly}
-                                placeholder="مثلاً amount > 10000000 — فعلاً فقط ذخیره می‌شود"
+                                placeholder="این فیلد منسوخ است؛ از Rule بالا استفاده کنید."
                                 onChange={(e) => updateTransitionField(selectedEdge.id, { conditionExpression: e.target.value || null })}
                             />
                         </div>
+
                         {!readOnly && (
                             <Button danger icon={<DeleteOutlined />} block onClick={() => deleteEdge(selectedEdge.id)}>حذفِ اتصال</Button>
                         )}

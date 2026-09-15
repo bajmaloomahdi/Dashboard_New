@@ -100,9 +100,40 @@ export interface TransitionDraft {
     priority: number;
     isDefault: boolean;
     label: string | null;
-    /** متنِ شرط (Nullable — فعلاً فقط Persist می‌شود، Runtime آن را Evaluate نمی‌کند) */
+    /** متنِ شرطِ Legacy (Nullable — فقط Persist می‌شود؛ Runtime آن را هرگز Evaluate نمی‌کند، Rule Builderِ جدید هم از آن استفاده نمی‌کند) */
     conditionExpression: string | null;
+    /** Ruleِ ساختاریافتهٔ Condition Engine — فقط برایِ گذارهایِ خروجیِ Stepِ CONDITION معنا دارد */
+    ruleJson: RuleGroup | null;
 }
+
+/* ============================ Condition Engine — Rule JSON ============================ */
+
+export type RuleLogic = 'AND' | 'OR';
+export type RuleOperator =
+    | 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE'
+    | 'CONTAINS' | 'IN' | 'NOT_IN'
+    | 'IS_EMPTY' | 'IS_NOT_EMPTY' | 'IS_TRUE' | 'IS_FALSE';
+
+export interface RuleValue {
+    kind: 'CONSTANT';
+    data: string | number | boolean | (string | number)[];
+}
+
+export interface RuleCondition {
+    type: 'CONDITION';
+    field: string;
+    operator: RuleOperator;
+    value?: RuleValue;
+}
+
+export interface RuleGroup {
+    version?: 1;
+    type: 'GROUP';
+    logic: RuleLogic;
+    children: RuleNode[];
+}
+
+export type RuleNode = RuleGroup | RuleCondition;
 
 export interface GraphDraft {
     steps: StepDraft[];
@@ -116,6 +147,20 @@ function toBool(v: unknown): boolean {
     if (typeof v === 'number') return v === 1;
     if (typeof v === 'string') return v === '1' || v.toLowerCase() === 'true';
     return false;
+}
+
+/** RuleJsonِ خام (رشته یا null از سمتِ Backend) → RuleGroup — Decodeِ محافظت‌شده. */
+function parseRuleJson(raw: unknown): RuleGroup | null {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw as RuleGroup;
+    if (typeof raw !== 'string') return null;
+    try {
+        const parsed = JSON.parse(raw);
+
+        return parsed && typeof parsed === 'object' ? (parsed as RuleGroup) : null;
+    } catch {
+        return null;
+    }
 }
 
 /** GET /workflow/versions/{id}/graph → GraphDraft (تنها نقطهٔ تبدیلِ ID→Code) */
@@ -174,6 +219,7 @@ export function graphFromServer(raw: { steps: any[]; actions: any[]; assignments
         isDefault: toBool(t.IsDefault),
         label: t.Label ?? null,
         conditionExpression: t.ConditionExpression ?? null,
+        ruleJson: parseRuleJson(t.RuleJson),
     }));
 
     return { steps, actions, assignments, transitions };
@@ -326,12 +372,35 @@ export function lintGraph(g: GraphDraft): LintResult {
         if (s.assignPolicy === 'N_OF_M' && !(s.requiredApprovals && s.requiredApprovals >= 1)) {
             advisory.push({ message: `مرحلهٔ «${label}» با سیاستِ N_OF_M نیازمندِ «تعدادِ تأییدِ لازم» است.` });
         }
+
+        // Condition Engine — هم‌ارزِ چکِ Default در WorkflowDefinitionService::validate()
+        if (s.stepType === 'CONDITION') {
+            const outgoing = g.transitions.filter((t) => t.fromStepCode === s.code);
+            const defaults = outgoing.filter((t) => t.isDefault);
+            if (defaults.length === 0) {
+                advisory.push({ message: `مرحلهٔ «${label}» (CONDITION) هیچ گذارِ پیش‌فرض (Else) ندارد.` });
+            } else if (defaults.length > 1) {
+                advisory.push({ message: `مرحلهٔ «${label}» (CONDITION) بیش از یک گذارِ پیش‌فرض دارد.` });
+            }
+        }
     });
 
     // Action↔Transition (تصمیمِ ۱۵) — Advisory
     g.actions.forEach((a) => {
         const hasTrigger = g.transitions.some((t) => t.fromStepCode === a.stepCode && t.triggerActionCode === a.code);
         if (!hasTrigger) advisory.push({ message: `Actionِ «${a.label || a.code}» در Stepِ «${a.stepCode}» هیچ گذارِ Triggerشده‌ای ندارد.` });
+    });
+
+    // Condition Engine — هم‌ارزِ اعتبارسنجیِ RuleJson در WorkflowDefinitionService::validate()
+    const stepTypeByCode = new Map(g.steps.map((s) => [s.code, s.stepType]));
+    g.transitions.forEach((t) => {
+        if (!t.ruleJson) return;
+        if (stepTypeByCode.get(t.fromStepCode) !== 'CONDITION') {
+            advisory.push({ message: `گذارِ «${t.code}» دارایِ Rule است ولی مبدأِ آن از نوعِ CONDITION نیست.` });
+        }
+        if (t.isDefault) {
+            advisory.push({ message: `گذارِ «${t.code}» پیش‌فرض است و نباید هم‌زمان دارایِ شرط (Rule) باشد.` });
+        }
     });
 
     return { blocking, advisory };

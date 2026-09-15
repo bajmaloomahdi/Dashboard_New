@@ -53,6 +53,7 @@ class ProcessVersionController extends Controller
             'positions'   => DB::select('EXEC sp_GetPositions @SearchText = NULL, @UnitID = NULL, @IsActive = 1'),
             'units'       => DB::select('EXEC sp_GetOrganizationalUnits @SearchText = NULL, @IsActive = 1'),
             'categories'  => $this->defs->listCategories(),
+            'conditionFields' => $this->defs->listConditionFields((int) $data['meta']->DefinitionID, includeInactive: true),
         ]);
     }
 

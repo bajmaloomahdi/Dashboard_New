@@ -26,6 +26,7 @@ use App\Http\Controllers\Process\ProcessDefinitionController;
 use App\Http\Controllers\Process\ProcessInstanceController;
 use App\Http\Controllers\Process\ProcessVersionController;
 use App\Http\Controllers\Workflow\WorkflowCategoryController;
+use App\Http\Controllers\Workflow\WorkflowConditionFieldController;
 use App\Http\Controllers\Workflow\WorkflowDefinitionController;
 use App\Http\Controllers\Workflow\WorkflowRuntimeController;
 use App\Http\Controllers\Workflow\WorkflowTaskController;
@@ -240,6 +241,14 @@ Route::middleware('auth')->group(function () {
         Route::post('categories', [WorkflowCategoryController::class, 'store'])->name('categories.store');
         Route::post('categories/{categoryId}/toggle', [WorkflowCategoryController::class, 'toggleActive'])
             ->whereNumber('categoryId')->name('categories.toggle');
+
+        // --- فیلدهایِ شرط (Condition Engine — Definition-level) ---
+        Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'index'])
+            ->whereNumber('definitionId')->name('condition-fields.index');
+        Route::post('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'store'])
+            ->whereNumber('definitionId')->name('condition-fields.store');
+        Route::post('condition-fields/{fieldId}/toggle', [WorkflowConditionFieldController::class, 'toggleActive'])
+            ->whereNumber('fieldId')->name('condition-fields.toggle');
 
         // --- نسخه‌ها ---
         Route::prefix('versions/{versionId}')->whereNumber('versionId')->name('versions.')->group(function () {

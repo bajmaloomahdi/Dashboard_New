@@ -10,12 +10,15 @@ import {
     NodeIndexOutlined,
     WarningOutlined,
     EditOutlined,
+    FilterOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DesignerCanvas from './Designer/DesignerCanvas';
+import ConditionFieldManagerModal from './Designer/ConditionFieldManagerModal';
+import type { ConditionField } from './Designer/ruleTypes';
 import DefinitionFormModal from '../Definitions/DefinitionFormModal';
 import type { WorkflowCategory } from '../Definitions/CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
@@ -71,6 +74,7 @@ interface PageProps {
     permissions: string[];
     users: LookupOption[]; roles: LookupOption[]; positions: LookupOption[]; units: LookupOption[];
     categories: WorkflowCategory[];
+    conditionFields: ConditionField[];
 }
 
 const statusTag: Record<string, { color: string; label: string }> = {
@@ -110,6 +114,9 @@ export default function ProcessVersionShow() {
     const [editingDefinitionData, setEditingDefinitionData] = useState<FullDefinition | null>(null);
     const [loadingDefinition, setLoadingDefinition] = useState(false);
 
+    const [conditionFields, setConditionFields] = useState<ConditionField[]>(props.conditionFields || []);
+    const [conditionFieldModalOpen, setConditionFieldModalOpen] = useState(false);
+
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false, type: 'success', message: '',
     });
@@ -118,6 +125,7 @@ export default function ProcessVersionShow() {
     const permissions = props.permissions || [];
     const hasDesign = permissions.includes('WORKFLOW_DESIGN');
     const hasPublish = permissions.includes('WORKFLOW_PUBLISH');
+    const hasManageConditionFields = permissions.includes('WORKFLOW_MANAGE_CONDITION_FIELDS');
     const isDraft = meta.Status === 'DRAFT';
     const isEditable = isDraft && hasDesign;
     const canValidate = isEditable;
@@ -237,6 +245,14 @@ export default function ProcessVersionShow() {
         await reloadGraph(); // meta (Name/EntityType/CategoryName) را هم تازه می‌کند
     };
 
+    /** بازخوانیِ فیلدهایِ شرط از همان GET /workflow/definitions/{id}/condition-fields موجود */
+    const refreshConditionFields = async () => {
+        const res = await wfApi(`/workflow/definitions/${meta.DefinitionID}/condition-fields?includeInactive=1`);
+        if (res.ok && res.success) {
+            setConditionFields(res.items || []);
+        }
+    };
+
     return (
         <MainLayout>
             <PageHeader
@@ -256,6 +272,11 @@ export default function ProcessVersionShow() {
                         {isEditable && (
                             <Button icon={<EditOutlined />} loading={loadingDefinition} onClick={openDefinitionEditor}>
                                 ویرایشِ اطلاعاتِ فرایند
+                            </Button>
+                        )}
+                        {hasManageConditionFields && (
+                            <Button icon={<FilterOutlined />} onClick={() => setConditionFieldModalOpen(true)}>
+                                مدیریتِ فیلدهایِ شرط
                             </Button>
                         )}
                         {isEditable && (
@@ -369,6 +390,7 @@ export default function ProcessVersionShow() {
                     roles={props.roles}
                     positions={props.positions}
                     units={props.units}
+                    conditionFields={conditionFields}
                 />
             </Card>
 
@@ -394,6 +416,14 @@ export default function ProcessVersionShow() {
                 editingDefinition={editingDefinitionData}
                 categories={props.categories || []}
                 onSuccess={handleDefinitionModalSuccess}
+            />
+
+            <ConditionFieldManagerModal
+                open={conditionFieldModalOpen}
+                onClose={() => setConditionFieldModalOpen(false)}
+                definitionId={meta.DefinitionID}
+                fields={conditionFields}
+                onChanged={refreshConditionFields}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((prev) => ({ ...prev, open: false }))} />

@@ -33,6 +33,8 @@ class WorkflowEngine
         private TaskService $tasks,
         private WorkflowHistoryRecorder $history,
         private EntityResolverRegistry $entities,
+        private ConditionContextBuilder $contextBuilder,
+        private ConditionEvaluator $conditionEvaluator,
     ) {
     }
 
@@ -67,7 +69,12 @@ class WorkflowEngine
             'entityTitle'       => $resolver->title($req->entityType, $req->entityId),
         ];
 
-        return DB::transaction(function () use ($ctx, $req) {
+        // Validate/Cast قبل از Transaction — Contextِ نامعتبر نباید هرگز Instanceِ
+        // ناقص بسازد (طبقِ Final Design، بخشِ D).
+        $context = $this->contextBuilder->build($ctx->definitionId, $req->context);
+        $contextJson = $context === [] ? null : json_encode($context, JSON_UNESCAPED_UNICODE);
+
+        return DB::transaction(function () use ($ctx, $req, $contextJson) {
             $instanceNumber = $this->store->nextNumber('WF_INSTANCE', 'WFI');
 
             $ins = $this->store->startInstance([
@@ -77,6 +84,7 @@ class WorkflowEngine
                 'entityId'        => $ctx->entityId,
                 'startedByUserId' => $req->startedByUserId,
                 'instanceNumber'  => $instanceNumber,
+                'contextJson'     => $contextJson,
             ]);
             $ctx->instanceId = (int) $ins->InstanceID;
 
@@ -446,6 +454,11 @@ class WorkflowEngine
         $guard = 0;
         $currentTransition = $transition;
 
+        // Contextِ Snapshotشدهٔ همین Instance — یک‌بار خوانده می‌شود (در طولِ advance
+        // تغییر نمی‌کند)؛ فقط برایِ Stepهایِ CONDITION لازم است.
+        $rawContextJson = $this->store->getInstanceContext($ctx->instanceId);
+        $context = $rawContextJson !== null ? (json_decode($rawContextJson, true) ?: []) : [];
+
         while ($guard++ < self::LOCAL_STEP_GUARD) {
             $count = $this->store->bumpTransitionCount($ctx->instanceId);
             $max = (int) config('workflow.max_transitions_per_instance', 500);
@@ -477,6 +490,27 @@ class WorkflowEngine
                 throw new WorkflowStateException('گذار به مرحله‌ای نامعتبر اشاره می‌کند.');
             }
 
+            $transitionDetail = [
+                'transitionId'   => (int) $currentTransition->TransitionID,
+                'transitionCode' => $currentTransition->Code,
+                'fromStepId'     => (int) $currentTransition->FromStepID,
+                'toStepId'       => (int) $currentTransition->ToStepID,
+            ];
+
+            // اگر مبدأِ این گذار یک Stepِ CONDITION بود، نتیجهٔ ارزیابی را هم برایِ
+            // Auditِ بعدی ثبت می‌کنیم (طبقِ Final Design، بخشِ B) — بدونِ تکرارِ
+            // Contextِ کامل، فقط ruleMatched/ruleSummary.
+            $fromStep = $this->stepById($graph['steps'], (int) $currentTransition->FromStepID);
+            if ($fromStep && $fromStep->StepType === 'CONDITION') {
+                $transitionDetail['ruleMatched'] = ! empty($currentTransition->RuleJson);
+                if (! empty($currentTransition->RuleJson)) {
+                    $decodedRule = json_decode((string) $currentTransition->RuleJson, true);
+                    $transitionDetail['ruleSummary'] = is_array($decodedRule)
+                        ? mb_substr($this->conditionEvaluator->summarize($decodedRule), 0, 300)
+                        : null;
+                }
+            }
+
             $this->history->record([
                 'entityType' => $ctx->entityType, 'entityId' => $ctx->entityId,
                 'eventCode'  => WorkflowHistoryRecorder::TRANSITION_TAKEN,
@@ -484,12 +518,7 @@ class WorkflowEngine
                 'actorUserId' => $actorUserId,
                 'actorType'  => $actorUserId ? 'USER' : 'SYSTEM',
                 'summary'    => "گذارِ «{$currentTransition->Code}» طی شد",
-                'detail'     => [
-                    'transitionId'   => (int) $currentTransition->TransitionID,
-                    'transitionCode' => $currentTransition->Code,
-                    'fromStepId'     => (int) $currentTransition->FromStepID,
-                    'toStepId'       => (int) $currentTransition->ToStepID,
-                ],
+                'detail'     => $transitionDetail,
             ]);
 
             $iteration = $this->store->countStepIterations($ctx->instanceId, (int) $target->StepID) + 1;
@@ -554,6 +583,37 @@ class WorkflowEngine
                     $next = $this->transitions->resolve($graph['transitions'], $graph['actions'], (int) $target->StepID, null);
                     $this->store->completeStepInstance($stepInstanceId, 'COMPLETED', null, (int) $next->TransitionID, $actorUserId);
                     $currentTransition = $next;
+                    break;
+
+                case 'CONDITION':
+                    // Gateway: اولین Ruleِ TRUE (طبقِ Priority) برنده است؛ در نبودِ آن، IsDefault.
+                    $winner = $this->transitions->resolveConditional($graph['transitions'], (int) $target->StepID, $context);
+
+                    if ($winner === null) {
+                        // Controlled Failure — نه Exception؛ وضعیت/تاریخچه با همین تراکنش Commit می‌شود
+                        // (هم‌الگو با نگهبانِ حلقهٔ بالا).
+                        $this->store->completeStepInstance($stepInstanceId, 'FAILED', null, null, $actorUserId);
+                        $this->store->setInstanceStatus($ctx->instanceId, 'FAILED', $actorUserId);
+                        $this->history->record([
+                            'entityType' => $ctx->entityType, 'entityId' => $ctx->entityId,
+                            'eventCode'  => WorkflowHistoryRecorder::INSTANCE_FAILED,
+                            'instanceId' => $ctx->instanceId, 'stepInstanceId' => $stepInstanceId,
+                            'actorUserId' => $actorUserId, 'actorType' => 'SYSTEM',
+                            'summary'    => "هیچ‌یک از قوانینِ مرحلهٔ «{$target->Name}» برقرار نبود و مسیرِ پیش‌فرضی تعریف نشده است.",
+                            'detail'     => ['stepId' => (int) $target->StepID, 'reason' => 'NO_RULE_MATCHED_NO_DEFAULT'],
+                        ]);
+
+                        return new EngineResult(
+                            $ctx->instanceId,
+                            'FAILED',
+                            $createdMessageIds,
+                            $target->Code,
+                            "هیچ‌یک از قوانینِ مرحلهٔ «{$target->Name}» برقرار نبود و مسیرِ پیش‌فرضی تعریف نشده است."
+                        );
+                    }
+
+                    $this->store->completeStepInstance($stepInstanceId, 'COMPLETED', null, (int) $winner->TransitionID, $actorUserId);
+                    $currentTransition = $winner;
                     break;
 
                 default:

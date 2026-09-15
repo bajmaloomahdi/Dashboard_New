@@ -9,6 +9,7 @@ use App\Services\Workflow\WorkflowEngine;
 use App\Services\Workflow\WorkflowQueryService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use Tests\TestCase;
 class MessageWorkflowIntegrationTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
     private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
@@ -37,6 +39,7 @@ class MessageWorkflowIntegrationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
         $this->engine = $this->app->make(WorkflowEngine::class);
         $this->query = $this->app->make(WorkflowQueryService::class);
@@ -88,7 +91,10 @@ class MessageWorkflowIntegrationTest extends TestCase
     private function startWorkflowTaskMessage(int $assignee, int $entityId): int
     {
         $code = 'MSGWF_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'ت', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        // entityType=TEST_ENTITY: این Instance صرفاً برایِ ساختِ یک تسکِ Workflowِ واقعی
+        // است (برایِ سنجشِ IsWfTask/workflowPermissions رویِ همان تسک)؛ entityId یک
+        // شناسهٔ دلخواه است و به هیچ ردیفِ واقعیِ Messages متصل نیست.
+        $def = $this->defs->save(['code' => $code, 'name' => 'ت', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -106,7 +112,7 @@ class MessageWorkflowIntegrationTest extends TestCase
         $this->defs->publish((int) $ver->VersionID, self::USER_FULL);
 
         $result = $this->engine->start(new StartWorkflowRequest(
-            entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
+            entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
         ));
 
         $tasks = $this->query->instance($result->instanceId)['tasks'];

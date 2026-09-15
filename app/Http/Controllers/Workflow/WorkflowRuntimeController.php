@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Workflow;
 
+use App\Services\Message\MessageAccessChecker;
 use App\Services\Workflow\Dto\StartWorkflowRequest;
+use App\Services\Workflow\Exceptions\WorkflowValidationException;
 use App\Services\Workflow\WorkflowEngine;
 use App\Services\Workflow\WorkflowQueryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * زمانِ اجرا: شروعِ فرایند + مشاهدهٔ Instance و تاریخچهٔ آن.
@@ -15,6 +18,7 @@ class WorkflowRuntimeController extends WorkflowApiController
     public function __construct(
         private WorkflowEngine $engine,
         private WorkflowQueryService $query,
+        private MessageAccessChecker $messageAccess,
     ) {
     }
 
@@ -42,6 +46,17 @@ class WorkflowRuntimeController extends WorkflowApiController
         }
 
         return $this->runWorkflow(function () use ($validated) {
+            // دسترسیِ کاربر به موجودیت — فقط برایِ EntityTypeهایی که معنایِ
+            // Access-Controlِ اختصاصی دارند. برایِ MESSAGE: فرستنده/گیرنده/رونوشت
+            // (همان Semanticsِ MessageAccessChecker که MessageController هم
+            // برایِ دانلودِ ضمیمه‌ها استفاده می‌کند). وجودِ خودِ Message هم همین‌جا
+            // پوشش داده می‌شود چون رکوردِ ناموجود هیچ ردیفِ Participant ندارد.
+            if ($validated['entityType'] === 'MESSAGE') {
+                if (! $this->messageAccess->isParticipant((int) $validated['entityId'], (int) Auth::id())) {
+                    throw new WorkflowValidationException('شما به این پیام دسترسی ندارید یا پیام یافت نشد.');
+                }
+            }
+
             $result = $this->engine->start(new StartWorkflowRequest(
                 entityType: $validated['entityType'],
                 entityId: (int) $validated['entityId'],

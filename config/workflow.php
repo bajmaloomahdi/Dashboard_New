@@ -45,7 +45,7 @@ return [
 
         'MESSAGE' => [
             'label'    => 'نامه / وظیفه',
-            'resolver' => \App\Services\Workflow\Entity\NullEntityResolver::class,
+            'resolver' => \App\Services\Workflow\Entity\MessageEntityResolver::class,
         ],
 
         'PROJECT' => [

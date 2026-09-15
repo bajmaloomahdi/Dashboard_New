@@ -9,6 +9,7 @@ use App\Services\Workflow\WorkflowQueryService;
 use App\Services\Workflow\Dto\StartWorkflowRequest;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
@@ -25,6 +26,7 @@ use Tests\TestCase;
 class WorkflowApiTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_FULL = 2;
     private const USER_FULL2 = 14;
@@ -41,6 +43,7 @@ class WorkflowApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
         $this->engine = $this->app->make(WorkflowEngine::class);
         $this->query = $this->app->make(WorkflowQueryService::class);
@@ -74,7 +77,7 @@ class WorkflowApiTest extends TestCase
     ): array {
         $code ??= 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['code' => $code, 'name' => 'API ' . $code, 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['code' => $code, 'name' => 'API ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_FULL);
         $versionId = (int) $ver->VersionID;
@@ -106,7 +109,7 @@ class WorkflowApiTest extends TestCase
     private function startInstance(string $code, int $entityId, int $startedBy = self::USER_FULL): int
     {
         return $this->engine->start(new StartWorkflowRequest(
-            entityType: 'MESSAGE', entityId: $entityId, startedByUserId: $startedBy, definitionCode: $code,
+            entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: $startedBy, definitionCode: $code,
         ))->instanceId;
     }
 
@@ -187,7 +190,7 @@ class WorkflowApiTest extends TestCase
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $defRes = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'فرایندِ API', 'entityType' => 'MESSAGE',
+            'code' => $code, 'name' => 'فرایندِ API', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
 
         $definitionId = $defRes['definitionId'];
@@ -213,7 +216,7 @@ class WorkflowApiTest extends TestCase
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'MESSAGE',
+            'code' => $code, 'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
 
         $definitionId = $res['definitionId'];
@@ -228,7 +231,7 @@ class WorkflowApiTest extends TestCase
     {
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'MESSAGE', 'isActive' => true,
+            'code' => $code, 'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'TEST_ENTITY', 'isActive' => true,
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
 
@@ -256,33 +259,33 @@ class WorkflowApiTest extends TestCase
         $codeB = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $codeA, 'name' => 'اول', 'entityType' => 'MESSAGE',
+            'code' => $codeA, 'name' => 'اول', 'entityType' => 'TEST_ENTITY',
         ])->assertOk();
         $defB = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $codeB, 'name' => 'دوم', 'entityType' => 'MESSAGE',
+            'code' => $codeB, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
         // تلاش برایِ تغییرِ کدِ B به همان کدِ A ⇒ رد (همان قاعدهٔ sp_Wf_SaveDefinition)
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'definitionId' => $defB['definitionId'], 'code' => $codeA, 'name' => 'دوم', 'entityType' => 'MESSAGE',
+            'definitionId' => $defB['definitionId'], 'code' => $codeA, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(422)->assertJson(['success' => false]);
     }
 
     public function test_update_definition_with_invalid_definition_id_is_422(): void
     {
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'definitionId' => 999999, 'code' => 'API_X', 'name' => 'X', 'entityType' => 'MESSAGE',
+            'definitionId' => 999999, 'code' => 'API_X', 'name' => 'X', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(422);
     }
 
     public function test_update_definition_without_permission_is_403(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'MESSAGE',
+            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
         $this->as(self::USER_NOPERM)->postJson('/workflow/definitions', [
-            'definitionId' => $created['definitionId'], 'code' => 'API_X2', 'name' => 'تغییرِ غیرمجاز', 'entityType' => 'MESSAGE',
+            'definitionId' => $created['definitionId'], 'code' => 'API_X2', 'name' => 'تغییرِ غیرمجاز', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(403);
     }
 
@@ -291,7 +294,7 @@ class WorkflowApiTest extends TestCase
     public function test_toggle_definition_active_flips_state(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ت', 'entityType' => 'MESSAGE',
+            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ت', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
 
@@ -327,7 +330,7 @@ class WorkflowApiTest extends TestCase
     public function test_toggle_definition_without_permission_is_403(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'MESSAGE',
+            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
         $this->as(self::USER_NOPERM)
@@ -367,7 +370,7 @@ class WorkflowApiTest extends TestCase
 
         // اما Startِ نمونهٔ *جدید* برایِ همین Definition دیگر مجاز نیست
         $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => 8002,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 8002,
         ])->assertStatus(422)->assertJson(['success' => false]);
     }
 
@@ -432,7 +435,7 @@ class WorkflowApiTest extends TestCase
         [, , $code] = $this->publishSimpleFlow();
 
         $res = $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => 7001,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 7001,
         ])->assertOk()->assertJson(['success' => true, 'instanceStatus' => 'RUNNING'])->json();
 
         $this->assertIsInt($res['instanceId']);
@@ -444,7 +447,7 @@ class WorkflowApiTest extends TestCase
         [, , $code] = $this->publishSimpleFlow();
 
         $this->as(self::USER_NOPERM)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => 7002,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 7002,
         ])->assertStatus(403);
     }
 
@@ -453,11 +456,11 @@ class WorkflowApiTest extends TestCase
         [, , $code] = $this->publishSimpleFlow();
 
         $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => 7003,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 7003,
         ])->assertOk();
 
         $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => 7003,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 7003,
         ])->assertStatus(409)->assertJson(['success' => false]);
     }
 
@@ -477,7 +480,7 @@ class WorkflowApiTest extends TestCase
         // بردِ رقیب از قبل در دیتابیس هست...
         DB::statement(
             "INSERT INTO dbo.WorkflowInstances (InstanceNumber, DefinitionID, VersionID, EntityType, EntityID, Status, StartedAt, Date_InsertFirst)
-             VALUES (?, ?, ?, 'MESSAGE', ?, N'RUNNING', SYSDATETIME(), SYSDATETIME())",
+             VALUES (?, ?, ?, 'TEST_ENTITY', ?, N'RUNNING', SYSDATETIME(), SYSDATETIME())",
             ['WFI-RACE-' . uniqid(), $definitionId, $versionId, $entityId]
         );
 
@@ -487,14 +490,14 @@ class WorkflowApiTest extends TestCase
         });
 
         $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'definitionCode' => $code, 'entityType' => 'MESSAGE', 'entityId' => $entityId,
+            'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => $entityId,
         ])->assertStatus(409)->assertJson(['success' => false]);
     }
 
     public function test_start_missing_definition_selector_is_422(): void
     {
         $this->as(self::USER_FULL)->postJson('/workflow/instances', [
-            'entityType' => 'MESSAGE', 'entityId' => 7004,
+            'entityType' => 'TEST_ENTITY', 'entityId' => 7004,
         ])->assertStatus(422);
     }
 
@@ -1042,7 +1045,7 @@ class WorkflowApiTest extends TestCase
     private function buildDraft(bool $withEnd = false): array
     {
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'D ' . $code, 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['code' => $code, 'name' => 'D ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $versionId = (int) $this->defs->createDraft($definitionId, self::USER_FULL)->VersionID;
 

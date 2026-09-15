@@ -11,6 +11,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
@@ -35,6 +36,7 @@ use Tests\TestCase;
 class WorkflowConcurrencyTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_A = 2;
 
@@ -45,6 +47,7 @@ class WorkflowConcurrencyTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
         $this->engine = $this->app->make(WorkflowEngine::class);
         $this->store = $this->app->make(WorkflowStore::class);
@@ -57,7 +60,7 @@ class WorkflowConcurrencyTest extends TestCase
     {
         $code ??= 'CONC_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['code' => $code, 'name' => 'همزمانی ' . $code, 'entityType' => 'MESSAGE'], self::USER_A);
+        $def = $this->defs->save(['code' => $code, 'name' => 'همزمانی ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_A);
         $versionId = (int) $ver->VersionID;
@@ -118,18 +121,18 @@ class WorkflowConcurrencyTest extends TestCase
         $entityId = 9001;
 
         // بردِ رقیب شبیه‌سازی می‌شود: یک RUNNING مستقیماً درج شده، بدونِ عبور از Engine
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING');
 
         try {
             $this->engine->start(new StartWorkflowRequest(
-                entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_A, definitionCode: $code,
+                entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: self::USER_A, definitionCode: $code,
             ));
             $this->fail('Startِ دوم باید رد شود چون یک RUNNING از قبل وجود دارد.');
         } catch (WorkflowStateException $e) {
             $this->assertStringContainsString('از قبل یک فرایندِ فعال وجود دارد', $e->getMessage());
         }
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', $entityId));
     }
 
     /* ==================================================================== */
@@ -141,14 +144,14 @@ class WorkflowConcurrencyTest extends TestCase
         [$definitionId, $versionId] = $this->publishMinimalFlow();
         $entityId = 9002;
 
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING', 'WFI-900001');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING', 'WFI-900001');
 
         // INSERTِ دوم از همان مسیرِ Store::startInstance که Engine در انتها صدا می‌زند
         // (شبیه‌سازیِ Requestِ بازنده‌ای که pre-check را رد کرده و به INSERT رسیده)
         try {
             $this->store->startInstance([
                 'definitionId' => $definitionId, 'versionId' => $versionId,
-                'entityType' => 'MESSAGE', 'entityId' => $entityId,
+                'entityType' => 'TEST_ENTITY', 'entityId' => $entityId,
                 'startedByUserId' => self::USER_A, 'instanceNumber' => 'WFI-900002',
             ]);
             $this->fail('INSERTِ دومِ RUNNING باید توسطِ ایندکسِ یکتا رد شود.');
@@ -156,21 +159,21 @@ class WorkflowConcurrencyTest extends TestCase
             $this->assertStringContainsString('از قبل یک فرایندِ فعال وجود دارد', $e->getMessage());
         }
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', $entityId));
     }
 
     public function test_the_underlying_error_is_the_running_entity_unique_index(): void
     {
         [$definitionId, $versionId] = $this->publishMinimalFlow();
         $entityId = 9003;
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING', 'WFI-900101');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING', 'WFI-900101');
 
         // مستقیماً روی SP، بدونِ نگاشتِ WorkflowStore — برای اثباتِ اینکه خطا واقعاً از
         // خودِ ایندکسِ UX_WorkflowInstances_Running_Entity می‌آید (نه یک فرضِ دیگر).
         try {
             DB::selectOne(
                 'EXEC dbo.sp_Wf_StartInstance @DefinitionID = ?, @VersionID = ?, @EntityType = ?, @EntityID = ?, @StartedByUserID = ?, @InstanceNumber = ?',
-                [$definitionId, $versionId, 'MESSAGE', $entityId, null, 'WFI-900102']
+                [$definitionId, $versionId, 'TEST_ENTITY', $entityId, null, 'WFI-900102']
             );
             $this->fail('SP باید نقضِ ایندکسِ یکتا بدهد.');
         } catch (UniqueConstraintViolationException $e) {
@@ -189,10 +192,10 @@ class WorkflowConcurrencyTest extends TestCase
         [$definitionId, $versionId] = $this->publishMinimalFlow();
         $entityId = 9010;
 
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'COMPLETED');
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING'); // نباید استثنا بدهد
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'COMPLETED');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING'); // نباید استثنا بدهد
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', $entityId));
     }
 
     public function test_running_and_suspended_may_coexist_for_the_same_entity(): void
@@ -202,31 +205,31 @@ class WorkflowConcurrencyTest extends TestCase
         [$definitionId, $versionId] = $this->publishMinimalFlow();
         $entityId = 9011;
 
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'SUSPENDED');
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING'); // نباید استثنا بدهد
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'SUSPENDED');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING'); // نباید استثنا بدهد
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', $entityId));
     }
 
     public function test_two_running_for_the_same_entity_is_impossible(): void
     {
         [$definitionId, $versionId] = $this->publishMinimalFlow();
         $entityId = 9012;
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING');
 
         $this->expectException(UniqueConstraintViolationException::class);
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING');
     }
 
     public function test_two_running_for_different_entities_is_allowed(): void
     {
         [$definitionId, $versionId] = $this->publishMinimalFlow();
 
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', 9013, 'RUNNING');
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', 9014, 'RUNNING'); // نباید استثنا بدهد
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', 9013, 'RUNNING');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', 9014, 'RUNNING'); // نباید استثنا بدهد
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', 9013));
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', 9014));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', 9013));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', 9014));
     }
 
     public function test_two_running_for_different_definitions_is_allowed(): void
@@ -235,11 +238,11 @@ class WorkflowConcurrencyTest extends TestCase
         [$definitionId2, $versionId2] = $this->publishMinimalFlow();
         $entityId = 9015;
 
-        $this->insertRawInstance($definitionId1, $versionId1, 'MESSAGE', $entityId, 'RUNNING');
-        $this->insertRawInstance($definitionId2, $versionId2, 'MESSAGE', $entityId, 'RUNNING'); // نباید استثنا بدهد
+        $this->insertRawInstance($definitionId1, $versionId1, 'TEST_ENTITY', $entityId, 'RUNNING');
+        $this->insertRawInstance($definitionId2, $versionId2, 'TEST_ENTITY', $entityId, 'RUNNING'); // نباید استثنا بدهد
 
-        $this->assertSame(1, $this->runningCount($definitionId1, 'MESSAGE', $entityId));
-        $this->assertSame(1, $this->runningCount($definitionId2, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId1, 'TEST_ENTITY', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId2, 'TEST_ENTITY', $entityId));
     }
 
     /* ==================================================================== */
@@ -250,14 +253,14 @@ class WorkflowConcurrencyTest extends TestCase
     public function test_instance_number_collision_is_not_mapped_to_duplicate_active_instance(): void
     {
         [$definitionId, $versionId] = $this->publishMinimalFlow();
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', 9020, 'RUNNING', 'WFI-DUPNUM');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', 9020, 'RUNNING', 'WFI-DUPNUM');
 
         try {
             // Entityِ متفاوت ⇒ ایندکسِ RUNNING دخیل نیست؛ اما همان InstanceNumber ⇒
             // نقضِ UQ_WorkflowInstances_Number.
             $this->store->startInstance([
                 'definitionId' => $definitionId, 'versionId' => $versionId,
-                'entityType' => 'MESSAGE', 'entityId' => 9021,
+                'entityType' => 'TEST_ENTITY', 'entityId' => 9021,
                 'startedByUserId' => self::USER_A, 'instanceNumber' => 'WFI-DUPNUM',
             ]);
             $this->fail('باید نقضِ UQ_WorkflowInstances_Number رخ دهد.');
@@ -282,7 +285,7 @@ class WorkflowConcurrencyTest extends TestCase
         $entityId = 9030;
 
         // بردِ رقیب از قبل در دیتابیس هست...
-        $this->insertRawInstance($definitionId, $versionId, 'MESSAGE', $entityId, 'RUNNING');
+        $this->insertRawInstance($definitionId, $versionId, 'TEST_ENTITY', $entityId, 'RUNNING');
 
         // ...ولی pre-checkِ Engine کور می‌شود (دقیقاً شبیه‌سازیِ پنجرهٔ TOCTOU: لحظه‌ای که
         // Requestِ بازنده هنوز commitِ Requestِ برنده را نمی‌بیند). partialMock فقط همین
@@ -295,13 +298,13 @@ class WorkflowConcurrencyTest extends TestCase
 
         try {
             $engine->start(new StartWorkflowRequest(
-                entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_A, definitionCode: $code,
+                entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: self::USER_A, definitionCode: $code,
             ));
             $this->fail('با pre-checkِ کور، فقط ایندکسِ یکتا باید جلوی دومین RUNNING را بگیرد.');
         } catch (WorkflowStateException $e) {
             $this->assertStringContainsString('از قبل یک فرایندِ فعال وجود دارد', $e->getMessage());
         }
 
-        $this->assertSame(1, $this->runningCount($definitionId, 'MESSAGE', $entityId));
+        $this->assertSame(1, $this->runningCount($definitionId, 'TEST_ENTITY', $entityId));
     }
 }

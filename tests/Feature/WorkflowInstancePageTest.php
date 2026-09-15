@@ -8,6 +8,7 @@ use App\Services\Workflow\WorkflowDefinitionService;
 use App\Services\Workflow\WorkflowEngine;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use Tests\TestCase;
 class WorkflowInstancePageTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
     private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
@@ -28,6 +30,7 @@ class WorkflowInstancePageTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
         $this->engine = $this->app->make(WorkflowEngine::class);
     }
@@ -43,7 +46,7 @@ class WorkflowInstancePageTest extends TestCase
     private function startSimpleInstance(int $entityId): int
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تست', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -61,7 +64,7 @@ class WorkflowInstancePageTest extends TestCase
         $this->defs->publish((int) $ver->VersionID, self::USER_FULL);
 
         return $this->engine->start(new StartWorkflowRequest(
-            entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
+            entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
         ))->instanceId;
     }
 
@@ -97,7 +100,7 @@ class WorkflowInstancePageTest extends TestCase
     public function test_instance_page_exposes_required_approvals_value_for_n_of_m_step(): void
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ N_OF_M', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ N_OF_M', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -118,7 +121,7 @@ class WorkflowInstancePageTest extends TestCase
         $this->defs->publish((int) $ver->VersionID, self::USER_FULL);
 
         $instanceId = $this->engine->start(new StartWorkflowRequest(
-            entityType: 'MESSAGE', entityId: 9299, startedByUserId: self::USER_FULL, definitionCode: $code,
+            entityType: 'TEST_ENTITY', entityId: 9299, startedByUserId: self::USER_FULL, definitionCode: $code,
         ))->instanceId;
 
         $props = $this->as(self::USER_FULL)->get("/process/instances/{$instanceId}")->viewData('page')['props'];

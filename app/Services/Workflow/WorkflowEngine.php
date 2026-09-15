@@ -647,6 +647,9 @@ class WorkflowEngine
         if (! $match) {
             throw new WorkflowValidationException('فرایندِ فعالی با این مشخصات یافت نشد.');
         }
+        if ((string) $match->EntityType !== $req->entityType) {
+            throw new WorkflowValidationException('نوعِ موجودیتِ درخواست با نوعِ موجودیتِ این فرایند یکسان نیست.');
+        }
         if ((int) ($match->ActiveVersionNo ?? 0) === 0) {
             throw new WorkflowStateException('این فرایند نسخهٔ فعالی ندارد؛ ابتدا یک نسخه را منتشر کنید.');
         }

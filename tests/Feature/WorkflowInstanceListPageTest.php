@@ -7,6 +7,7 @@ use App\Services\Workflow\Dto\StartWorkflowRequest;
 use App\Services\Workflow\WorkflowDefinitionService;
 use App\Services\Workflow\WorkflowEngine;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use Tests\TestCase;
 class WorkflowInstanceListPageTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
     private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
@@ -26,6 +28,7 @@ class WorkflowInstanceListPageTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
         $this->engine = $this->app->make(WorkflowEngine::class);
     }
@@ -41,7 +44,7 @@ class WorkflowInstanceListPageTest extends TestCase
     private function publishSimpleFlow(): array
     {
         $code = 'LIST_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ لیست', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ لیست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -64,7 +67,7 @@ class WorkflowInstanceListPageTest extends TestCase
     private function startInstance(string $code, int $entityId): int
     {
         return $this->engine->start(new StartWorkflowRequest(
-            entityType: 'MESSAGE', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
+            entityType: 'TEST_ENTITY', entityId: $entityId, startedByUserId: self::USER_FULL, definitionCode: $code,
         ))->instanceId;
     }
 
@@ -126,7 +129,7 @@ class WorkflowInstanceListPageTest extends TestCase
         $this->startInstance($otherCode, 9304);
 
         $props = $this->as(self::USER_FULL)
-            ->get("/process/instances?definitionId={$definitionId}&entityType=MESSAGE&entityId=9303")
+            ->get("/process/instances?definitionId={$definitionId}&entityType=TEST_ENTITY&entityId=9303")
             ->viewData('page')['props'];
 
         $ids = collect($props['instances'])->pluck('InstanceID')->map(fn ($v) => (int) $v)->all();

@@ -30,6 +30,7 @@ import {
     CommentOutlined,
     UserAddOutlined,
     PictureOutlined,
+    PlayCircleOutlined,
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -38,6 +39,7 @@ import ChipTabs from '../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import DueDateBadge from '../../Components/DueDateBadge';
 import WorkflowTaskCard from '../../Components/Workflow/WorkflowTaskCard';
+import StartWorkflowModal from '../../Components/Workflow/StartWorkflowModal';
 import { THEME, STYLES } from '../../theme';
 
 const { Title, Text } = Typography;
@@ -135,6 +137,7 @@ export default function MessageShow() {
         isTask,
         isWfTask,
         workflowPermissions,
+        canStartWorkflow,
         canComment,
         currentUserId,
         flash,
@@ -166,6 +169,15 @@ export default function MessageShow() {
     const showNotification = (type: NotificationType, m: string) => {
         setNotificationKey((k) => k + 1);
         setNotification({ open: true, type, message: m });
+    };
+
+    // شروعِ فرایند رویِ این پیام (فازِ ۳ — P0)
+    const [startWfOpen, setStartWfOpen] = useState(false);
+
+    const handleStartWfSuccess = (m: string) => {
+        setStartWfOpen(false);
+        showNotification('success', m);
+        router.reload();
     };
 
     useEffect(() => {
@@ -390,6 +402,18 @@ export default function MessageShow() {
                         }]
                         : []),
                 ]}
+                actions={
+                    canStartWorkflow ? (
+                        <Button
+                            type="primary"
+                            ghost
+                            icon={<PlayCircleOutlined />}
+                            onClick={() => setStartWfOpen(true)}
+                        >
+                            شروع فرایند
+                        </Button>
+                    ) : undefined
+                }
             />
 
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
@@ -1037,6 +1061,14 @@ export default function MessageShow() {
                 type={notification.type}
                 message={notification.message}
                 onClose={closeNotification}
+            />
+
+            <StartWorkflowModal
+                open={startWfOpen}
+                onClose={() => setStartWfOpen(false)}
+                entityType="MESSAGE"
+                entityId={msg.MessageID}
+                onSuccess={handleStartWfSuccess}
             />
         </MainLayout>
     );

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Message\MessageAccessChecker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,10 @@ use Inertia\Inertia;
 
 class MessageController extends Controller
 {
+    public function __construct(private MessageAccessChecker $access)
+    {
+    }
+
     /**
      * لیست اولویت‌های فعال پیام (برای فیلترها و فرم ارسال)
      */
@@ -237,6 +242,10 @@ class MessageController extends Controller
         $perm = DB::select('EXEC sp_CheckMessageCommentPermission @MessageID = ?, @UserID = ?', [$id, $currentUserId]);
         $canComment = !empty($perm) && (int) ($perm[0]->CanComment ?? 0) === 1;
 
+        // فقط برایِ محاسبهٔ canStartWorkflow — روی workflowPermissions (که مقدارش
+        // برایِ پیامِ غیرِ Workflow عمداً [] می‌ماند) هیچ اثری ندارد.
+        $wfPermissions = $this->workflowPermissions($currentUserId);
+
         return Inertia::render('Messages/Show', [
             'message' => $message,
             'details' => $details,
@@ -253,7 +262,10 @@ class MessageController extends Controller
             // فقط کدهایِ WORKFLOW_* — همان الگویِ CalendarController::calendarPermissions().
             // Frontend فقط برایِ UX (پنهان‌کردنِ دکمه‌هایِ Forward/Delegate) از این استفاده می‌کند؛
             // مرجعِ نهاییِ ۴۰۳ همچنان WorkflowApiController::authorizeWorkflow() سمتِ Backend است.
-            'workflowPermissions' => $isWfTask ? $this->workflowPermissions($currentUserId) : [],
+            'workflowPermissions' => $isWfTask ? $wfPermissions : [],
+            // آیا دکمهٔ «شروع فرایند» نمایش داده شود — فقط UX؛ اجازهٔ نهایی همچنان
+            // در WorkflowRuntimeController::start() (WORKFLOW_START + سایرِ Validationها) است.
+            'canStartWorkflow' => !$isWfTask && in_array('WORKFLOW_START', $wfPermissions, true),
             'canComment' => $canComment,
         ]);
     }
@@ -322,6 +334,7 @@ class MessageController extends Controller
 
     /**
      * آیا کاربر جاری در این پیام نقشی دارد؟ (فرستنده، گیرنده یا رونوشت)
+     * منطقِ واقعی در MessageAccessChecker است — مشترک با مسیرِ Start Workflow.
      */
     private function isMessageParticipant(int $messageId): bool
     {
@@ -330,16 +343,7 @@ class MessageController extends Controller
             return false;
         }
 
-        $exists = DB::select(
-            'SELECT 1 FROM dbo.Messages WHERE MessageID = ? AND SenderUserID = ?
-             UNION ALL
-             SELECT 1 FROM dbo.MessageDetails WHERE MessageID = ? AND ToUserID = ?
-             UNION ALL
-             SELECT 1 FROM dbo.MessageCopies WHERE MessageID = ? AND UserID = ?',
-            [$messageId, $userId, $messageId, $userId, $messageId, $userId]
-        );
-
-        return !empty($exists);
+        return $this->access->isParticipant($messageId, (int) $userId);
     }
 
     public function changeStatus(Request $request, $id)

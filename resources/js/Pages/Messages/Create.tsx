@@ -24,6 +24,7 @@ import {
     UploadOutlined,
     PaperClipOutlined,
     ThunderboltOutlined,
+    FileTextOutlined,
 } from '@ant-design/icons';
 import { router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -32,6 +33,7 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import PersianDateInput from '../../Components/PersianDateInput';
 import { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
+import MessageFromTemplateModal from '../../Components/Workflow/MessageFromTemplateModal';
 
 const { Title, Text } = Typography;
 
@@ -75,6 +77,8 @@ export default function MessageCreate() {
         type: NotificationType;
         message: string;
     }>({ open: false, type: 'success', message: '' });
+
+    const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         MessageTypeID: null as number | null,
@@ -196,6 +200,11 @@ export default function MessageCreate() {
                 subtitle="ارسال پیام به همکاران و مدیران"
                 backHref="/messages"
                 backLabel="بازگشت به کارتابل"
+                actions={
+                    <Button icon={<FileTextOutlined />} onClick={() => setTemplateModalOpen(true)}>
+                        ارسال از روی الگو
+                    </Button>
+                }
             />
 
             <Card style={STYLES.card}>
@@ -461,6 +470,16 @@ export default function MessageCreate() {
                 type={notification.type}
                 message={notification.message}
                 onClose={closeNotification}
+            />
+
+            <MessageFromTemplateModal
+                open={templateModalOpen}
+                onClose={() => setTemplateModalOpen(false)}
+                targets={targets || []}
+                onSuccess={(_message, messageId) => {
+                    setTemplateModalOpen(false);
+                    router.visit(`/messages/${messageId}`);
+                }}
             />
         </MainLayout>
     );

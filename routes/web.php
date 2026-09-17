@@ -6,6 +6,7 @@ use App\Http\Controllers\MasterParameterController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MessageStatusController;
+use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\MessageTypeController;
 use App\Http\Controllers\OrganizationalUnitController;
 use App\Http\Controllers\PositionController;
@@ -25,12 +26,14 @@ use App\Http\Controllers\ProjectsController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
 use App\Http\Controllers\Process\ProcessEntityTypeController;
 use App\Http\Controllers\Process\ProcessInstanceController;
+use App\Http\Controllers\Process\ProcessLetterTemplateController;
 use App\Http\Controllers\Process\ProcessTemplateParameterController;
 use App\Http\Controllers\Process\ProcessVersionController;
 use App\Http\Controllers\Workflow\WorkflowCategoryController;
 use App\Http\Controllers\Workflow\WorkflowConditionFieldController;
 use App\Http\Controllers\Workflow\WorkflowDefinitionController;
 use App\Http\Controllers\Workflow\WorkflowEntityTypeController;
+use App\Http\Controllers\Workflow\WorkflowLetterTemplateController;
 use App\Http\Controllers\Workflow\WorkflowRuntimeController;
 use App\Http\Controllers\Workflow\WorkflowTemplateParameterController;
 use App\Http\Controllers\Workflow\WorkflowTaskController;
@@ -175,6 +178,7 @@ Route::middleware('auth')->group(function () {
     Route::get('messages/create', [MessageController::class, 'create'])->name('messages.create');
     Route::get('messages/archive', [MessageController::class, 'archive'])->name('messages.archive');
     Route::post('messages', [MessageController::class, 'store'])->name('messages.store');
+    Route::post('messages/from-template', [MessageTemplateController::class, 'store'])->name('messages.from-template');
     Route::get('messages/{id}', [MessageController::class, 'show'])->name('messages.show');
     Route::post('messages/{id}/status', [MessageController::class, 'changeStatus'])->name('messages.change-status');
     Route::post('messages/{id}/forward', [MessageController::class, 'forward'])->name('messages.forward');
@@ -239,6 +243,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('definitionId')->name('definitions.toggle');
         Route::post('definitions/{definitionId}/versions', [WorkflowVersionController::class, 'createDraft'])
             ->whereNumber('definitionId')->name('versions.draft');
+        Route::get('definitions/{definitionId}/templates', [WorkflowLetterTemplateController::class, 'forDefinition'])
+            ->whereNumber('definitionId')->name('definitions.templates');
 
         // --- دسته‌بندیِ فرایندها ---
         Route::get('categories', [WorkflowCategoryController::class, 'index'])->name('categories.index');
@@ -257,6 +263,14 @@ Route::middleware('auth')->group(function () {
         Route::post('template-parameters', [WorkflowTemplateParameterController::class, 'store'])->name('template-parameters.store');
         Route::post('template-parameters/{templateParameterId}/toggle', [WorkflowTemplateParameterController::class, 'toggleActive'])
             ->whereNumber('templateParameterId')->name('template-parameters.toggle');
+
+        // --- Registryِ قالب‌هایِ نامه (LetterTemplates) — مستقل از Condition Engine ---
+        Route::get('templates', [WorkflowLetterTemplateController::class, 'index'])->name('templates.index');
+        Route::post('templates', [WorkflowLetterTemplateController::class, 'store'])->name('templates.store');
+        Route::post('templates/{letterTemplateId}/toggle', [WorkflowLetterTemplateController::class, 'toggleActive'])
+            ->whereNumber('letterTemplateId')->name('templates.toggle');
+        Route::post('templates/{letterTemplateId}/render', [WorkflowLetterTemplateController::class, 'render'])
+            ->whereNumber('letterTemplateId')->name('templates.render');
 
         // --- فیلدهایِ شرط (Condition Engine — Definition-level) ---
         Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'index'])
@@ -325,6 +339,7 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('versionId')->name('versions.show');
         Route::get('entity-types', [ProcessEntityTypeController::class, 'index'])->name('entity-types.index');
         Route::get('template-parameters', [ProcessTemplateParameterController::class, 'index'])->name('template-parameters.index');
+        Route::get('templates', [ProcessLetterTemplateController::class, 'index'])->name('templates.index');
     });
 
     // تنظیمات شرکت

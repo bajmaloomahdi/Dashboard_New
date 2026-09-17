@@ -158,6 +158,52 @@ class WorkflowStore
         );
     }
 
+    /* ---------- Registryِ قالب‌هایِ نامه (LetterTemplates) ---------- */
+
+    public function getLetterTemplates(
+        ?string $search = null,
+        ?string $entityType = null,
+        ?int $definitionId = null,
+        ?bool $isActive = null
+    ): array {
+        return DB::select(
+            'EXEC dbo.sp_Wf_GetLetterTemplates @SearchText = ?, @EntityType = ?, @DefinitionID = ?, @IsActive = ?',
+            [$search, $entityType, $definitionId, $isActive]
+        );
+    }
+
+    public function getLetterTemplateById(int $letterTemplateId): ?object
+    {
+        return DB::selectOne('EXEC dbo.sp_Wf_GetLetterTemplateByID @LetterTemplateID = ?', [$letterTemplateId]);
+    }
+
+    /** Templateهایِ قابلِ‌استفاده برایِ یک Definitionِ مشخص: اختصاصیِ آن + عمومیِ همان EntityType. */
+    public function getLetterTemplatesForDefinition(int $definitionId): array
+    {
+        return DB::select('EXEC dbo.sp_Wf_GetLetterTemplatesForDefinition @DefinitionID = ?', [$definitionId]);
+    }
+
+    public function saveLetterTemplate(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_SaveLetterTemplate
+                @LetterTemplateID = ?, @Code = ?, @Name = ?, @EntityType = ?, @DefinitionID = ?,
+                @SubjectTemplate = ?, @BodyTemplate = ?, @UserID = ?',
+            [
+                $p['letterTemplateId'] ?? null, $p['code'], $p['name'], $p['entityType'], $p['definitionId'] ?? null,
+                $p['subjectTemplate'], $p['bodyTemplate'], $p['userId'],
+            ]
+        );
+    }
+
+    public function toggleLetterTemplateActive(int $letterTemplateId, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_ToggleLetterTemplateActive @LetterTemplateID = ?, @UserID = ?',
+            [$letterTemplateId, $userId]
+        );
+    }
+
     /* ---------- فیلدهایِ شرط (WorkflowConditionFields) ---------- */
 
     public function getConditionFields(int $definitionId, bool $includeInactive = false): array

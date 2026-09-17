@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Message\MessageAccessChecker;
+use App\Services\Message\MessageComposer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -11,8 +12,10 @@ use Inertia\Inertia;
 
 class MessageController extends Controller
 {
-    public function __construct(private MessageAccessChecker $access)
-    {
+    public function __construct(
+        private MessageAccessChecker $access,
+        private MessageComposer $composer,
+    ) {
     }
 
     /**
@@ -142,64 +145,32 @@ class MessageController extends Controller
             'msgPriorityID.required' => 'انتخاب اولویت پیام الزامی است.',
         ]);
 
-        $jalaliYear = $this->getJalaliYear(now());
+        $result = $this->composer->insert([
+            'MessageTypeID'    => $validated['MessageTypeID'],
+            'msgPriorityID'    => $validated['msgPriorityID'],
+            'Subject'          => $validated['Subject'],
+            'MessageText'      => $validated['MessageText'] ?? null,
+            'RecipientType'    => (int) $validated['RecipientType'],
+            'RecipientUserIDs' => $validated['RecipientUserIDs'] ?? null,
+            'CopyUserIDs'      => $validated['CopyUserIDs'] ?? null,
+            'CopyDescription'  => $validated['CopyDescription'] ?? null,
+            'SenderUserID'     => Auth::id(),
+            'CreateUserID'     => Auth::id(),
+            'DueDate'          => $validated['DueDate'] ?? null,
+        ]);
 
-        $result = DB::select(
-            'EXEC sp_InsertMessage
-                @MessageTypeID = ?, @msgPriorityID = ?, @Subject = ?, @MessageText = ?,
-                @RecipientType = ?, @RecipientUserIDs = ?, @CopyUserIDs = ?,
-                @CopyDescription = ?, @SenderUserID = ?, @Year = ?, @CreateUser = ?, @DueDate = ?',
-            [
-                $validated['MessageTypeID'],
-                $validated['msgPriorityID'],
-                $validated['Subject'],
-                $validated['MessageText'] ?? null,
-                (int) $validated['RecipientType'],
-                isset($validated['RecipientUserIDs']) ? implode(',', $validated['RecipientUserIDs']) : null,
-                isset($validated['CopyUserIDs']) ? implode(',', $validated['CopyUserIDs']) : null,
-                $validated['CopyDescription'] ?? null,
-                Auth::id(),
-                $jalaliYear,
-                Auth::id(),
-                $validated['DueDate'] ?? null,
-            ]
-        );
-
-        $response = (array) ($result[0] ?? []);
-
-        if (empty($response['Success'])) {
+        if (! $result['success']) {
             return back()->withErrors([
-                'Subject' => $response['Message'] ?? 'خطا در ارسال پیام',
+                'Subject' => $result['message'] ?? 'خطا در ارسال پیام',
             ]);
         }
 
-        $messageId = $response['NewMessageID'] ?? null;
-
-        if ($messageId && $request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $originalName = $file->getClientOriginalName();
-                $extension = $file->getClientOriginalExtension();
-                $size = $file->getSize();
-
-                $path = $file->store('messages/' . $messageId, 'public');
-
-                DB::select(
-                    'EXEC sp_InsertMessageAttachment
-                        @MessageID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @CreateUser = ?',
-                    [
-                        $messageId,
-                        $originalName,
-                        $extension,
-                        $size,
-                        $path,
-                        Auth::id(),
-                    ]
-                );
-            }
+        if ($result['messageId'] && $request->hasFile('attachments')) {
+            $this->composer->attachFiles((int) $result['messageId'], $request->file('attachments'), (int) Auth::id());
         }
 
         return redirect()->route('messages.index')
-            ->with('success', $response['Message']);
+            ->with('success', $result['message']);
     }
 
     public function show($id)
@@ -518,27 +489,5 @@ class MessageController extends Controller
 
         return redirect()->route('messages.show', $id)
             ->with('success', $response['Message']);
-    }
-
-    private function getJalaliYear($date): int
-    {
-        $gy = (int) $date->format('Y');
-        $gm = (int) $date->format('n');
-        $gd = (int) $date->format('j');
-
-        $g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-        $jy = ($gy <= 1600) ? 0 : 979;
-        $gy -= ($gy <= 1600) ? 621 : 1600;
-        $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
-        $days = (365 * $gy) + intdiv($gy2 + 3, 4) - intdiv($gy2 + 99, 100)
-              + intdiv($gy2 + 399, 400) - 80 + $gd + $g_d_m[$gm - 1];
-        $jy += 33 * intdiv($days, 12053);
-        $days %= 12053;
-        $jy += 4 * intdiv($days, 1461);
-        $days %= 1461;
-        if ($days > 365) {
-            $jy += intdiv($days - 1, 365);
-        }
-        return $jy;
     }
 }

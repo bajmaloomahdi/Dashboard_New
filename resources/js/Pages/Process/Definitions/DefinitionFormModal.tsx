@@ -48,9 +48,19 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
     const [processing, setProcessing] = useState(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
+    const [entityTypes, setEntityTypes] = useState<{ Code: string; DisplayName: string }[]>([]);
+    const [entityTypesLoading, setEntityTypesLoading] = useState(false);
 
     useEffect(() => {
         if (!open) return;
+
+        setEntityTypesLoading(true);
+        wfApi('/workflow/entity-types?isActive=1&usableOnly=1').then((res) => {
+            setEntityTypesLoading(false);
+            if (res.ok && res.success) {
+                setEntityTypes(res.items || []);
+            }
+        });
 
         const initial = editingDefinition
             ? {
@@ -205,20 +215,24 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                 <Form.Item
                     label="نوعِ موجودیت (EntityType)"
                     name="entityType"
-                    rules={[
-                        { required: true, message: 'نوعِ موجودیت الزامی است.' },
-                        { max: 64, message: 'حداکثر ۶۴ نویسه.' },
-                    ]}
+                    rules={[{ required: true, message: 'نوعِ موجودیت الزامی است.' }]}
                     validateStatus={fieldErrors.entityType ? 'error' : ''}
-                    help={fieldErrors.entityType || 'باید در config/workflow.php ثبت شده باشد (مثلاً MESSAGE یا PROJECT).'}
+                    help={fieldErrors.entityType || 'فهرست از Registryِ نوعِ موجودیت‌ها (/process/entity-types) می‌آید.'}
                 >
-                    <Input
-                        prefix={<TagOutlined style={{ color: '#8c8c8c' }} />}
-                        placeholder="MESSAGE"
-                        value={values.entityType}
-                        onChange={(e) => setValues((v) => ({ ...v, entityType: e.target.value }))}
+                    <Select
+                        showSearch
+                        loading={entityTypesLoading}
+                        placeholder="انتخابِ نوعِ موجودیت..."
+                        value={values.entityType || undefined}
+                        onChange={(v: string) => setValues((val) => ({ ...val, entityType: v }))}
                         size="large"
-                        dir="ltr"
+                        suffixIcon={<TagOutlined style={{ color: '#8c8c8c' }} />}
+                        optionFilterProp="label"
+                        notFoundContent={entityTypesLoading ? undefined : 'موجودیتِ فعالی در Registry یافت نشد.'}
+                        options={entityTypes.map((e) => ({
+                            value: e.Code,
+                            label: `${e.DisplayName} (${e.Code})`,
+                        }))}
                     />
                 </Form.Item>
 

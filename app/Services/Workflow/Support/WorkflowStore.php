@@ -86,6 +86,35 @@ class WorkflowStore
         );
     }
 
+    /* ---------- Registryِ نوعِ موجودیت‌ها (WorkflowEntityTypes) ---------- */
+
+    public function getEntityTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Wf_GetEntityTypes @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    /** ردیفِ خام برایِ یک Code — برایِ چکِ isUsable؛ اگر ثبت نشده باشد null. */
+    public function getEntityTypeByCode(string $code): ?object
+    {
+        return DB::selectOne('SELECT TOP 1 * FROM dbo.WorkflowEntityTypes WHERE Code = ?', [$code]);
+    }
+
+    public function saveEntityType(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_SaveEntityType @EntityTypeID = ?, @Code = ?, @DisplayName = ?, @ResolverClass = ?, @SortOrder = ?, @UserID = ?',
+            [$p['entityTypeId'] ?? null, $p['code'], $p['displayName'], $p['resolverClass'] ?? null, $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleEntityTypeActive(int $entityTypeId, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_ToggleEntityTypeActive @EntityTypeID = ?, @UserID = ?',
+            [$entityTypeId, $userId]
+        );
+    }
+
     /* ---------- فیلدهایِ شرط (WorkflowConditionFields) ---------- */
 
     public function getConditionFields(int $definitionId, bool $includeInactive = false): array

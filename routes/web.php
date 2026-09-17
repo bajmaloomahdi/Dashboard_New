@@ -23,11 +23,13 @@ use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\MsgPriorityController;
 use App\Http\Controllers\ProjectsController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
+use App\Http\Controllers\Process\ProcessEntityTypeController;
 use App\Http\Controllers\Process\ProcessInstanceController;
 use App\Http\Controllers\Process\ProcessVersionController;
 use App\Http\Controllers\Workflow\WorkflowCategoryController;
 use App\Http\Controllers\Workflow\WorkflowConditionFieldController;
 use App\Http\Controllers\Workflow\WorkflowDefinitionController;
+use App\Http\Controllers\Workflow\WorkflowEntityTypeController;
 use App\Http\Controllers\Workflow\WorkflowRuntimeController;
 use App\Http\Controllers\Workflow\WorkflowTaskController;
 use App\Http\Controllers\Workflow\WorkflowVersionController;
@@ -242,6 +244,12 @@ Route::middleware('auth')->group(function () {
         Route::post('categories/{categoryId}/toggle', [WorkflowCategoryController::class, 'toggleActive'])
             ->whereNumber('categoryId')->name('categories.toggle');
 
+        // --- Registryِ نوعِ موجودیت‌ها (WorkflowEntityTypes) ---
+        Route::get('entity-types', [WorkflowEntityTypeController::class, 'index'])->name('entity-types.index');
+        Route::post('entity-types', [WorkflowEntityTypeController::class, 'store'])->name('entity-types.store');
+        Route::post('entity-types/{entityTypeId}/toggle', [WorkflowEntityTypeController::class, 'toggleActive'])
+            ->whereNumber('entityTypeId')->name('entity-types.toggle');
+
         // --- فیلدهایِ شرط (Condition Engine — Definition-level) ---
         Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'index'])
             ->whereNumber('definitionId')->name('condition-fields.index');
@@ -307,6 +315,7 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('instanceId')->name('instances.show');
         Route::get('versions/{versionId}', [ProcessVersionController::class, 'show'])
             ->whereNumber('versionId')->name('versions.show');
+        Route::get('entity-types', [ProcessEntityTypeController::class, 'index'])->name('entity-types.index');
     });
 
     // تنظیمات شرکت

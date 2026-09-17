@@ -39,8 +39,8 @@ class WorkflowDefinitionService
     public function save(array $input, int $userId): object
     {
         $entityType = $input['entityType'] ?? '';
-        if (! $this->entities->isKnown($entityType)) {
-            throw new WorkflowValidationException("نوعِ موجودیتِ «{$entityType}» شناخته‌شده نیست (config/workflow.php).");
+        if (! $this->isEntityTypeUsable($entityType)) {
+            throw new WorkflowValidationException("نوعِ موجودیتِ «{$entityType}» در Registry فعال/شناخته‌شده نیست.");
         }
 
         return $this->store->saveDefinition([
@@ -77,6 +77,62 @@ class WorkflowDefinitionService
     public function toggleCategoryActive(int $categoryId, int $userId): object
     {
         return $this->store->toggleCategoryActive($categoryId, $userId);
+    }
+
+    /* ---------- Registryِ نوعِ موجودیت‌ها (WorkflowEntityTypes) ----------
+     *
+     * تفکیکِ عمدی: این Registry «Business/UI Registry» است (Code/DisplayName/
+     * IsActive که در UI انتخاب می‌شود)؛ config('workflow.entities') همچنان
+     * تنها منبعِ «Technical Resolver Mapping» است (کدامResolverِ PHP واقعاً
+     * پشتِ این Code قرار دارد). این دو عمداً به هم Hard-wire نشده‌اند:
+     * ثبتِ یک ردیفِ Registry هرگز نیازمندِ وجودِ از‌پیشِ آن Code در Config
+     * نیست (کاربر می‌تواند موجودیتی را در Registry تعریف کند که Resolverِ
+     * واقعی هنوز برایش نوشته نشده) — اما isEntityTypeUsable() (تنها گیت‌وی
+     * برایِ «آیا این EntityType در Workflowِ جدید قابلِ‌استفاده است؟») هر دو
+     * منبع را با هم چک می‌کند؛ بدونِ Resolverِ واقعی در Config، هرگز Usable
+     * نمی‌شود — صرفِ فعال‌کردنِ IsActive در Registry کافی نیست.
+     */
+
+    public function listEntityTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getEntityTypes($search, $isActive);
+    }
+
+    public function saveEntityType(array $input, int $userId): object
+    {
+        return $this->store->saveEntityType([
+            'entityTypeId'  => $input['entityTypeId'] ?? null,
+            'code'          => strtoupper(trim($input['code'] ?? '')),
+            'displayName'   => trim($input['displayName'] ?? ''),
+            'resolverClass' => $input['resolverClass'] ?? null,
+            'sortOrder'     => $input['sortOrder'] ?? 0,
+            'userId'        => $userId,
+        ]);
+    }
+
+    public function toggleEntityTypeActive(int $entityTypeId, int $userId): object
+    {
+        return $this->store->toggleEntityTypeActive($entityTypeId, $userId);
+    }
+
+    /**
+     * تنها گیت‌وی برایِ «آیا این EntityType همین حالا در یک Workflowِ جدید
+     * قابلِ‌استفاده است؟». دو شرط، هر دو لازم:
+     *   ۱) در config('workflow.entities') یک Resolverِ واقعی برایش وصل باشد
+     *      (بدونِ آن، فعال‌کردنِ صرفِ IsActive در Registry معنایی ندارد).
+     *   ۲) اگر ردیفی در Registry برایِ این Code ثبت شده، IsActive آن true باشد.
+     *      اگر اصلاً ردیفی ثبت نشده (مثلِ EntityTypeِ فقط‌تستی)، این شرط را
+     *      نادیده می‌گیریم — رفتارِ فعلی (پیش‌از‌Registry) حفظ می‌شود.
+     */
+    public function isEntityTypeUsable(string $entityType): bool
+    {
+        if (! $this->entities->isKnown($entityType)) {
+            return false;
+        }
+
+        $row = $this->store->getEntityTypeByCode($entityType);
+
+        return $row === null || (bool) $row->IsActive;
     }
 
     /* ---------- فیلدهایِ شرط (WorkflowConditionFields) — Definition-level ---------- */

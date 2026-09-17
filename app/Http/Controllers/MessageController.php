@@ -125,6 +125,22 @@ class MessageController extends Controller
         ]);
     }
 
+    /**
+     * مسیرِ مستقلِ «ارسال از رویِ قالب» — همان دادهٔ create() را برایِ گیرندگان می‌خواهد؛
+     * ایجادِ Message خودش از طریقِ MessageTemplateController::store() (POST messages/from-template)
+     * انجام می‌شود، نه اینجا.
+     */
+    public function createFromTemplate()
+    {
+        $userId = Auth::id();
+
+        $targets = DB::select('EXEC sp_GetSendTargets @UserID = ?, @IsTask = 0', [$userId]);
+
+        return Inertia::render('Messages/CreateFromTemplate', [
+            'targets' => $targets,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

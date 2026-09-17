@@ -98,6 +98,8 @@ export default function ProcessTemplateParametersIndex() {
     const [entityTypes, setEntityTypes] = useState<EntityTypeOption[]>([]);
     const [formOpen, setFormOpen] = useState(false);
     const [draft, setDraft] = useState<RowDraft>(emptyDraft);
+    /** تا وقتی کاربر خودش SourceKey را دستی تغییر نداده، برایِ گروهِ FORM با Code همگام می‌ماند. */
+    const [sourceKeyAuto, setSourceKeyAuto] = useState(true);
     const [saving, setSaving] = useState(false);
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -131,6 +133,7 @@ export default function ProcessTemplateParametersIndex() {
 
     const openCreate = () => {
         setDraft(emptyDraft);
+        setSourceKeyAuto(true);
         setError(null);
         setFormOpen(true);
     };
@@ -147,6 +150,7 @@ export default function ProcessTemplateParametersIndex() {
             sourceKey: row.SourceKey,
             sortOrder: row.SortOrder,
         });
+        setSourceKeyAuto(false);
         setError(null);
         setFormOpen(true);
     };
@@ -279,7 +283,14 @@ export default function ProcessTemplateParametersIndex() {
                                     dir="ltr"
                                     style={{ width: 220 }}
                                     value={draft.code}
-                                    onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                                    onChange={(e) => {
+                                        const code = e.target.value.toUpperCase();
+                                        setDraft((d) => ({
+                                            ...d,
+                                            code,
+                                            sourceKey: d.groupCode === 'FORM' && sourceKeyAuto ? code : d.sourceKey,
+                                        }));
+                                    }}
                                     placeholder="USER_FULL_NAME"
                                 />
                             </div>
@@ -295,11 +306,31 @@ export default function ProcessTemplateParametersIndex() {
                         <Space style={{ width: '100%' }} wrap>
                             <div>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>گروه (GroupCode)</Text>
-                                <Select style={{ width: 180 }} placeholder="انتخاب..." value={draft.groupCode ?? undefined} onChange={(v) => setDraft((d) => ({ ...d, groupCode: v }))} options={GROUP_OPTIONS} />
+                                <Select
+                                    style={{ width: 180 }}
+                                    placeholder="انتخاب..."
+                                    value={draft.groupCode ?? undefined}
+                                    onChange={(v) =>
+                                        setDraft((d) => ({
+                                            ...d,
+                                            groupCode: v,
+                                            sourceType: v === 'FORM' ? 'FORM' : d.sourceType,
+                                            sourceKey: v === 'FORM' && sourceKeyAuto ? d.code : d.sourceKey,
+                                        }))
+                                    }
+                                    options={GROUP_OPTIONS}
+                                />
                             </div>
                             <div>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>منبع (SourceType)</Text>
-                                <Select style={{ width: 180 }} placeholder="انتخاب..." value={draft.sourceType ?? undefined} onChange={(v) => setDraft((d) => ({ ...d, sourceType: v }))} options={SOURCE_TYPE_OPTIONS} />
+                                <Select
+                                    style={{ width: 180 }}
+                                    placeholder="انتخاب..."
+                                    value={draft.sourceType ?? undefined}
+                                    disabled={draft.groupCode === 'FORM'}
+                                    onChange={(v) => setDraft((d) => ({ ...d, sourceType: v }))}
+                                    options={SOURCE_TYPE_OPTIONS}
+                                />
                             </div>
                             <div>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نوعِ داده (DataType)</Text>
@@ -308,8 +339,20 @@ export default function ProcessTemplateParametersIndex() {
                         </Space>
                         <Space style={{ width: '100%' }} wrap>
                             <div>
-                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>کلیدِ منبع (SourceKey)</Text>
-                                <Input dir="ltr" style={{ width: 200 }} value={draft.sourceKey} onChange={(e) => setDraft((d) => ({ ...d, sourceKey: e.target.value }))} placeholder="FullName" />
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                                    کلیدِ منبع (SourceKey)
+                                    {draft.groupCode === 'FORM' ? <Text type="secondary"> (پیش‌فرض = کد؛ در صورتِ نیاز قابلِ تغییر)</Text> : null}
+                                </Text>
+                                <Input
+                                    dir="ltr"
+                                    style={{ width: 200 }}
+                                    value={draft.sourceKey}
+                                    onChange={(e) => {
+                                        setSourceKeyAuto(false);
+                                        setDraft((d) => ({ ...d, sourceKey: e.target.value }));
+                                    }}
+                                    placeholder="FullName"
+                                />
                             </div>
                             <div>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>

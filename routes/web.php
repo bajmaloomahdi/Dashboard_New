@@ -176,6 +176,7 @@ Route::middleware('auth')->group(function () {
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
     Route::get('messages/sent', [MessageController::class, 'index'])->name('messages.sent')->defaults('mode', 'sent');
     Route::get('messages/create', [MessageController::class, 'create'])->name('messages.create');
+    Route::get('messages/create-from-template', [MessageController::class, 'createFromTemplate'])->name('messages.create-from-template');
     Route::get('messages/archive', [MessageController::class, 'archive'])->name('messages.archive');
     Route::post('messages', [MessageController::class, 'store'])->name('messages.store');
     Route::post('messages/from-template', [MessageTemplateController::class, 'store'])->name('messages.from-template');

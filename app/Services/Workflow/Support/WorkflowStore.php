@@ -115,6 +115,49 @@ class WorkflowStore
         );
     }
 
+    /* ---------- Registryِ پارامترهایِ Template (TemplateParameters) ----------
+     * مستقل از Condition Engine — هیچ متدی اینجا به WorkflowConditionFields،
+     * ConditionContextBuilder یا ConditionDataTypeCaster ارجاع نمی‌دهد.
+     */
+
+    public function getTemplateParameters(
+        ?string $search = null,
+        ?string $groupCode = null,
+        ?string $entityType = null,
+        ?bool $isActive = null
+    ): array {
+        return DB::select(
+            'EXEC dbo.sp_Wf_GetTemplateParameters @SearchText = ?, @GroupCode = ?, @EntityType = ?, @IsActive = ?',
+            [$search, $groupCode, $entityType, $isActive]
+        );
+    }
+
+    public function getTemplateParameterByCode(string $code): ?object
+    {
+        return DB::selectOne('EXEC dbo.sp_Wf_GetTemplateParameterByCode @Code = ?', [$code]);
+    }
+
+    public function saveTemplateParameter(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_SaveTemplateParameter
+                @TemplateParameterID = ?, @Code = ?, @Caption = ?, @GroupCode = ?, @EntityType = ?,
+                @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @SortOrder = ?, @UserID = ?',
+            [
+                $p['templateParameterId'] ?? null, $p['code'], $p['caption'], $p['groupCode'], $p['entityType'] ?? null,
+                $p['dataType'], $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
+            ]
+        );
+    }
+
+    public function toggleTemplateParameterActive(int $templateParameterId, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Wf_ToggleTemplateParameterActive @TemplateParameterID = ?, @UserID = ?',
+            [$templateParameterId, $userId]
+        );
+    }
+
     /* ---------- فیلدهایِ شرط (WorkflowConditionFields) ---------- */
 
     public function getConditionFields(int $definitionId, bool $includeInactive = false): array

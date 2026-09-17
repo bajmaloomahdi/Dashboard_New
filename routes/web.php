@@ -25,12 +25,14 @@ use App\Http\Controllers\ProjectsController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
 use App\Http\Controllers\Process\ProcessEntityTypeController;
 use App\Http\Controllers\Process\ProcessInstanceController;
+use App\Http\Controllers\Process\ProcessTemplateParameterController;
 use App\Http\Controllers\Process\ProcessVersionController;
 use App\Http\Controllers\Workflow\WorkflowCategoryController;
 use App\Http\Controllers\Workflow\WorkflowConditionFieldController;
 use App\Http\Controllers\Workflow\WorkflowDefinitionController;
 use App\Http\Controllers\Workflow\WorkflowEntityTypeController;
 use App\Http\Controllers\Workflow\WorkflowRuntimeController;
+use App\Http\Controllers\Workflow\WorkflowTemplateParameterController;
 use App\Http\Controllers\Workflow\WorkflowTaskController;
 use App\Http\Controllers\Workflow\WorkflowVersionController;
 
@@ -250,6 +252,12 @@ Route::middleware('auth')->group(function () {
         Route::post('entity-types/{entityTypeId}/toggle', [WorkflowEntityTypeController::class, 'toggleActive'])
             ->whereNumber('entityTypeId')->name('entity-types.toggle');
 
+        // --- Registryِ پارامترهایِ Template (TemplateParameters) — مستقل از Condition Engine ---
+        Route::get('template-parameters', [WorkflowTemplateParameterController::class, 'index'])->name('template-parameters.index');
+        Route::post('template-parameters', [WorkflowTemplateParameterController::class, 'store'])->name('template-parameters.store');
+        Route::post('template-parameters/{templateParameterId}/toggle', [WorkflowTemplateParameterController::class, 'toggleActive'])
+            ->whereNumber('templateParameterId')->name('template-parameters.toggle');
+
         // --- فیلدهایِ شرط (Condition Engine — Definition-level) ---
         Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'index'])
             ->whereNumber('definitionId')->name('condition-fields.index');
@@ -316,6 +324,7 @@ Route::middleware('auth')->group(function () {
         Route::get('versions/{versionId}', [ProcessVersionController::class, 'show'])
             ->whereNumber('versionId')->name('versions.show');
         Route::get('entity-types', [ProcessEntityTypeController::class, 'index'])->name('entity-types.index');
+        Route::get('template-parameters', [ProcessTemplateParameterController::class, 'index'])->name('template-parameters.index');
     });
 
     // تنظیمات شرکت

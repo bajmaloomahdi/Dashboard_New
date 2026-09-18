@@ -144,7 +144,9 @@ class TemplateRenderer
 
         return match ($dataType) {
             'STRING' => $str,
-            'DATE' => $str, // پذیرشِ هر رشتهٔ غیرِخالی — بدونِ Parseِ سخت‌گیرانه (طبقِ اصلِ «پیچیده نکن»)
+            // PersianDateInput مقدارِ فرم را همیشه ISOِ میلادی (YYYY-MM-DD) می‌دهد؛ متنِ نهاییِ
+            // Renderشده باید شمسی باشد، پس همین‌جا (با همان gregorianToJalali موجود) تبدیل می‌شود.
+            'DATE' => $this->formatDateValue($str),
             'INTEGER' => (function () use ($str, $caption) {
                 $v = filter_var($str, FILTER_VALIDATE_INT);
                 if ($v === false) {
@@ -162,6 +164,18 @@ class TemplateRenderer
             })(),
             default => $str,
         };
+    }
+
+    /** ISOِ میلادیِ (YYYY-MM-DD) خروجیِ PersianDateInput را به نمایشِ شمسی (YYYY/MM/DD) تبدیل می‌کند. */
+    private function formatDateValue(string $value): string
+    {
+        if (! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
+            return $value; // فرمتِ غیرِمنتظره — بدونِ تبدیل، همان مقدارِ خام
+        }
+
+        [$jy, $jm, $jd] = $this->gregorianToJalali((int) $m[1], (int) $m[2], (int) $m[3]);
+
+        return sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
     }
 
     /* ---------- تاریخِ جلالیِ امروز — مستقل، بدونِ کتابخانهٔ خارجی ---------- */

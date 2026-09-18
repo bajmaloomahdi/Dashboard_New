@@ -21,24 +21,12 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Menu WHERE MenuCode = N'WF_LETTER_TEMPLATES')
     INSERT INTO dbo.Menu (ParentID, MenuCode, MenuTitle, MenuKind, Url, Icon, Level, SortOrder, OpenInNewTab, IsVisible, IsActive, IsHomeTab, CreateUser)
     SELECT MenuID, N'WF_LETTER_TEMPLATES', N'قالب‌هایِ نامه', N'PAGE', N'/process/templates', N'bi bi-diagram-3', 2, 5, 0, 1, 1, 0, 2
     FROM dbo.Menu WHERE MenuCode = N'WORKFLOW';
-
--- زیرمنویِ جدید برایِ ارسالِ پیام از رویِ قالب (زیرِ پوشهٔ اتوماسیون/پیام‌ها موجود، MenuCode='114')
-IF NOT EXISTS (SELECT 1 FROM dbo.Menu WHERE MenuCode = N'MSG_FROM_TEMPLATE')
-    INSERT INTO dbo.Menu (ParentID, MenuCode, MenuTitle, MenuKind, Url, Icon, Level, SortOrder, OpenInNewTab, IsVisible, IsActive, IsHomeTab, CreateUser)
-    SELECT MenuID, N'MSG_FROM_TEMPLATE', N'ارسال از روی قالب', N'PAGE', N'/messages/create-from-template', N'FileTextOutlined', 2, 4, 0, 1, 1, 0, 2
-    FROM dbo.Menu WHERE MenuCode = N'114';
 GO
 
--- اعطایِ دسترسیِ نمایش — دقیقاً هم‌الگو با خواهر-و-برادرهایِ هر منو (RoleID=1 برایِ صفحاتِ Process، RoleID=1/4 برایِ پیام‌ها)
+-- اعطایِ دسترسیِ نمایش — دقیقاً هم‌الگو با خواهر-و-برادرهایِ هر منو (RoleID=1 برایِ صفحاتِ Process)
 INSERT INTO dbo.RoleMenus (RoleID, MenuID, CanView, IsActive)
 SELECT 1, m.MenuID, 1, 1
 FROM dbo.Menu m
-WHERE m.MenuCode IN (N'WF_ENTITY_TYPES', N'WF_TEMPLATE_PARAMETERS', N'WF_LETTER_TEMPLATES', N'MSG_FROM_TEMPLATE')
+WHERE m.MenuCode IN (N'WF_ENTITY_TYPES', N'WF_TEMPLATE_PARAMETERS', N'WF_LETTER_TEMPLATES')
   AND NOT EXISTS (SELECT 1 FROM dbo.RoleMenus rm WHERE rm.RoleID = 1 AND rm.MenuID = m.MenuID);
-
-INSERT INTO dbo.RoleMenus (RoleID, MenuID, CanView, IsActive)
-SELECT 4, m.MenuID, 1, 1
-FROM dbo.Menu m
-WHERE m.MenuCode = N'MSG_FROM_TEMPLATE'
-  AND NOT EXISTS (SELECT 1 FROM dbo.RoleMenus rm WHERE rm.RoleID = 4 AND rm.MenuID = m.MenuID);
 GO

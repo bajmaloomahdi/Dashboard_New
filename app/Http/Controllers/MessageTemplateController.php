@@ -37,6 +37,10 @@ class MessageTemplateController extends Controller
         $validated = $request->validate([
             'letterTemplateId'   => 'required|integer|exists:LetterTemplates,LetterTemplateID',
             'formValues'         => 'nullable|array',
+            // ویرایشِ دستیِ کاربر رویِ موضوع/متنِ Renderشده — اختیاری؛ وقتی ارسال شود
+            // (غیرِخالی)، به‌جایِ خروجیِ TemplateRenderer استفاده می‌شود.
+            'Subject'            => 'nullable|string|max:500',
+            'MessageText'        => 'nullable|string|max:5000',
             'MessageTypeID'      => 'required|integer',
             'msgPriorityID'      => 'required|integer',
             'RecipientType'      => 'required|in:1,2,3',
@@ -61,11 +65,13 @@ class MessageTemplateController extends Controller
         }
 
         // مرحلهٔ ۲ — همان مسیرِ نوشتنیِ MessageController::store()، بدونِ تغییرِ sp_InsertMessage.
+        // اگر کاربر موضوع/متنِ Renderشده را در فرم دستی ویرایش کرده باشد، همان مقدارِ
+        // ویرایش‌شده ذخیره می‌شود؛ در غیرِ این صورت همان خروجیِ TemplateRenderer.
         $result = $this->composer->insert([
             'MessageTypeID'    => $validated['MessageTypeID'],
             'msgPriorityID'    => $validated['msgPriorityID'],
-            'Subject'          => $rendered['subject'],
-            'MessageText'      => $rendered['body'],
+            'Subject'          => ! empty($validated['Subject']) ? $validated['Subject'] : $rendered['subject'],
+            'MessageText'      => ! empty($validated['MessageText']) ? $validated['MessageText'] : $rendered['body'],
             'RecipientType'    => (int) $validated['RecipientType'],
             'RecipientUserIDs' => $validated['RecipientUserIDs'] ?? null,
             'CopyUserIDs'      => $validated['CopyUserIDs'] ?? null,

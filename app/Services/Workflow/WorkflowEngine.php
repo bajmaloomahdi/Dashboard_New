@@ -114,6 +114,106 @@ class WorkflowEngine
         });
     }
 
+    /**
+     * پیش‌نمایشِ Read-Only گیرندهٔ اولین Task — بدونِ نوشتن، بدونِ Instanceِ واقعی.
+     *
+     * فقط مسیرِ پیش‌فرض (بدونِ هیچ مرحلهٔ CONDITION) را از START دنبال می‌کند؛
+     * به‌محضِ رسیدن به یک CONDITION، بدونِ حدس متوقف می‌شود — چون Contextِ لازم
+     * برایِ ارزیابیِ آن از Registryِ کاملاً جداگانهٔ WorkflowConditionFields
+     * می‌آید (نه پارامترهایِ قالب) و اینجا در دسترس نیست.
+     *
+     * برایِ EntityType=MESSAGE، «مالکِ موجودیت» همیشه خودِ Actor است (فرستندهٔ
+     * پیامی که هنوز ساخته نشده)، دقیقاً هم‌الگو با MessageEntityResolver —
+     * پس EntityOwnerUserID/EntityUnitID بدونِ نیاز به Messageِ واقعی معلوم‌اند.
+     *
+     * @return array{resolved:bool, reason:?string, users:array<int,array{userId:int,fullName:?string}>}
+     */
+    public function previewAssignment(int $definitionId, int $actorUserId): array
+    {
+        $definitions = $this->store->getDefinitions(null, true);
+        $match = null;
+        foreach ($definitions as $d) {
+            if ((int) $d->DefinitionID === $definitionId) {
+                $match = $d;
+                break;
+            }
+        }
+        if (! $match || (int) ($match->ActiveVersionNo ?? 0) === 0) {
+            return ['resolved' => false, 'reason' => 'NO_ACTIVE_VERSION', 'users' => []];
+        }
+
+        $detail = $this->store->getDefinition($definitionId);
+        $activeVersion = null;
+        foreach ($detail['versions'] as $v) {
+            if ($v->Status === 'ACTIVE') {
+                $activeVersion = $v;
+                break;
+            }
+        }
+        if (! $activeVersion) {
+            return ['resolved' => false, 'reason' => 'NO_ACTIVE_VERSION', 'users' => []];
+        }
+
+        $graph = $this->store->getVersionGraph((int) $activeVersion->VersionID);
+        $startStep = $this->firstOfType($graph['steps'], 'START');
+        if (! $startStep) {
+            return ['resolved' => false, 'reason' => 'NO_START_STEP', 'users' => []];
+        }
+
+        $ctx = (object) [
+            'initiatorUserId'   => $actorUserId,
+            'entityOwnerUserId' => $actorUserId,
+            'entityUnitId'      => $this->store->getUserCurrentUnitId($actorUserId),
+        ];
+
+        $currentStepId = (int) $startStep->StepID;
+        $guard = 0;
+
+        while ($guard++ < self::LOCAL_STEP_GUARD) {
+            try {
+                $transition = $this->transitions->resolve($graph['transitions'], $graph['actions'], $currentStepId, null);
+            } catch (WorkflowStateException) {
+                return ['resolved' => false, 'reason' => 'DEAD_END', 'users' => []];
+            }
+
+            $target = $this->stepById($graph['steps'], (int) $transition->ToStepID);
+            if (! $target) {
+                return ['resolved' => false, 'reason' => 'DEAD_END', 'users' => []];
+            }
+
+            if ($target->StepType === 'CONDITION') {
+                return ['resolved' => false, 'reason' => 'CONDITION', 'users' => []];
+            }
+
+            if ($target->StepType === 'END') {
+                return ['resolved' => true, 'reason' => 'NO_TASK', 'users' => []];
+            }
+
+            if (in_array($target->StepType, ['USER_TASK', 'APPROVAL'], true)) {
+                $assignmentRows = array_values(array_filter(
+                    $graph['assignments'],
+                    fn ($a) => (int) $a->StepID === (int) $target->StepID && empty($a->IsBackup)
+                ));
+                $assignees = $this->assignments->resolve($assignmentRows, $ctx);
+
+                return [
+                    'resolved' => true,
+                    'reason'   => $assignees === [] ? 'NO_ASSIGNEE_FOUND' : null,
+                    'users'    => array_map(fn ($a) => ['userId' => $a->userId, 'fullName' => $a->fullName], $assignees),
+                ];
+            }
+
+            if ($target->StepType === 'START') {
+                $currentStepId = (int) $target->StepID;
+                continue;
+            }
+
+            return ['resolved' => false, 'reason' => 'UNSUPPORTED_STEP', 'users' => []];
+        }
+
+        return ['resolved' => false, 'reason' => 'LOOP_GUARD', 'users' => []];
+    }
+
     /* ======================= اقدام روی تسک ======================= */
 
     public function performAction(TaskActionRequest $req): EngineResult

@@ -627,6 +627,17 @@ class WorkflowStore
         );
     }
 
+    /** واحدِ سازمانیِ فعلیِ یک کاربر (آخرین سمتِ فعال) — برایِ پیش‌نمایشِ Assignment پیش از وجودِ موجودیت. */
+    public function getUserCurrentUnitId(int $userId): ?int
+    {
+        $row = DB::selectOne(
+            'SELECT TOP 1 UnitID FROM dbo.UserPositions WHERE UserID = ? AND IsActive = 1 ORDER BY CreateDate DESC, UserPositionID DESC',
+            [$userId]
+        );
+
+        return $row ? (int) $row->UnitID : null;
+    }
+
     /** @return array{instance:?object, steps:array, tasks:array} */
     public function getInstance(int $instanceId): array
     {

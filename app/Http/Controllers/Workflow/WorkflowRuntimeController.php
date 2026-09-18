@@ -78,6 +78,18 @@ class WorkflowRuntimeController extends WorkflowApiController
         });
     }
 
+    /**
+     * GET workflow/definitions/{definitionId}/preview-assignees
+     * پیش‌نمایشِ Read-Only گیرندهٔ اولین Task — بدونِ نوشتن، بدونِ Instanceِ واقعی.
+     * برایِ فرمِ «ارسالِ بر اساسِ فرایند» در Messages/Create.
+     */
+    public function previewAssignees(int $definitionId)
+    {
+        $this->authorizeWorkflow('WORKFLOW_VIEW');
+
+        return $this->runWorkflow(fn () => $this->engine->previewAssignment($definitionId, $this->actorId()));
+    }
+
     /** GET workflow/instances/{instanceId} */
     public function show(int $instanceId)
     {

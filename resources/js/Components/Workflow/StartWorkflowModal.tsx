@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Modal, Radio, Space, Typography, Empty, Spin, Alert, Button } from 'antd';
+import { Modal, Radio, Space, Typography, Empty, Spin, Alert, Button, Input, InputNumber, Select, Divider } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { wfApi } from './workflowApi';
+import PersianDateInput from '../PersianDateInput';
 
 const { Text } = Typography;
 
@@ -11,6 +12,16 @@ interface WfDefinition {
     Name: string;
     EntityType: string;
     ActiveVersionNo: number | null;
+}
+
+interface WfConditionField {
+    FieldID: number;
+    Code: string;
+    DisplayName: string;
+    DataType: string;
+    SourceType: string;
+    SourceKey: string;
+    AllowedValuesJson: string | null;
 }
 
 interface StartWorkflowModalProps {
@@ -36,11 +47,17 @@ export default function StartWorkflowModal({ open, onClose, entityType, entityId
     const [starting, setStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [conditionFields, setConditionFields] = useState<WfConditionField[]>([]);
+    const [fieldsLoading, setFieldsLoading] = useState(false);
+    const [contextValues, setContextValues] = useState<Record<string, string>>({});
+
     useEffect(() => {
         if (!open) return;
 
         setError(null);
         setSelectedId(null);
+        setConditionFields([]);
+        setContextValues({});
         setLoading(true);
 
         wfApi('/workflow/definitions?isActive=1').then((res) => {
@@ -56,6 +73,39 @@ export default function StartWorkflowModal({ open, onClose, entityType, entityId
         });
     }, [open, entityType]);
 
+    // فیلدهایِ شرط (START_CONTEXT) همان Definitionِ انتخاب‌شده — مقدارِ آن‌ها همان
+    // «مقدارِ فرم» است که در ContextJsonِ Instance ذخیره و بعداً در CONDITIONها استفاده می‌شود.
+    useEffect(() => {
+        setContextValues({});
+        if (!selectedId) {
+            setConditionFields([]);
+            return;
+        }
+        setFieldsLoading(true);
+        wfApi(`/workflow/definitions/${selectedId}/condition-fields`).then((res) => {
+            setFieldsLoading(false);
+            if (res.ok && res.success) {
+                const items: WfConditionField[] = (res.items || []).filter(
+                    (f: WfConditionField) => f.SourceType === 'START_CONTEXT'
+                );
+                setConditionFields(items);
+            }
+        });
+    }, [selectedId]);
+
+    const setFieldValue = (sourceKey: string, value: string) =>
+        setContextValues((s) => ({ ...s, [sourceKey]: value }));
+
+    const buildContext = (): Record<string, unknown> => {
+        const ctx: Record<string, unknown> = {};
+        for (const f of conditionFields) {
+            const raw = contextValues[f.SourceKey];
+            if (raw === undefined || raw === '') continue;
+            ctx[f.SourceKey] = f.DataType === 'BOOLEAN' ? raw === 'true' : raw;
+        }
+        return ctx;
+    };
+
     const handleStart = async () => {
         if (!selectedId) return;
 
@@ -66,6 +116,7 @@ export default function StartWorkflowModal({ open, onClose, entityType, entityId
             definitionId: selectedId,
             entityType,
             entityId,
+            context: buildContext(),
         });
 
         setStarting(false);
@@ -132,6 +183,81 @@ export default function StartWorkflowModal({ open, onClose, entityType, entityId
                     </Space>
                 </Radio.Group>
             )}
+
+            {fieldsLoading ? (
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                    <Spin size="small" />
+                </div>
+            ) : conditionFields.length > 0 ? (
+                <>
+                    <Divider style={{ margin: '16px 0' }}>
+                        <Text strong style={{ fontSize: 13 }}>اطلاعاتِ لازم برایِ این فرایند</Text>
+                    </Divider>
+                    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                        {conditionFields.map((f) => {
+                            const value = contextValues[f.SourceKey] ?? '';
+                            let control: JSX.Element;
+
+                            if (f.DataType === 'INTEGER' || f.DataType === 'DECIMAL') {
+                                control = (
+                                    <InputNumber
+                                        style={{ width: '100%' }}
+                                        value={value === '' ? undefined : Number(value)}
+                                        onChange={(v) => setFieldValue(f.SourceKey, v == null ? '' : String(v))}
+                                    />
+                                );
+                            } else if (f.DataType === 'DATE') {
+                                control = (
+                                    <PersianDateInput
+                                        value={value || null}
+                                        onChange={(v) => setFieldValue(f.SourceKey, v || '')}
+                                    />
+                                );
+                            } else if (f.DataType === 'BOOLEAN') {
+                                control = (
+                                    <Radio.Group
+                                        value={value || undefined}
+                                        onChange={(e) => setFieldValue(f.SourceKey, e.target.value)}
+                                    >
+                                        <Radio value="true">بله</Radio>
+                                        <Radio value="false">خیر</Radio>
+                                    </Radio.Group>
+                                );
+                            } else if (f.DataType === 'SELECT') {
+                                const options = ((): string[] => {
+                                    try {
+                                        return JSON.parse(f.AllowedValuesJson || '[]');
+                                    } catch {
+                                        return [];
+                                    }
+                                })();
+                                control = (
+                                    <Select
+                                        style={{ width: '100%' }}
+                                        value={value || undefined}
+                                        onChange={(v) => setFieldValue(f.SourceKey, v)}
+                                        options={options.map((o) => ({ value: o, label: o }))}
+                                    />
+                                );
+                            } else {
+                                control = (
+                                    <Input
+                                        value={value}
+                                        onChange={(e) => setFieldValue(f.SourceKey, e.target.value)}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <div key={f.FieldID}>
+                                    <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>{f.DisplayName}</Text>
+                                    {control}
+                                </div>
+                            );
+                        })}
+                    </Space>
+                </>
+            ) : null}
         </Modal>
     );
 }

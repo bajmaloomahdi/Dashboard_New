@@ -2249,4 +2249,62 @@ class WorkflowEngineTest extends TestCase
         $this->expectException(WorkflowValidationException::class);
         $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['TOTAL_AMOUNT' => '2000']);
     }
+
+    /* ==================== Condition Engine بعد از یک اقدامِ واقعیِ تسک ==================== */
+
+    /**
+     * START → REVIEW(APPROVAL) → COND → END_HIGH/END_LOW — advance() همانی است که start()
+     * استفاده می‌کند، اما تا امروز هیچ تستی دقیقاً همین شکل را از مسیرِ performAction() (نه
+     * فقط start()) سنجش نکرده بود. این تست ثابت می‌کند بعد از تأییدِ یک تسکِ واقعی هم، مرحلهٔ
+     * CONDITIONِ میان‌راهی با همان Contextِ Snapshotشده درست حل و به شاخهٔ صحیح می‌رود.
+     */
+    public function test_condition_gateway_evaluated_after_real_task_action(): void
+    {
+        $code = 'CGT_' . strtoupper(bin2hex(random_bytes(4)));
+        $definitionId = (int) $this->defs->save(['code' => $code, 'name' => 'گیت‌وی بعدِ تسک', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
+
+        $version = $this->defs->createDraft($definitionId, self::USER_A);
+        $graph = [
+            'steps' => [
+                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
+                ['code' => 'REVIEW', 'name' => 'بررسی', 'stepType' => 'APPROVAL', 'assignPolicy' => 'ANY', 'sortOrder' => 1],
+                ['code' => 'COND', 'name' => 'شرط', 'stepType' => 'CONDITION', 'sortOrder' => 2],
+                ['code' => 'END_HIGH', 'name' => 'پایانِ بالا', 'stepType' => 'END', 'sortOrder' => 3],
+                ['code' => 'END_LOW', 'name' => 'پایانِ پایین', 'stepType' => 'END', 'sortOrder' => 4],
+            ],
+            'actions' => [
+                ['stepCode' => 'REVIEW', 'code' => 'APPROVE', 'kind' => 'APPROVE', 'label' => 'تأیید', 'sortOrder' => 0],
+            ],
+            'assignments' => [
+                ['stepCode' => 'REVIEW', 'assigneeType' => 'USER', 'refId' => self::USER_A],
+            ],
+            'transitions' => [
+                ['code' => 'T_START', 'fromStepCode' => 'START', 'toStepCode' => 'REVIEW', 'isDefault' => true],
+                ['code' => 'T_TO_COND', 'fromStepCode' => 'REVIEW', 'toStepCode' => 'COND', 'triggerActionCode' => 'APPROVE'],
+                ['code' => 'T_HIGH', 'fromStepCode' => 'COND', 'toStepCode' => 'END_HIGH', 'priority' => 10, 'ruleJson' => $this->amountRule('AMOUNT', 'GT', 100)],
+                ['code' => 'T_LOW', 'fromStepCode' => 'COND', 'toStepCode' => 'END_LOW', 'priority' => 999, 'isDefault' => true],
+            ],
+        ];
+        $this->defs->saveGraph((int) $version->VersionID, $graph, self::USER_A);
+        $this->defs->publish((int) $version->VersionID, self::USER_A);
+
+        $started = $this->startWfWithContext($code, random_int(90000, 99999), ['amount' => '500']);
+        $this->assertSame('RUNNING', $started->instanceStatus);
+
+        $task = $this->openTask($started->instanceId);
+        $result = $this->act($task, self::USER_A, 'APPROVE');
+
+        $this->assertSame('COMPLETED', $result->instanceStatus);
+        $this->assertSame('END_HIGH', $result->enteredStepCode, 'بعدِ تأییدِ تسک، Conditionِ AMOUNT>100 باید برقرار باشد و به END_HIGH برود.');
+
+        $history = collect($this->store->getInstanceHistory($result->instanceId));
+        $ruleEvent = $history->first(function ($h) {
+            $detail = json_decode($h->DetailJson ?? '{}', true) ?? [];
+
+            return $h->EventCode === 'TRANSITION_TAKEN' && ($detail['ruleMatched'] ?? false) === true;
+        });
+        $this->assertNotNull($ruleEvent, 'باید رویدادِ TRANSITION_TAKEN با ruleMatched=true بعدِ اقدامِ تسک ثبت شده باشد.');
+        $this->assertContains('INSTANCE_COMPLETED', $history->pluck('EventCode')->all());
+    }
 }

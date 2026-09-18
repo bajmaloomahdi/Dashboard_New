@@ -185,6 +185,13 @@ class MessageController extends Controller
                 ->with('error', 'پیام مورد نظر یافت نشد');
         }
 
+        // بدونِ این بررسی، هر کاربرِ احراز هویت‌شده‌ای با دانستنِ MessageID می‌توانست
+        // محتوایِ کاملِ هر پیامی (حتی بی‌ربط به خودش) را ببیند — همان قاعده‌ای که
+        // downloadAttachment/downloadCommentAttachment در همین فایل از قبل اعمال می‌کنند.
+        if (!$this->isMessageParticipant($id)) {
+            abort(403, 'شما به این پیام دسترسی ندارید.');
+        }
+
         DB::statement('EXEC sp_MarkNotificationRead @UserID = ?, @MessageID = ?', [Auth::id(), $id]);
 
         $details = DB::select('EXEC sp_GetMessageDetailsList @MessageID = ?', [$id]);

@@ -188,9 +188,12 @@ class MessageWorkflowIntegrationTest extends TestCase
 
     public function test_workflow_permissions_prop_excludes_forward_and_delegate_for_user_without_grant(): void
     {
-        // کاربرِ ۳ فقط WORKFLOW_VIEW دارد (برایِ اینکه اصلاً بتواند صفحه را ببیند)
+        // کاربرِ ۳ فقط WORKFLOW_VIEW دارد؛ خودش انجام‌دهندهٔ همین تسک است (چون
+        // MessageController::show() اکنون Participantِ‌بودن را الزامی می‌کند —
+        // مطابقِ downloadAttachment/Start Workflow — پس یک شخصِ کاملاً بی‌ربط
+        // دیگر نمی‌تواند صفحهٔ پیامِ او را ببیند).
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW);
-        $messageId = $this->startWorkflowTaskMessage(self::USER_FULL, 9103);
+        $messageId = $this->startWorkflowTaskMessage(self::USER_NOPERM, 9103);
 
         $response = $this->as(self::USER_NOPERM)->get("/messages/{$messageId}");
         $response->assertOk();

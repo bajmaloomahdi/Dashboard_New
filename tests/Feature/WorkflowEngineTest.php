@@ -64,7 +64,7 @@ class WorkflowEngineTest extends TestCase
     {
         $code ??= 'T_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['code' => $code, 'name' => 'تست ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'تست ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $definitionId = (int) $def->DefinitionID;
 
         $ver = $this->defs->createDraft($definitionId, self::USER_A);
@@ -372,7 +372,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_publish_is_blocked_when_graph_is_invalid(): void
     {
-        $def = $this->defs->save(['code' => 'TEST_BAD_' . uniqid(), 'name' => 'بد', 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $def = $this->defs->save(['latinName' => 'TEST_BAD_' . uniqid(), 'name' => 'بد', 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_A);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [['code' => 'START', 'name' => 'ش', 'stepType' => 'START', 'sortOrder' => 0]],

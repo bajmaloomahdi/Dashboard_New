@@ -38,7 +38,7 @@ class WorkflowDefinitionPageTest extends TestCase
     private function createDefinition(): int
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ Definition', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تستِ تعریف', 'entityType' => 'MESSAGE'], self::USER_FULL);
 
         return (int) $def->DefinitionID;
     }

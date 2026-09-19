@@ -30,7 +30,30 @@ interface DefinitionFormModalProps {
     onSuccess: (message: string, definitionId: number, isNew: boolean) => void;
 }
 
-const emptyValues = { code: '', name: '', description: '', entityType: '', isActive: true, categoryId: null as number | null };
+const emptyValues = { code: '', latinName: '', name: '', description: '', entityType: '', isActive: true, categoryId: null as number | null };
+
+/**
+ * تولیدِ Code — فقط حروف/عددِ لاتین و Underscore را نگه می‌دارد. این فقط یک
+ * پیش‌نمایشِ سمتِ کلاینت است؛ Backend همین الگوریتم را دوباره و مستقلاً روی
+ * name/latinName اجرا می‌کند و تنها منبعِ حقیقتِ Code است.
+ */
+function suggestCode(title: string): string {
+    return title
+        .toUpperCase()
+        .replace(/[^A-Z0-9\s_]/g, '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^[^A-Z]+/, '')
+        .slice(0, 50);
+}
+
+/** الگویِ معتبرِ Code — هم‌ارزِ CODE_PATTERN در Backend. */
+const CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,49}$/;
+
+function isUsableCode(code: string): boolean {
+    return CODE_PATTERN.test(code);
+}
 
 /**
  * فرمِ ایجاد/ویرایشِ WorkflowDefinition — هر دو از همان یک endpointِ Upsertِ
@@ -39,6 +62,11 @@ const emptyValues = { code: '', name: '', description: '', entityType: '', isAct
  * خلافِ فرم‌هایِ Inertiaِ معمولِ پروژه (مثلِ MasterParameterFormModal) از
  * useForm استفاده نمی‌شود — همان الگویِ wfApi که در WorkflowReassignModal
  * ساخته شد.
+ *
+ * Code هرگز مستقیماً توسطِ کاربر تایپ نمی‌شود: Backend آن را از رویِ نام می‌سازد
+ * (Read-only در UI، فقط برایِ نمایش). اگر نام حرفِ لاتینِ کافی نداشته باشد (مثلاً
+ * کاملاً فارسی)، یک فیلدِ کوچکِ «نامِ لاتین» فقط در همان لحظه ظاهر می‌شود — دقیقاً
+ * هم‌الگو با TemplateParameters/ConditionFields.
  */
 export default function DefinitionFormModal({ open, onClose, editingDefinition, categories, onSuccess }: DefinitionFormModalProps) {
     const [form] = Form.useForm();
@@ -65,6 +93,7 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
         const initial = editingDefinition
             ? {
                   code: editingDefinition.Code || '',
+                  latinName: '',
                   name: editingDefinition.Name || '',
                   description: editingDefinition.Description || '',
                   entityType: editingDefinition.EntityType || '',
@@ -85,16 +114,25 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
         onClose();
     };
 
+    const codeFromName = suggestCode(values.name);
+    const needsLatinName = !isEdit && values.name.trim() !== '' && !isUsableCode(codeFromName);
+    const previewCode = isEdit ? values.code : (needsLatinName ? suggestCode(values.latinName) : codeFromName);
+
     const handleSubmit = () => {
         form.validateFields().then(async () => {
+            if (needsLatinName && !isUsableCode(suggestCode(values.latinName))) {
+                setFormError('نام شامل حروفِ لاتینِ کافی نیست — یک «نامِ لاتین» کوتاه و معتبر وارد کنید (مثلاً LEAVE_REQUEST).');
+                return;
+            }
+
             setProcessing(true);
             setFieldErrors({});
             setFormError(null);
 
             const res = await wfApi('/workflow/definitions', 'POST', {
                 definitionId: editingDefinition ? editingDefinition.DefinitionID : undefined,
-                code: values.code,
                 name: values.name,
+                latinName: !isEdit && needsLatinName ? values.latinName.trim() : undefined,
                 description: values.description.trim() || undefined,
                 entityType: values.entityType,
                 isActive: values.isActive,
@@ -169,30 +207,6 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                 <Row gutter={16}>
                     <Col xs={24} md={12}>
                         <Form.Item
-                            label="کد فرایند"
-                            name="code"
-                            rules={[
-                                { required: true, message: 'کد الزامی است.' },
-                                { max: 64, message: 'حداکثر ۶۴ نویسه.' },
-                            ]}
-                            validateStatus={fieldErrors.code ? 'error' : ''}
-                            help={fieldErrors.code}
-                        >
-                            <Input
-                                prefix={<CodeOutlined style={{ color: '#8c8c8c' }} />}
-                                placeholder="LEAVE_REQUEST"
-                                value={values.code}
-                                onChange={(e) => setValues((v) => ({ ...v, code: e.target.value }))}
-                                size="large"
-                                dir="ltr"
-                                disabled={isEdit}
-                            />
-                        </Form.Item>
-                        {isEdit ? <Text type="secondary" style={{ fontSize: 12 }}>کد پس از ایجاد قابلِ ویرایش نیست.</Text> : null}
-                    </Col>
-
-                    <Col xs={24} md={12}>
-                        <Form.Item
                             label="نامِ فرایند"
                             name="name"
                             rules={[
@@ -209,6 +223,36 @@ export default function DefinitionFormModal({ open, onClose, editingDefinition, 
                                 size="large"
                             />
                         </Form.Item>
+                    </Col>
+
+                    {needsLatinName && (
+                        <Col xs={24} md={12}>
+                            <Form.Item label="نامِ لاتین" help="چون نام حرفِ لاتین ندارد — یک نامِ کوتاهِ لاتین برایِ ساختِ Code لازم است.">
+                                <Input
+                                    placeholder="LEAVE_REQUEST"
+                                    value={values.latinName}
+                                    onChange={(e) => setValues((v) => ({ ...v, latinName: e.target.value.toUpperCase() }))}
+                                    size="large"
+                                    dir="ltr"
+                                />
+                            </Form.Item>
+                        </Col>
+                    )}
+
+                    <Col xs={24} md={12}>
+                        <Form.Item label="کد فرایند">
+                            <Input
+                                prefix={<CodeOutlined style={{ color: '#8c8c8c' }} />}
+                                placeholder="LEAVE_REQUEST"
+                                value={previewCode}
+                                size="large"
+                                dir="ltr"
+                                disabled
+                            />
+                        </Form.Item>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            {isEdit ? 'کد پس از ایجاد قابلِ‌تغییر نیست.' : 'کد به‌صورتِ خودکار ساخته می‌شود.'}
+                        </Text>
                     </Col>
                 </Row>
 

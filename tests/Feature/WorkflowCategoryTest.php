@@ -129,7 +129,7 @@ class WorkflowCategoryTest extends TestCase
     {
         $categoryId = $this->createCategory();
         $this->defs->save([
-            'code' => $this->uniqueCode('DEP'), 'name' => 'وابسته', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('DEP'), 'name' => 'وابسته', 'entityType' => 'MESSAGE',
             'categoryId' => $categoryId, 'isActive' => 1,
         ], self::USER_FULL);
 
@@ -143,7 +143,7 @@ class WorkflowCategoryTest extends TestCase
     {
         $categoryId = $this->createCategory();
         $def = $this->defs->save([
-            'code' => $this->uniqueCode('DEP2'), 'name' => 'وابستهٔ غیرفعال', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('DEP2'), 'name' => 'وابستهٔ غیرفعال', 'entityType' => 'MESSAGE',
             'categoryId' => $categoryId, 'isActive' => 0,
         ], self::USER_FULL);
 
@@ -162,7 +162,7 @@ class WorkflowCategoryTest extends TestCase
         $this->as(self::USER_FULL)->postJson("/workflow/categories/{$categoryId}/toggle")->assertOk();
 
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $this->uniqueCode('NEWDEF'), 'name' => 'فرایندِ جدید', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('NEWDEF'), 'name' => 'فرایندِ جدید', 'entityType' => 'MESSAGE',
             'categoryId' => $categoryId,
         ]);
         $res->assertStatus(422);
@@ -174,7 +174,7 @@ class WorkflowCategoryTest extends TestCase
         $categoryId = $this->createCategory();
         $code = $this->uniqueCode('KEEP');
         $def = $this->defs->save([
-            'code' => $code, 'name' => 'قبلِ غیرفعالی', 'entityType' => 'MESSAGE',
+            'latinName' => $code, 'name' => 'قبلِ غیرفعالی', 'entityType' => 'MESSAGE',
             'categoryId' => $categoryId, 'isActive' => 0,
         ], self::USER_FULL);
         $this->as(self::USER_FULL)->postJson("/workflow/categories/{$categoryId}/toggle")->assertOk();
@@ -182,7 +182,7 @@ class WorkflowCategoryTest extends TestCase
         // ویرایشِ نام، بدونِ تغییرِ CategoryID — نباید رد شود
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
             'definitionId' => (int) $def->DefinitionID,
-            'code'         => $code,
+            'latinName'         => $code,
             'name'         => 'نامِ تغییریافته',
             'entityType'   => 'MESSAGE',
             'categoryId'   => $categoryId,
@@ -195,7 +195,7 @@ class WorkflowCategoryTest extends TestCase
     {
         $categoryId = $this->createCategory();
         $def = $this->defs->save([
-            'code' => $this->uniqueCode('TGLDEF'), 'name' => 'تستِ Toggle', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('TGLDEF'), 'name' => 'تستِ تغییرِ وضعیت', 'entityType' => 'MESSAGE',
             'categoryId' => $categoryId, 'isActive' => 1,
         ], self::USER_FULL);
 
@@ -213,8 +213,8 @@ class WorkflowCategoryTest extends TestCase
         $catA = $this->createCategory();
         $catB = $this->createCategory();
 
-        $defA = $this->defs->save(['code' => $this->uniqueCode('FILT_A'), 'name' => 'الف', 'entityType' => 'MESSAGE', 'categoryId' => $catA], self::USER_FULL);
-        $this->defs->save(['code' => $this->uniqueCode('FILT_B'), 'name' => 'ب', 'entityType' => 'MESSAGE', 'categoryId' => $catB], self::USER_FULL);
+        $defA = $this->defs->save(['latinName' => $this->uniqueCode('FILT_A'), 'name' => 'الف', 'entityType' => 'MESSAGE', 'categoryId' => $catA], self::USER_FULL);
+        $this->defs->save(['latinName' => $this->uniqueCode('FILT_B'), 'name' => 'ب', 'entityType' => 'MESSAGE', 'categoryId' => $catB], self::USER_FULL);
 
         $res = $this->as(self::USER_FULL)->getJson('/workflow/definitions?categoryId=' . $catA);
         $res->assertOk();
@@ -227,7 +227,7 @@ class WorkflowCategoryTest extends TestCase
     public function test_definition_show_includes_category_name(): void
     {
         $categoryId = $this->createCategory();
-        $def = $this->defs->save(['code' => $this->uniqueCode('SHOWCAT'), 'name' => 'تستِ نمایش', 'entityType' => 'MESSAGE', 'categoryId' => $categoryId], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $this->uniqueCode('SHOWCAT'), 'name' => 'تستِ نمایش', 'entityType' => 'MESSAGE', 'categoryId' => $categoryId], self::USER_FULL);
 
         $shown = $this->defs->show((int) $def->DefinitionID)['definition'];
         $this->assertSame('دستهٔ تست', $shown->CategoryName);
@@ -236,7 +236,7 @@ class WorkflowCategoryTest extends TestCase
     public function test_version_meta_includes_category_name(): void
     {
         $categoryId = $this->createCategory();
-        $def = $this->defs->save(['code' => $this->uniqueCode('VERMETA'), 'name' => 'تستِ Meta', 'entityType' => 'MESSAGE', 'categoryId' => $categoryId], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $this->uniqueCode('VERMETA'), 'name' => 'تستِ ابرداده', 'entityType' => 'MESSAGE', 'categoryId' => $categoryId], self::USER_FULL);
         $version = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
 
         $graph = $this->defs->getGraph((int) $version->VersionID);
@@ -245,7 +245,7 @@ class WorkflowCategoryTest extends TestCase
 
     public function test_definition_without_category_is_still_valid(): void
     {
-        $def = $this->defs->save(['code' => $this->uniqueCode('NOCAT'), 'name' => 'بدونِ دسته', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $this->uniqueCode('NOCAT'), 'name' => 'بدونِ دسته', 'entityType' => 'MESSAGE'], self::USER_FULL);
 
         $shown = $this->defs->show((int) $def->DefinitionID)['definition'];
         $this->assertNull($shown->CategoryID);

@@ -69,7 +69,7 @@ class WorkflowLetterTemplateTest extends TestCase
     private function createDefinition(string $entityType, ?string $code = null): int
     {
         $code ??= $this->uniqueCode('WD');
-        $def = $this->defs->save(['code' => $code, 'name' => 'فرایندِ تست ' . $code, 'entityType' => $entityType], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'فرایندِ تست ' . $code, 'entityType' => $entityType], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
 
         $ver = $this->defs->createDraft($definitionId, self::USER_FULL);

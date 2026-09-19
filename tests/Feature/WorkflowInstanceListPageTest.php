@@ -44,7 +44,7 @@ class WorkflowInstanceListPageTest extends TestCase
     private function publishSimpleFlow(): array
     {
         $code = 'LIST_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ لیست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تستِ لیست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [

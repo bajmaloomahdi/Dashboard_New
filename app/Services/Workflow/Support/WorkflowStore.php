@@ -52,6 +52,12 @@ class WorkflowStore
         return ['definition' => $def[0] ?? null, 'versions' => $versions];
     }
 
+    /** لوکاپِ سبک برایِ چکِ Uniquenessِ Code در سمتِ PHP، قبل از فراخوانیِ SP (هم‌الگو با getEntityTypeByCode). */
+    public function getDefinitionByCode(string $code): ?object
+    {
+        return DB::selectOne('SELECT TOP 1 * FROM dbo.WorkflowDefinitions WHERE Code = ?', [$code]);
+    }
+
     public function saveDefinition(array $p): object
     {
         return $this->write(

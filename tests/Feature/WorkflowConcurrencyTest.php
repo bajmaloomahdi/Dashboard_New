@@ -60,7 +60,7 @@ class WorkflowConcurrencyTest extends TestCase
     {
         $code ??= 'CONC_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['code' => $code, 'name' => 'همزمانی ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'همزمانی ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_A);
         $versionId = (int) $ver->VersionID;

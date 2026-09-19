@@ -62,8 +62,10 @@ class WorkflowDefinitionController extends WorkflowApiController
 
         $validated = $request->validate([
             'definitionId' => 'nullable|integer|exists:WorkflowDefinitions,DefinitionID',
-            'code'         => 'required|string|max:64',
+            // Code هرگز از کلاینت گرفته نمی‌شود — Service آن را از name/latinName می‌سازد؛
+            // latinName فقط وقتی لازم است که name حرفِ لاتینِ کافی نداشته باشد.
             'name'         => 'required|string|max:200',
+            'latinName'    => 'nullable|string|max:50',
             'description'  => 'nullable|string|max:1000',
             'entityType'   => 'required|string|max:64',
             'isActive'     => 'nullable|boolean',
@@ -73,8 +75,8 @@ class WorkflowDefinitionController extends WorkflowApiController
         return $this->runWorkflow(function () use ($validated) {
             $res = $this->defs->save([
                 'definitionId' => $validated['definitionId'] ?? null,
-                'code'         => $validated['code'],
                 'name'         => $validated['name'],
+                'latinName'    => $validated['latinName'] ?? null,
                 'description'  => $validated['description'] ?? null,
                 'entityType'   => $validated['entityType'],
                 'isActive'     => (int) ($validated['isActive'] ?? 1),
@@ -82,8 +84,9 @@ class WorkflowDefinitionController extends WorkflowApiController
             ], $this->actorId());
 
             return [
-                'message'      => $res->Message ?? 'فرایند ذخیره شد.',
+                'message'      => ($res->Message ?? 'فرایند ذخیره شد.') . " (Code: {$res->Code})",
                 'definitionId' => (int) $res->DefinitionID,
+                'code'         => $res->Code,
             ];
         });
     }
@@ -110,7 +113,6 @@ class WorkflowDefinitionController extends WorkflowApiController
 
             $res = $this->defs->save([
                 'definitionId' => $definitionId,
-                'code'         => $current->Code,
                 'name'         => $current->Name,
                 'description'  => $current->Description,
                 'entityType'   => $current->EntityType,

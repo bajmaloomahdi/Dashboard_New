@@ -37,7 +37,7 @@ class WorkflowVersionPageTest extends TestCase
     private function createDraftVersion(): int
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ Version', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تستِ نسخه', 'entityType' => 'MESSAGE'], self::USER_FULL);
         $version = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
 
         return (int) $version->VersionID;

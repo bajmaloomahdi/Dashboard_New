@@ -174,7 +174,7 @@ class WorkflowEntityTypeTest extends TestCase
     {
         $code = $this->uniqueCode('MSGREG');
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'رگرسیونِ پیام', 'entityType' => 'MESSAGE',
+            'latinName' => $code, 'name' => 'رگرسیونِ پیام', 'entityType' => 'MESSAGE',
         ])->assertOk()->json();
 
         $this->assertTrue($res['success']);
@@ -185,7 +185,7 @@ class WorkflowEntityTypeTest extends TestCase
     {
         $code = $this->uniqueCode('PRJREG');
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'رگرسیونِ پروژه', 'entityType' => 'PROJECT',
+            'latinName' => $code, 'name' => 'رگرسیونِ پروژه', 'entityType' => 'PROJECT',
         ])->assertOk()->json();
 
         $this->assertTrue($res['success']);
@@ -218,7 +218,7 @@ class WorkflowEntityTypeTest extends TestCase
 
         // و در سطحِ Backendِ ساختِ Definition هم رد شود
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $this->uniqueCode('INACTIVE_ENTITY'), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
+            'latinName' => $this->uniqueCode('INACTIVE_ENTITY'), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(422)->assertJson(['success' => false]);
     }
 
@@ -245,7 +245,7 @@ class WorkflowEntityTypeTest extends TestCase
 
         // و ساختِ Definition با این Code هم رد می‌شود
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $this->uniqueCode('NORESOLVER_DEF'), 'name' => 'ن', 'entityType' => $code,
+            'latinName' => $this->uniqueCode('NORESOLVER_DEF'), 'name' => 'ن', 'entityType' => $code,
         ])->assertStatus(422)->assertJson(['success' => false]);
     }
 
@@ -256,7 +256,7 @@ class WorkflowEntityTypeTest extends TestCase
     public function test_definition_with_completely_unknown_entity_type_is_rejected(): void
     {
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $this->uniqueCode('UNKNOWN'), 'name' => 'ن', 'entityType' => 'TOTALLY_UNKNOWN_ENTITY',
+            'latinName' => $this->uniqueCode('UNKNOWN'), 'name' => 'ن', 'entityType' => 'TOTALLY_UNKNOWN_ENTITY',
         ])->assertStatus(422)->assertJson(['success' => false]);
     }
 
@@ -274,7 +274,7 @@ class WorkflowEntityTypeTest extends TestCase
 
         // یک Definitionِ فعال برایِ اطمینان می‌سازیم
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $this->uniqueCode('BLOCKTGL'), 'name' => 'ن', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('BLOCKTGL'), 'name' => 'ن', 'entityType' => 'MESSAGE',
         ])->assertOk();
 
         $this->as(self::USER_FULL)->postJson("/workflow/entity-types/{$messageRow['EntityTypeID']}/toggle")

@@ -46,7 +46,7 @@ class WorkflowInstancePageTest extends TestCase
     private function startSimpleInstance(int $entityId): int
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -100,7 +100,7 @@ class WorkflowInstancePageTest extends TestCase
     public function test_instance_page_exposes_required_approvals_value_for_n_of_m_step(): void
     {
         $code = 'PAGE_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'صفحهٔ تستِ N_OF_M', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تستِ چندنفره', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [

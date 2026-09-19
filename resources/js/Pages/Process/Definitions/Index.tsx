@@ -13,12 +13,12 @@ import {
     BranchesOutlined,
     PlayCircleOutlined,
     TagsOutlined,
+    UserOutlined,
+    CalendarOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
-import type { ColumnsType } from 'antd/es/table';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
-import DataGrid from '../../../Components/DataGrid';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DefinitionFormModal from './DefinitionFormModal';
 import CategoryManagerModal, { type WorkflowCategory } from './CategoryManagerModal';
@@ -27,7 +27,7 @@ import { THEME, STYLES } from '../../../theme';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import { toBool } from '../../../Utils/bool';
 
-const { Text } = Typography;
+const { Title, Text } = Typography;
 
 interface Definition {
     DefinitionID: number;
@@ -43,6 +43,23 @@ interface Definition {
     VersionCount: number;
     ActiveVersionNo: number | null;
     InstanceCount: number;
+}
+
+/**
+ * وضعیتِ نسخه از خودِ وضعیتِ فرایند (IsActive) کاملاً جداست — یکی نیست. IsActive
+ * فقط یعنی «آیا Startِ نمونهٔ جدید مجاز است»؛ این‌جا فقط بر اساسِ VersionCount/
+ * ActiveVersionNoِ موجود می‌گوییم که آیا این فرایند اصلاً نسخهٔ منتشرشده‌ای دارد یا نه
+ * (تفکیکِ دقیقِ «پیش‌نویس» از «فقط بایگانی‌شده» به فیلدِ دیگری از Backend نیاز دارد
+ * که فعلاً برگردانده نمی‌شود).
+ */
+function versionStatusLabel(def: Definition): { text: string; color: string } {
+    if (def.ActiveVersionNo) {
+        return { text: `منتشرشده: v${def.ActiveVersionNo}`, color: 'blue' };
+    }
+    if (def.VersionCount > 0) {
+        return { text: 'بدونِ نسخهٔ منتشرشده', color: 'gold' };
+    }
+    return { text: 'بدونِ نسخه', color: 'default' };
 }
 
 export default function ProcessDefinitionsIndex() {
@@ -164,136 +181,6 @@ export default function ProcessDefinitionsIndex() {
         router.reload({ only: ['definitions'] });
     };
 
-    const customColumns: ColumnsType<Definition> = [
-        {
-            title: 'کد',
-            dataIndex: 'Code',
-            key: 'Code',
-            width: 160,
-            align: 'center',
-            render: (code: string) => <span style={STYLES.codeBadge}>{code}</span>,
-        },
-        {
-            title: 'نام',
-            key: 'name',
-            align: 'center',
-            render: (_, record) => (
-                <div style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 200, textAlign: 'right' }}>
-                    <Text strong style={{ color: THEME.textPrimary }}>{record.Name}</Text>
-                    {record.Description ? <Text type="secondary" style={{ fontSize: 11 }}>{record.Description}</Text> : null}
-                </div>
-            ),
-        },
-        {
-            title: 'دسته‌بندی',
-            key: 'category',
-            width: 130,
-            align: 'center',
-            render: (_, record) =>
-                record.CategoryName ? (
-                    <Tag color="geekblue" style={{ borderRadius: 6 }}>{record.CategoryName}</Tag>
-                ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>بدونِ دسته</Text>
-                ),
-        },
-        {
-            title: 'نوعِ موجودیت',
-            dataIndex: 'EntityType',
-            key: 'EntityType',
-            width: 140,
-            align: 'center',
-            render: (v: string) => <Tag color="purple" style={{ borderRadius: 6 }}>{v}</Tag>,
-        },
-        {
-            title: 'نسخه‌ها',
-            key: 'versions',
-            width: 130,
-            align: 'center',
-            render: (_, record) => (
-                <Tooltip title="تعدادِ کلِ نسخه‌ها / شمارهٔ نسخهٔ فعال">
-                    <Tag icon={<BranchesOutlined />} color="blue" style={{ borderRadius: 6 }}>
-                        {record.VersionCount} {record.ActiveVersionNo ? `(فعال: v${record.ActiveVersionNo})` : '(بدونِ نسخهٔ فعال)'}
-                    </Tag>
-                </Tooltip>
-            ),
-        },
-        {
-            title: 'نمونه‌ها',
-            dataIndex: 'InstanceCount',
-            key: 'InstanceCount',
-            width: 100,
-            align: 'center',
-            render: (count: number) => (
-                <Tag icon={<PlayCircleOutlined />} color={count > 0 ? 'green' : 'default'} style={{ borderRadius: 6 }}>
-                    {count}
-                </Tag>
-            ),
-        },
-        {
-            title: 'وضعیت',
-            key: 'status',
-            width: 110,
-            align: 'center',
-            render: (_, record) => {
-                const isActive = toBool(record.IsActive);
-                return (
-                    <Tag icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />} color={isActive ? 'success' : 'default'} style={{ borderRadius: 6 }}>
-                        {isActive ? 'فعال' : 'غیرفعال'}
-                    </Tag>
-                );
-            },
-        },
-        {
-            title: 'تاریخِ ایجاد',
-            dataIndex: 'Date_InsertFirst',
-            key: 'Date_InsertFirst',
-            width: 120,
-            align: 'center',
-            render: (v: string) => <Text style={{ fontSize: 12 }}>{gregorianToJalaliDisplay(v)}</Text>,
-        },
-        {
-            title: 'عملیات',
-            key: 'actions',
-            width: 140,
-            align: 'center',
-            fixed: 'left',
-            render: (_, record) => {
-                const isActive = toBool(record.IsActive);
-                return (
-                    <Space>
-                        <Tooltip title="باز کردن">
-                            <Button type="text" icon={<EyeOutlined />} style={{ color: THEME.primary }} onClick={() => router.visit(`/process/definitions/${record.DefinitionID}/open`)} />
-                        </Tooltip>
-                        {canDesign && (
-                            <>
-                                <Tooltip title="ویرایش">
-                                    <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => handleEdit(record)} />
-                                </Tooltip>
-                                <Popconfirm
-                                    title={isActive ? 'غیرفعال‌کردنِ فرایند' : 'فعال‌کردنِ فرایند'}
-                                    description={isActive ? 'پس از غیرفعال‌شدن، Startِ نمونهٔ جدید برایِ این فرایند ممکن نخواهد بود؛ نمونه‌هایِ در‌حالِ‌اجرا تحتِ تأثیر قرار نمی‌گیرند.' : 'آیا مطمئن هستید؟'}
-                                    onConfirm={() => handleToggle(record)}
-                                    okText="بله"
-                                    cancelText="خیر"
-                                    okButtonProps={{ danger: isActive }}
-                                >
-                                    <Tooltip title={isActive ? 'غیرفعال کردن' : 'فعال کردن'}>
-                                        <Button
-                                            type="text"
-                                            icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
-                                            loading={togglingId === record.DefinitionID}
-                                            style={{ color: isActive ? THEME.error : THEME.success }}
-                                        />
-                                    </Tooltip>
-                                </Popconfirm>
-                            </>
-                        )}
-                    </Space>
-                );
-            },
-        },
-    ];
-
     const totalCount = definitions?.length || 0;
     const activeCount = definitions?.filter((d) => toBool(d.IsActive)).length || 0;
     const runningInstances = definitions?.reduce((sum, d) => sum + (d.InstanceCount || 0), 0) || 0;
@@ -372,18 +259,171 @@ export default function ProcessDefinitionsIndex() {
                 </Row>
             </Card>
 
-            <Card style={STYLES.card}>
-                <DataGrid
-                    columns={[]}
-                    dataSource={definitions}
-                    loading={searching}
-                    customColumns={customColumns}
-                    rowKey="DefinitionID"
-                    showColumnSearch={false}
-                    showRowNumber={false}
-                    pageSize={15}
-                />
+            <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
+                {searching ? (
+                    <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>
+                        <LoadingOutlined style={{ fontSize: 20, color: THEME.primary }} />
+                    </div>
+                ) : (definitions || []).length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>
+                        هیچ فرایندی یافت نشد
+                    </div>
+                ) : (
+                    <div className="definition-cards-grid">
+                        {(definitions || []).map((def) => {
+                            const isActive = toBool(def.IsActive);
+                            const vStatus = versionStatusLabel(def);
+                            return (
+                                <div
+                                    className="definition-card"
+                                    key={def.DefinitionID}
+                                    onClick={() => router.visit(`/process/definitions/${def.DefinitionID}/open`)}
+                                >
+                                    <div className="definition-card-header">
+                                        <span style={STYLES.codeBadge}>{def.Code}</span>
+                                        <Space size={4}>
+                                            <Tag
+                                                icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />}
+                                                color={isActive ? 'success' : 'default'}
+                                                style={{ borderRadius: 6, margin: 0 }}
+                                            >
+                                                {isActive ? 'فعال' : 'غیرفعال'}
+                                            </Tag>
+                                        </Space>
+                                    </div>
+
+                                    <Title level={5} style={{ margin: '10px 0 4px', color: THEME.textPrimary }}>
+                                        <ApartmentOutlined style={{ marginLeft: 6, color: THEME.primary }} />
+                                        {def.Name}
+                                    </Title>
+
+                                    {def.Description ? (
+                                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 10 }}>
+                                            {def.Description.length > 80 ? def.Description.substring(0, 80) + '...' : def.Description}
+                                        </Text>
+                                    ) : (
+                                        <div style={{ marginBottom: 10 }} />
+                                    )}
+
+                                    <Space size={6} wrap style={{ marginBottom: 12 }}>
+                                        <Tag color={vStatus.color} style={{ borderRadius: 6, margin: 0 }}>
+                                            {vStatus.text}
+                                        </Tag>
+                                        {def.CategoryName ? (
+                                            <Tag color="geekblue" style={{ borderRadius: 6, margin: 0 }}>{def.CategoryName}</Tag>
+                                        ) : null}
+                                        <Tag color="purple" style={{ borderRadius: 6, margin: 0 }}>{def.EntityType}</Tag>
+                                    </Space>
+
+                                    <div className="definition-card-meta">
+                                        <Space size={6}>
+                                            <BranchesOutlined style={{ color: '#2563EB' }} />
+                                            <Text style={{ fontSize: 12 }}>{def.VersionCount} نسخه</Text>
+                                        </Space>
+                                        <Space size={6}>
+                                            <PlayCircleOutlined style={{ color: def.InstanceCount > 0 ? '#16A34A' : THEME.textLight }} />
+                                            <Text style={{ fontSize: 12 }}>{def.InstanceCount} نمونه</Text>
+                                        </Space>
+                                    </div>
+
+                                    <div className="definition-card-meta">
+                                        <Space size={6}>
+                                            <UserOutlined style={{ color: THEME.textLight }} />
+                                            <Text type="secondary" style={{ fontSize: 12 }}>{def.CreatedByName || '—'}</Text>
+                                        </Space>
+                                        <Space size={6}>
+                                            <CalendarOutlined style={{ color: THEME.textLight }} />
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                {def.Date_InsertFirst ? gregorianToJalaliDisplay(def.Date_InsertFirst) : '—'}
+                                            </Text>
+                                        </Space>
+                                    </div>
+
+                                    <div className="definition-card-actions" onClick={(e) => e.stopPropagation()}>
+                                        <Tooltip title="باز کردن">
+                                            <Button
+                                                type="text"
+                                                icon={<EyeOutlined />}
+                                                style={{ color: THEME.primary }}
+                                                onClick={() => router.visit(`/process/definitions/${def.DefinitionID}/open`)}
+                                            />
+                                        </Tooltip>
+                                        {canDesign && (
+                                            <>
+                                                <Tooltip title="ویرایش">
+                                                    <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => handleEdit(def)} />
+                                                </Tooltip>
+                                                <Popconfirm
+                                                    title={isActive ? 'غیرفعال‌کردنِ فرایند' : 'فعال‌کردنِ فرایند'}
+                                                    description={isActive ? 'پس از غیرفعال‌شدن، Startِ نمونهٔ جدید برایِ این فرایند ممکن نخواهد بود؛ نمونه‌هایِ در‌حالِ‌اجرا تحتِ تأثیر قرار نمی‌گیرند.' : 'آیا مطمئن هستید؟'}
+                                                    onConfirm={() => handleToggle(def)}
+                                                    okText="بله"
+                                                    cancelText="خیر"
+                                                    okButtonProps={{ danger: isActive }}
+                                                >
+                                                    <Tooltip title={isActive ? 'غیرفعال کردن' : 'فعال کردن'}>
+                                                        <Button
+                                                            type="text"
+                                                            icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+                                                            loading={togglingId === def.DefinitionID}
+                                                            style={{ color: isActive ? THEME.error : THEME.success }}
+                                                        />
+                                                    </Tooltip>
+                                                </Popconfirm>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </Card>
+
+            <style>{`
+                .definition-cards-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 18px;
+                }
+                .definition-card {
+                    background: #fff;
+                    border: 1px solid ${THEME.border};
+                    border-inline-end-width: 5px;
+                    border-inline-end-style: solid;
+                    border-inline-end-color: transparent;
+                    border-radius: 14px;
+                    padding: 16px;
+                    cursor: pointer;
+                    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+                }
+                .definition-card:hover {
+                    transform: translateY(-8px) scale(1.02);
+                    box-shadow: 0 16px 32px rgba(102, 126, 234, 0.22);
+                    border-color: ${THEME.borderPrimary};
+                }
+                .definition-card-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .definition-card-meta {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding-top: 8px;
+                    border-top: 1px dashed ${THEME.borderLight};
+                    margin-top: 6px;
+                }
+                .definition-card-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 2px;
+                    margin-top: 10px;
+                    padding-top: 8px;
+                    border-top: 1px solid ${THEME.borderLight};
+                }
+            `}</style>
 
             <DefinitionFormModal
                 open={modalOpen}

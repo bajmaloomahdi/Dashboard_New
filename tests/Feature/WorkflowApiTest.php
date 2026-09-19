@@ -77,7 +77,7 @@ class WorkflowApiTest extends TestCase
     ): array {
         $code ??= 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['code' => $code, 'name' => 'API ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_FULL);
         $versionId = (int) $ver->VersionID;
@@ -190,7 +190,7 @@ class WorkflowApiTest extends TestCase
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $defRes = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'فرایندِ API', 'entityType' => 'TEST_ENTITY',
+            'latinName' => $code, 'name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
 
         $definitionId = $defRes['definitionId'];
@@ -216,7 +216,7 @@ class WorkflowApiTest extends TestCase
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'TEST_ENTITY',
+            'latinName' => $code, 'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
 
         $definitionId = $res['definitionId'];
@@ -231,13 +231,13 @@ class WorkflowApiTest extends TestCase
     {
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $code, 'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'TEST_ENTITY', 'isActive' => true,
+            'latinName' => $code, 'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'TEST_ENTITY', 'isActive' => true,
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
 
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
             'definitionId' => $definitionId,
-            'code'         => $code, // کد ثابت می‌ماند
+            'latinName'         => $code, // کد ثابت می‌ماند
             'name'         => 'نامِ ویرایش‌شده',
             'description'  => 'توضیحِ ویرایش‌شده',
             'entityType'   => 'PROJECT',
@@ -253,39 +253,49 @@ class WorkflowApiTest extends TestCase
         $this->assertSame($code, $shown['definition']['Code']);
     }
 
-    public function test_update_definition_with_duplicate_code_is_422(): void
+    /**
+     * ساده‌سازیِ UX (دورِ Code): Code پس از ایجاد کاملاً Immutable است — Service حتی
+     * تلاش نمی‌کند مقدارِ ارسالی از کلاینت را برایِ Code در ویرایش بخواند، پس هیچ
+     * تغییری رخ نمی‌دهد و خطایی هم صادر نمی‌شود (نه ردِ صریح، فقط بی‌اثر ماندنِ Code).
+     */
+    public function test_update_definition_never_changes_code_even_if_client_sends_a_different_one(): void
     {
         $codeA = 'API_' . strtoupper(bin2hex(random_bytes(4)));
         $codeB = 'API_' . strtoupper(bin2hex(random_bytes(4)));
 
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $codeA, 'name' => 'اول', 'entityType' => 'TEST_ENTITY',
+            'latinName' => $codeA, 'name' => 'اول', 'entityType' => 'TEST_ENTITY',
         ])->assertOk();
         $defB = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => $codeB, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
+            'latinName' => $codeB, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
-        // تلاش برایِ تغییرِ کدِ B به همان کدِ A ⇒ رد (همان قاعدهٔ sp_Wf_SaveDefinition)
-        $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'definitionId' => $defB['definitionId'], 'code' => $codeA, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
-        ])->assertStatus(422)->assertJson(['success' => false]);
+        // تلاش برایِ تغییرِ کدِ B به همان کدِ A — بدونِ خطا، ولی Code واقعاً دست‌نخورده می‌ماند.
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
+            'definitionId' => $defB['definitionId'], 'latinName' => $codeA, 'name' => 'دومِ ویرایش‌شده', 'entityType' => 'TEST_ENTITY',
+        ])->assertOk()->json();
+        $this->assertSame($codeB, $res['code']);
+
+        $shown = $this->as(self::USER_FULL)->getJson("/workflow/definitions/{$defB['definitionId']}")->assertOk()->json();
+        $this->assertSame($codeB, $shown['definition']['Code']);
+        $this->assertSame('دومِ ویرایش‌شده', $shown['definition']['Name']);
     }
 
     public function test_update_definition_with_invalid_definition_id_is_422(): void
     {
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'definitionId' => 999999, 'code' => 'API_X', 'name' => 'X', 'entityType' => 'TEST_ENTITY',
+            'definitionId' => 999999, 'latinName' => 'API_X', 'name' => 'X', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(422);
     }
 
     public function test_update_definition_without_permission_is_403(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
+            'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
         $this->as(self::USER_NOPERM)->postJson('/workflow/definitions', [
-            'definitionId' => $created['definitionId'], 'code' => 'API_X2', 'name' => 'تغییرِ غیرمجاز', 'entityType' => 'TEST_ENTITY',
+            'definitionId' => $created['definitionId'], 'latinName' => 'API_X2', 'name' => 'تغییرِ غیرمجاز', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(403);
     }
 
@@ -294,7 +304,7 @@ class WorkflowApiTest extends TestCase
     public function test_toggle_definition_active_flips_state(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ت', 'entityType' => 'TEST_ENTITY',
+            'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ت', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
 
@@ -315,7 +325,7 @@ class WorkflowApiTest extends TestCase
     public function test_toggle_definition_preserves_other_fields(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'حفظِ فیلدها', 'description' => 'توضیح', 'entityType' => 'PROJECT',
+            'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'حفظِ فیلدها', 'description' => 'توضیح', 'entityType' => 'PROJECT',
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
 
@@ -330,7 +340,7 @@ class WorkflowApiTest extends TestCase
     public function test_toggle_definition_without_permission_is_403(): void
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'code' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
+            'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
         $this->as(self::USER_NOPERM)
@@ -1045,7 +1055,7 @@ class WorkflowApiTest extends TestCase
     private function buildDraft(bool $withEnd = false): array
     {
         $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['code' => $code, 'name' => 'D ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['latinName' => $code, 'name' => 'فرایندِ پیش‌نویس', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $versionId = (int) $this->defs->createDraft($definitionId, self::USER_FULL)->VersionID;
 

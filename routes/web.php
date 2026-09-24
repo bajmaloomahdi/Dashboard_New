@@ -21,6 +21,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\Crm\CrmAddressController;
+use App\Http\Controllers\Crm\CrmBrandController;
+use App\Http\Controllers\Crm\CrmClassificationController;
+use App\Http\Controllers\Crm\CrmContactController;
+use App\Http\Controllers\Crm\CrmDirectoryController;
+use App\Http\Controllers\Crm\CrmGeographyController;
+use App\Http\Controllers\Crm\CrmPartyController;
+use App\Http\Controllers\Crm\CrmPersonController;
 use App\Http\Controllers\MsgPriorityController;
 use App\Http\Controllers\ProjectsController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
@@ -342,6 +350,102 @@ Route::middleware('auth')->group(function () {
         Route::get('entity-types', [ProcessEntityTypeController::class, 'index'])->name('entity-types.index');
         Route::get('template-parameters', [ProcessTemplateParameterController::class, 'index'])->name('template-parameters.index');
         Route::get('templates', [ProcessLetterTemplateController::class, 'index'])->name('templates.index');
+    });
+
+    // ───────────────────────── CRM — Master Data (فازِ ۱) ─────────────────────────
+    Route::prefix('crm')->name('crm.')->group(function () {
+        Route::get('classification', [CrmClassificationController::class, 'page'])->name('classification.page');
+        Route::get('classification/departments', [CrmClassificationController::class, 'departmentsIndex'])->name('classification.departments.index');
+        Route::post('classification/departments', [CrmClassificationController::class, 'departmentsStore'])->name('classification.departments.store');
+        Route::post('classification/departments/{departmentId}/toggle', [CrmClassificationController::class, 'departmentsToggle'])
+            ->whereNumber('departmentId')->name('classification.departments.toggle');
+        Route::get('classification/party-types', [CrmClassificationController::class, 'partyTypesIndex'])->name('classification.party-types.index');
+        Route::post('classification/party-types', [CrmClassificationController::class, 'partyTypesStore'])->name('classification.party-types.store');
+        Route::post('classification/party-types/{partyTypeId}/toggle', [CrmClassificationController::class, 'partyTypesToggle'])
+            ->whereNumber('partyTypeId')->name('classification.party-types.toggle');
+        Route::get('classification/activities', [CrmClassificationController::class, 'activitiesIndex'])->name('classification.activities.index');
+        Route::post('classification/activities', [CrmClassificationController::class, 'activitiesStore'])->name('classification.activities.store');
+        Route::post('classification/activities/{activityId}/toggle', [CrmClassificationController::class, 'activitiesToggle'])
+            ->whereNumber('activityId')->name('classification.activities.toggle');
+
+        Route::get('geography', [CrmGeographyController::class, 'page'])->name('geography.page');
+        Route::get('geography/provinces', [CrmGeographyController::class, 'provincesIndex'])->name('geography.provinces.index');
+        Route::post('geography/provinces', [CrmGeographyController::class, 'provincesStore'])->name('geography.provinces.store');
+        Route::post('geography/provinces/{provinceId}/toggle', [CrmGeographyController::class, 'provincesToggle'])
+            ->whereNumber('provinceId')->name('geography.provinces.toggle');
+        Route::get('geography/cities', [CrmGeographyController::class, 'citiesIndex'])->name('geography.cities.index');
+        Route::post('geography/cities', [CrmGeographyController::class, 'citiesStore'])->name('geography.cities.store');
+        Route::post('geography/cities/{cityId}/toggle', [CrmGeographyController::class, 'citiesToggle'])
+            ->whereNumber('cityId')->name('geography.cities.toggle');
+        Route::get('geography/counties', [CrmGeographyController::class, 'countiesIndex'])->name('geography.counties.index');
+        Route::post('geography/counties', [CrmGeographyController::class, 'countiesStore'])->name('geography.counties.store');
+        Route::post('geography/counties/{countyId}/toggle', [CrmGeographyController::class, 'countiesToggle'])
+            ->whereNumber('countyId')->name('geography.counties.toggle');
+        Route::get('geography/municipal-zones', [CrmGeographyController::class, 'municipalZonesIndex'])->name('geography.municipal-zones.index');
+        Route::post('geography/municipal-zones', [CrmGeographyController::class, 'municipalZonesStore'])->name('geography.municipal-zones.store');
+        Route::post('geography/municipal-zones/{municipalZoneId}/toggle', [CrmGeographyController::class, 'municipalZonesToggle'])
+            ->whereNumber('municipalZoneId')->name('geography.municipal-zones.toggle');
+
+        Route::get('directory', [CrmDirectoryController::class, 'page'])->name('directory.page');
+        Route::get('directory/titles', [CrmDirectoryController::class, 'titlesIndex'])->name('directory.titles.index');
+        Route::post('directory/titles', [CrmDirectoryController::class, 'titlesStore'])->name('directory.titles.store');
+        Route::post('directory/titles/{titleId}/toggle', [CrmDirectoryController::class, 'titlesToggle'])
+            ->whereNumber('titleId')->name('directory.titles.toggle');
+        Route::get('directory/positions', [CrmDirectoryController::class, 'positionsIndex'])->name('directory.positions.index');
+        Route::post('directory/positions', [CrmDirectoryController::class, 'positionsStore'])->name('directory.positions.store');
+        Route::post('directory/positions/{positionId}/toggle', [CrmDirectoryController::class, 'positionsToggle'])
+            ->whereNumber('positionId')->name('directory.positions.toggle');
+        Route::get('directory/contact-roles', [CrmDirectoryController::class, 'contactRolesIndex'])->name('directory.contact-roles.index');
+        Route::post('directory/contact-roles', [CrmDirectoryController::class, 'contactRolesStore'])->name('directory.contact-roles.store');
+        Route::post('directory/contact-roles/{contactRoleId}/toggle', [CrmDirectoryController::class, 'contactRolesToggle'])
+            ->whereNumber('contactRoleId')->name('directory.contact-roles.toggle');
+        Route::get('directory/contact-types', [CrmDirectoryController::class, 'contactTypesIndex'])->name('directory.contact-types.index');
+        Route::post('directory/contact-types', [CrmDirectoryController::class, 'contactTypesStore'])->name('directory.contact-types.store');
+        Route::post('directory/contact-types/{contactTypeId}/toggle', [CrmDirectoryController::class, 'contactTypesToggle'])
+            ->whereNumber('contactTypeId')->name('directory.contact-types.toggle');
+        Route::get('directory/address-titles', [CrmDirectoryController::class, 'addressTitlesIndex'])->name('directory.address-titles.index');
+        Route::post('directory/address-titles', [CrmDirectoryController::class, 'addressTitlesStore'])->name('directory.address-titles.store');
+        Route::post('directory/address-titles/{addressTitleId}/toggle', [CrmDirectoryController::class, 'addressTitlesToggle'])
+            ->whereNumber('addressTitleId')->name('directory.address-titles.toggle');
+
+        // ───────────────── فازِ ۲: طرف‌حساب و موجودیت‌هایِ وابسته ─────────────────
+        Route::get('parties', [CrmPartyController::class, 'page'])->name('parties.page');
+        Route::get('parties-list', [CrmPartyController::class, 'index'])->name('parties.index');
+        Route::get('parties/{partyId}', [CrmPartyController::class, 'show'])->whereNumber('partyId')->name('parties.show');
+        Route::post('parties', [CrmPartyController::class, 'store'])->name('parties.store');
+        Route::post('parties/{partyId}/toggle', [CrmPartyController::class, 'toggleActive'])
+            ->whereNumber('partyId')->name('parties.toggle');
+
+        Route::get('brands', [CrmBrandController::class, 'index'])->name('brands.index'); // ?partyId=
+        Route::post('brands', [CrmBrandController::class, 'store'])->name('brands.store');
+        Route::post('brands/{brandId}/toggle', [CrmBrandController::class, 'toggleActive'])
+            ->whereNumber('brandId')->name('brands.toggle');
+
+        Route::get('addresses', [CrmAddressController::class, 'index'])->name('addresses.index'); // ?partyId=
+        Route::get('addresses/cities', [CrmAddressController::class, 'citiesByProvince'])->name('addresses.cities');
+        Route::get('addresses/counties', [CrmAddressController::class, 'countiesByCity'])->name('addresses.counties');
+        Route::post('addresses', [CrmAddressController::class, 'store'])->name('addresses.store');
+        Route::post('addresses/{addressId}/toggle', [CrmAddressController::class, 'toggleActive'])
+            ->whereNumber('addressId')->name('addresses.toggle');
+
+        Route::get('contacts', [CrmContactController::class, 'index'])->name('contacts.index'); // ?partyId=
+        Route::post('contacts', [CrmContactController::class, 'store'])->name('contacts.store');
+        Route::post('contacts/{contactId}/toggle', [CrmContactController::class, 'toggleActive'])
+            ->whereNumber('contactId')->name('contacts.toggle');
+
+        Route::get('persons-page', [CrmPersonController::class, 'page'])->name('persons.page');
+        Route::get('persons', [CrmPersonController::class, 'index'])->name('persons.index'); // ?search=
+        Route::get('persons/{personId}', [CrmPersonController::class, 'show'])->whereNumber('personId')->name('persons.show');
+        Route::post('persons', [CrmPersonController::class, 'store'])->name('persons.store');
+        Route::post('persons/{personId}/toggle', [CrmPersonController::class, 'toggleActive'])
+            ->whereNumber('personId')->name('persons.toggle');
+
+        Route::get('relations', [CrmPersonController::class, 'relationsIndex'])->name('relations.index'); // ?partyId=
+        Route::get('relations/{relationId}/roles', [CrmPersonController::class, 'relationRoles'])
+            ->whereNumber('relationId')->name('relations.roles');
+        Route::post('relations', [CrmPersonController::class, 'relationsStore'])->name('relations.store');
+        Route::post('relations/{relationId}/toggle', [CrmPersonController::class, 'relationsToggle'])
+            ->whereNumber('relationId')->name('relations.toggle');
     });
 
     // تنظیمات شرکت

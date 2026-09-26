@@ -56,6 +56,7 @@ class CrmPersonController extends CrmApiController
             'person' => $person,
             'contacts' => $this->parties->listContacts(null, $personId),
             'addresses' => $this->parties->listAddresses(null, $personId),
+            'relations' => $this->parties->listRelationsForPerson($personId),
             'addressTitles' => $this->masterData->listAddressTitles(null, true),
             'provinces' => $this->masterData->listProvinces(null, true),
             'contactTypes' => $this->masterData->listContactTypes(null, true),

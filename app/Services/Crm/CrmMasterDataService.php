@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm;
 
+use App\Services\Crm\Exceptions\CrmValidationException;
 use App\Services\Crm\Support\CrmStore;
 
 /**
@@ -216,18 +217,41 @@ class CrmMasterDataService
         return $this->store->toggleProvinceActive($provinceId, $userId);
     }
 
-    /* ---------- شهر (زیرمجموعهٔ استان) ---------- */
+    /* ---------- شهرستان (زیرمجموعهٔ استان) ---------- */
 
-    public function listCities(?int $provinceId = null, ?string $search = null, ?bool $isActive = null): array
+    public function listCounties(?int $provinceId = null, ?string $search = null, ?bool $isActive = null): array
     {
-        return $this->store->getCities($provinceId, $search, $isActive);
+        return $this->store->getCounties($provinceId, $search, $isActive);
+    }
+
+    public function saveCounty(array $input, int $userId): object
+    {
+        return $this->store->saveCounty([
+            'countyId'    => $input['countyId'] ?? null,
+            'provinceId'  => $input['provinceId'] ?? null,
+            'displayName' => trim($input['displayName'] ?? ''),
+            'sortOrder'   => $input['sortOrder'] ?? 0,
+            'userId'      => $userId,
+        ]);
+    }
+
+    public function toggleCountyActive(int $countyId, int $userId): object
+    {
+        return $this->store->toggleCountyActive($countyId, $userId);
+    }
+
+    /* ---------- شهر (زیرمجموعهٔ شهرستان) ---------- */
+
+    public function listCities(?int $countyId = null, ?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getCities($countyId, $search, $isActive);
     }
 
     public function saveCity(array $input, int $userId): object
     {
         return $this->store->saveCity([
             'cityId'      => $input['cityId'] ?? null,
-            'provinceId'  => $input['provinceId'] ?? null,
+            'countyId'    => $input['countyId'] ?? null,
             'displayName' => trim($input['displayName'] ?? ''),
             'sortOrder'   => $input['sortOrder'] ?? 0,
             'userId'      => $userId,
@@ -239,27 +263,27 @@ class CrmMasterDataService
         return $this->store->toggleCityActive($cityId, $userId);
     }
 
-    /* ---------- شهرستان (زیرمجموعهٔ شهر) ---------- */
+    /* ---------- محله (زیرمجموعهٔ شهر) ---------- */
 
-    public function listCounties(?int $cityId = null, ?string $search = null, ?bool $isActive = null): array
+    public function listNeighborhoods(?int $cityId = null, ?string $search = null, ?bool $isActive = null): array
     {
-        return $this->store->getCounties($cityId, $search, $isActive);
+        return $this->store->getNeighborhoods($cityId, $search, $isActive);
     }
 
-    public function saveCounty(array $input, int $userId): object
+    public function saveNeighborhood(array $input, int $userId): object
     {
-        return $this->store->saveCounty([
-            'countyId'    => $input['countyId'] ?? null,
-            'cityId'      => $input['cityId'] ?? null,
-            'displayName' => trim($input['displayName'] ?? ''),
-            'sortOrder'   => $input['sortOrder'] ?? 0,
-            'userId'      => $userId,
+        return $this->store->saveNeighborhood([
+            'neighborhoodId' => $input['neighborhoodId'] ?? null,
+            'cityId'         => $input['cityId'] ?? null,
+            'displayName'    => trim($input['displayName'] ?? ''),
+            'sortOrder'      => $input['sortOrder'] ?? 0,
+            'userId'         => $userId,
         ]);
     }
 
-    public function toggleCountyActive(int $countyId, int $userId): object
+    public function toggleNeighborhoodActive(int $neighborhoodId, int $userId): object
     {
-        return $this->store->toggleCountyActive($countyId, $userId);
+        return $this->store->toggleNeighborhoodActive($neighborhoodId, $userId);
     }
 
     /* ---------- منطقهٔ شهرداری ---------- */
@@ -282,5 +306,33 @@ class CrmMasterDataService
     public function toggleMunicipalZoneActive(int $municipalZoneId, int $userId): object
     {
         return $this->store->toggleMunicipalZoneActive($municipalZoneId, $userId);
+    }
+
+    /* ---------- دسته‌بندیِ محصولات (درختِ نامحدود؛ جلوگیری از حلقه در SP) ---------- */
+
+    public function listProductCategories(?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getProductCategories($search, $isActive);
+    }
+
+    public function saveProductCategory(array $input, int $userId): object
+    {
+        $displayName = trim($input['displayName'] ?? '');
+        if ($displayName === '') {
+            throw new CrmValidationException('نامِ دسته‌بندی الزامی است.');
+        }
+
+        return $this->store->saveProductCategory([
+            'productCategoryId' => $input['productCategoryId'] ?? null,
+            'parentCategoryId'  => $input['parentCategoryId'] ?? null,
+            'displayName'       => $displayName,
+            'sortOrder'         => $input['sortOrder'] ?? 0,
+            'userId'            => $userId,
+        ]);
+    }
+
+    public function toggleProductCategoryActive(int $productCategoryId, int $userId): object
+    {
+        return $this->store->toggleProductCategoryActive($productCategoryId, $userId);
     }
 }

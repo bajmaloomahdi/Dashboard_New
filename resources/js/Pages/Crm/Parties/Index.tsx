@@ -15,6 +15,7 @@ import {
     TagOutlined,
     EnvironmentOutlined,
     PhoneOutlined,
+    ApartmentOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../../Layouts/MainLayout';
@@ -35,6 +36,7 @@ interface PartyRow extends Party {
     ActiveBrandCount: number;
     ActiveAddressCount: number;
     ActiveContactCount: number;
+    ClassificationCount: number;
 }
 
 export default function CrmPartiesIndex() {
@@ -235,9 +237,11 @@ export default function CrmPartiesIndex() {
                                     ) : null}
 
                                     <Space size={6} wrap style={{ marginBottom: 12 }}>
-                                        {p.DepartmentName ? <Tag color="cyan" style={{ borderRadius: 6, margin: 0 }}>{p.DepartmentName}</Tag> : null}
-                                        {p.PartyTypeName ? <Tag color="gold" style={{ borderRadius: 6, margin: 0 }}><TagOutlined /> {p.PartyTypeName}</Tag> : null}
-                                        {p.ActivityName ? <Tag color="green" style={{ borderRadius: 6, margin: 0 }}>{p.ActivityName}</Tag> : null}
+                                        {Number(p.ClassificationCount) > 0 ? (
+                                            <Tag color="gold" style={{ borderRadius: 6, margin: 0 }}>
+                                                <ApartmentOutlined /> {p.ClassificationCount} دسته‌بندی
+                                            </Tag>
+                                        ) : null}
                                     </Space>
 
                                     <div className="party-card-meta">

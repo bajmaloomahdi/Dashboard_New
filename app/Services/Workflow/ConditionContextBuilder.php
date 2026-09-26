@@ -14,14 +14,25 @@ use App\Services\Workflow\Support\WorkflowStore;
  *   - خروجی با کلیدِ Code (نه SourceKey) ذخیره می‌شود — چون RuleJson و
  *     ConditionEvaluator بعداً با همین Code به Context مراجعه می‌کنند
  *
+ * از زمانِ Global Registryِ WorkflowConditionFields (فیلدها دیگر Definition-level
+ * نیستند)، «فیلدهایِ مرتبط با این Start» دیگر با یک Queryِ ساده روی DefinitionID
+ * معلوم نمی‌شود؛ به‌جایش دقیقاً همان Codeهایی که در RuleJsonِ Transitionهایِ همین
+ * Version ارجاع شده‌اند استخراج می‌شوند (با همان extractFieldCodes که Publish-time
+ * Validation هم استفاده می‌کند) و بعد در Registryِ سراسری Lookup می‌شوند —
+ * **صرف‌نظر از IsActive**، تا اجرایِ Versionِ منتشرشده هرگز با غیرفعال‌شدنِ بعدیِ
+ * یک فیلد خراب نشود (Field فقط برایِ ساختِ Ruleِ جدید باید فعال باشد، نه برایِ
+ * اجرایِ Ruleِ از‌قبل‌منتشرشده).
+ *
  * اگر حتی یک فیلد Cast نشود، کل عملیات با WorkflowValidationException متوقف
  * می‌شود — یعنی هیچ Instanceِ ناقصی هرگز ساخته نمی‌شود (فراخوان باید این را قبل
  * از DB::transaction صدا بزند).
  */
 class ConditionContextBuilder
 {
-    public function __construct(private WorkflowStore $store)
-    {
+    public function __construct(
+        private WorkflowStore $store,
+        private ConditionRuleValidator $ruleValidator,
+    ) {
     }
 
     /**
@@ -30,12 +41,16 @@ class ConditionContextBuilder
      *
      * @throws WorkflowValidationException  اگر Cast/Validateِ هر فیلدی شکست بخورد
      */
-    public function build(int $definitionId, array $rawContext): array
+    public function build(int $versionId, array $rawContext): array
     {
-        $fields = array_filter(
-            $this->store->getConditionFields($definitionId, includeInactive: false),
-            fn ($f) => $f->SourceType === 'START_CONTEXT'
-        );
+        $referencedCodes = $this->referencedFieldCodes($versionId);
+
+        $fields = $referencedCodes === []
+            ? []
+            : array_filter(
+                $this->store->getConditionFields(includeInactive: true),
+                fn ($f) => $f->SourceType === 'START_CONTEXT' && in_array($f->Code, $referencedCodes, true)
+            );
 
         $result = [];
         $errors = [];
@@ -68,7 +83,7 @@ class ConditionContextBuilder
         // اشتباه‌فرستاده‌شده باید همان زمانِ Start آشکار شود، نه بعداً به‌صورتِ یک
         // Ruleِ ساکتاً هیچ‌وقت TRUE‌نشونده.
         foreach (array_diff(array_keys($rawContext), $knownSourceKeys) as $unknownKey) {
-            $errors[] = "کلیدِ «{$unknownKey}» در Contextِ ارسالی به هیچ فیلدِ شرطِ فعالی (SourceType=START_CONTEXT) متناظر نیست.";
+            $errors[] = "کلیدِ «{$unknownKey}» در Contextِ ارسالی به هیچ فیلدِ شرطِ ارجاع‌شده در این نسخه (SourceType=START_CONTEXT) متناظر نیست.";
         }
 
         if ($errors !== []) {
@@ -76,5 +91,24 @@ class ConditionContextBuilder
         }
 
         return $result;
+    }
+
+    /** @return string[] Codeهایِ فیلدِ ارجاع‌شده در RuleJsonِ Transitionهایِ این Version (بدونِ نیاز به وجودِ Instance). */
+    private function referencedFieldCodes(int $versionId): array
+    {
+        $graph = $this->store->getVersionGraph($versionId);
+
+        $codes = [];
+        foreach ($graph['transitions'] as $t) {
+            if (empty($t->RuleJson)) {
+                continue;
+            }
+            $rule = json_decode((string) $t->RuleJson, true);
+            if (is_array($rule)) {
+                $codes = array_merge($codes, $this->ruleValidator->extractFieldCodes($rule));
+            }
+        }
+
+        return array_values(array_unique($codes));
     }
 }

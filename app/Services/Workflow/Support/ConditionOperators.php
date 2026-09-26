@@ -18,6 +18,7 @@ class ConditionOperators
         'INTEGER' => ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
         'DECIMAL' => ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
         'DATE'    => ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
+        'TIME'    => ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
         'BOOLEAN' => ['IS_TRUE', 'IS_FALSE'],
         'STRING'  => ['EQ', 'NE', 'CONTAINS', 'IS_EMPTY', 'IS_NOT_EMPTY'],
         'SELECT'  => ['EQ', 'NE', 'IN', 'NOT_IN'],

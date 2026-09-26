@@ -2,23 +2,27 @@
 
 namespace App\Http\Controllers\Workflow;
 
-use App\Services\Workflow\WorkflowDefinitionService;
+use App\Services\Workflow\ConditionFieldService;
 use Illuminate\Http\Request;
 
 /**
- * فیلدهایِ شرط (WorkflowConditionFields) — Definition-level.
+ * فیلدهایِ شرط (WorkflowConditionFields) — Global Registry (Phase 2).
  *
- * مشاهده با WORKFLOW_VIEW (هم‌الگو با WorkflowCategoryController)؛ ایجاد/ویرایش/
- * فعال‌سازی با Permissionِ جداگانهٔ WORKFLOW_MANAGE_CONDITION_FIELDS.
+ * یک Field یک‌بار تعریف می‌شود و در RuleJsonِ هر تعداد Definition/Version قابلِ
+ * استفاده است — دیگر Definition-level نیست. ساختار عمداً هم‌الگو با
+ * WorkflowTemplateParameterController/TemplateParameterService.
+ *
+ * مشاهده با WORKFLOW_VIEW؛ ایجاد/ویرایش/فعال‌سازی با Permissionِ جداگانهٔ
+ * WORKFLOW_MANAGE_CONDITION_FIELDS (بدونِ تغییر).
  */
 class WorkflowConditionFieldController extends WorkflowApiController
 {
-    public function __construct(private WorkflowDefinitionService $defs)
+    public function __construct(private ConditionFieldService $conditionFields)
     {
     }
 
-    /** GET workflow/definitions/{definitionId}/condition-fields */
-    public function index(int $definitionId, Request $request)
+    /** GET workflow/condition-fields */
+    public function index(Request $request)
     {
         $this->authorizeWorkflow('WORKFLOW_VIEW');
 
@@ -27,39 +31,36 @@ class WorkflowConditionFieldController extends WorkflowApiController
         ]);
 
         return $this->runWorkflow(fn () => [
-            'items' => $this->defs->listConditionFields(
-                $definitionId,
-                (bool) ($validated['includeInactive'] ?? false)
-            ),
+            'items' => $this->conditionFields->list((bool) ($validated['includeInactive'] ?? false)),
         ]);
     }
 
-    /** POST workflow/definitions/{definitionId}/condition-fields — Upsert: بدونِ fieldId = ایجاد؛ با fieldId = ویرایش. */
-    public function store(int $definitionId, Request $request)
+    /** POST workflow/condition-fields — Upsert: بدونِ fieldId = ایجاد؛ با fieldId = ویرایش. */
+    public function store(Request $request)
     {
         $this->authorizeWorkflow('WORKFLOW_MANAGE_CONDITION_FIELDS');
 
         $validated = $request->validate([
             'fieldId'         => 'nullable|integer|exists:WorkflowConditionFields,FieldID',
-            'code'            => 'required|string|max:50',
+            // Code هرگز از کلاینت گرفته نمی‌شود — Service آن را از displayName/latinName
+            // می‌سازد؛ latinName فقط وقتی لازم است که displayName حرفِ لاتینِ کافی نداشته باشد.
+            // SourceType/SourceKey هم جزئیاتِ فنیِ صرفِ Backend‌اند و اینجا گرفته نمی‌شوند.
             'displayName'     => 'required|string|max:200',
+            'latinName'       => 'nullable|string|max:50',
             'dataType'        => 'required|string|max:20',
-            'sourceType'      => 'required|string|max:20',
-            'sourceKey'       => 'required|string|max:100',
             'allowedValues'   => 'nullable|array',
             'allowedValues.*' => 'string|max:200',
+            'description'     => 'nullable|string|max:500',
             'sortOrder'       => 'nullable|integer',
         ]);
 
-        return $this->runWorkflow(function () use ($definitionId, $validated) {
-            $res = $this->defs->saveConditionField(
-                array_merge($validated, ['definitionId' => $definitionId]),
-                $this->actorId()
-            );
+        return $this->runWorkflow(function () use ($validated) {
+            $res = $this->conditionFields->save($validated, $this->actorId());
 
             return [
-                'message' => $res->Message ?? 'فیلد ذخیره شد.',
+                'message' => ($res->Message ?? 'فیلد ذخیره شد.') . " (Code: {$res->Code})",
                 'fieldId' => (int) $res->FieldID,
+                'code'    => $res->Code,
             ];
         });
     }
@@ -70,9 +71,26 @@ class WorkflowConditionFieldController extends WorkflowApiController
         $this->authorizeWorkflow('WORKFLOW_MANAGE_CONDITION_FIELDS');
 
         return $this->runWorkflow(function () use ($fieldId) {
-            $res = $this->defs->toggleConditionFieldActive($fieldId, $this->actorId());
+            $res = $this->conditionFields->toggleActive($fieldId, $this->actorId());
 
             return ['message' => $res->Message ?? 'وضعیتِ فیلد تغییر کرد.'];
         });
+    }
+
+    /**
+     * سازگاریِ عقب‌رو با Designer UIِ موجود (ConditionFieldManagerModal.tsx) که هنوز
+     * روی مسیرِ قدیمیِ definitions/{definitionId}/condition-fields کار می‌کند —
+     * definitionId فقط در URL باقی می‌ماند و در منطق استفاده نمی‌شود، چون Registry
+     * دیگر Definition-level نیست. تغییرِ خودِ UI به این PR موکول نشده (خارج از Scope).
+     */
+    public function indexForDefinition(int $definitionId, Request $request)
+    {
+        return $this->index($request);
+    }
+
+    /** سازگاریِ عقب‌رو — نگاه کن به indexForDefinition(). */
+    public function storeForDefinition(int $definitionId, Request $request)
+    {
+        return $this->store($request);
     }
 }

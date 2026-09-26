@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // نشان — مقادیر فقط در .env، هرگز در Git/کد:
+    //   map_key     (NESHAN_MAP_KEY)     کلیدِ نقشهٔ وب (MapLibre SDK)؛ به مرورگر داده می‌شود
+    //   service_key (NESHAN_SERVICE_KEY) کلیدِ وب‌سرویسِ «تبدیل آدرس به نقطه»؛ فقط سمتِ سرور (proxy)، هرگز به مرورگر
+    //   geocoding_plus (NESHAN_GEOCODING_PLUS) true = استفاده از Geocoding Plus (باید رویِ همان کلید فعال باشد)
+    'neshan' => [
+        'map_key' => env('NESHAN_MAP_KEY'),
+        'service_key' => env('NESHAN_SERVICE_KEY'),
+        'geocoding_plus' => env('NESHAN_GEOCODING_PLUS', false),
+    ],
+
 ];

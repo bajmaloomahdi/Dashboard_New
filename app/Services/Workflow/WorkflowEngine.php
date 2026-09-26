@@ -67,11 +67,14 @@ class WorkflowEngine
             'entityOwnerUserId' => $req->entityOwnerUserId ?? $resolver->ownerUserId($req->entityType, $req->entityId),
             'entityUnitId'      => $req->entityUnitId ?? $resolver->unitId($req->entityType, $req->entityId),
             'entityTitle'       => $resolver->title($req->entityType, $req->entityId),
+            'preCreatedMessageId' => $req->preCreatedMessageId,
         ];
 
         // Validate/Cast قبل از Transaction — Contextِ نامعتبر نباید هرگز Instanceِ
-        // ناقص بسازد (طبقِ Final Design، بخشِ D).
-        $context = $this->contextBuilder->build($ctx->definitionId, $req->context);
+        // ناقص بسازد (طبقِ Final Design، بخشِ D). با versionId (نه definitionId) صدا زده
+        // می‌شود چون فیلدهایِ مرتبط اکنون از رویِ RuleJsonِ همین Version استخراج می‌شوند
+        // (Global Registry)، نه از رویِ یک فهرستِ Definition-level.
+        $context = $this->contextBuilder->build($ctx->versionId, $req->context);
         $contextJson = $context === [] ? null : json_encode($context, JSON_UNESCAPED_UNICODE);
 
         return DB::transaction(function () use ($ctx, $req, $contextJson) {
@@ -111,6 +114,69 @@ class WorkflowEngine
             $result = $this->advance($ctx, $graph, $transition, $req->startedByUserId);
 
             return $result;
+        });
+    }
+
+    /**
+     * Pre-create + Adopt — مسیرِ جایگزینِ «Message عادی → Start Workflow» برایِ
+     * EntityType=MESSAGE، فقط وقتی مسیرِ START→اولین USER_TASK/APPROVAL مستقیم است
+     * (بدونِ CONDITIONِ میانی). به‌جایِ ساختِ دو Message (یکی برایِ خودِ «نامه»، یکی
+     * برایِ تسکِ Workflow)، یک Message واحد (با sp_Wf_CreateTaskMessage، از ابتدا
+     * MessageTypeID=«وظیفه» و گیرندهٔ واقعی) ساخته و همان به اولین Task متصل می‌شود.
+     *
+     * توالی (همه در یک Transaction، بجز پیش‌نمایش که Read-Only است):
+     *   ۱) previewAssignment() — تشخیصِ مسیرِ مستقیم + Assigneeهایِ واقعی (Read-Only)
+     *   ۲) sp_Wf_CreateTaskMessage — ساختِ تنها Message
+     *   ۳) start() با entityId=همان MessageID و preCreatedMessageId=همان MessageID
+     *      → advance() در رسیدنِ به اولین Task، به‌جایِ createStepTask()، adoptStepTask()
+     *        را صدا می‌زند (Assigneeها دوباره از همان AssignmentResolver حل می‌شوند —
+     *        نه از پیش‌نمایشِ گامِ ۱؛ چون entityId اکنون همین Message است و
+     *        MessageEntityResolver::ownerUserId/unitId دقیقاً همان actorUserId/UnitId را
+     *        برمی‌گردانند، این دو حل، در یک درخواست و بدونِ تغییرِ داده‌ای در فاصلهٔ آن‌ها،
+     *        همیشه یکسان‌اند).
+     *
+     * @throws WorkflowValidationException  اگر مسیرِ مستقیم برقرار نباشد (Conditionِ میانی،
+     *         بدونِ نسخهٔ فعال، بدونِ Assigneeِ قابلِ‌حل و ...) — هیچ Message ای ساخته نمی‌شود.
+     */
+    public function startWithNewTaskMessage(
+        int $definitionId,
+        int $startedByUserId,
+        string $subject,
+        ?string $messageText = null,
+        ?int $priorityId = null,
+        ?string $dueDate = null,
+    ): EngineResult {
+        $preview = $this->previewAssignment($definitionId, $startedByUserId);
+
+        if (! $preview['resolved'] || $preview['reason'] !== null || empty($preview['users'])) {
+            $reason = $preview['reason'] ?? 'UNKNOWN';
+            throw new WorkflowValidationException(
+                "این فرایند برایِ مسیرِ Pre-create مناسب نیست (مسیرِ مستقیمِ START→Task برقرار نیست یا Assigneeِ قابلِ‌حلی ندارد؛ دلیل: {$reason})."
+            );
+        }
+
+        return DB::transaction(function () use ($definitionId, $startedByUserId, $subject, $messageText, $priorityId, $dueDate, $preview) {
+            $assigneeUserIds = array_map(fn ($u) => $u['userId'], $preview['users']);
+
+            $msg = $this->store->createTaskMessage([
+                'subject'         => $subject,
+                'messageText'     => $messageText,
+                'priorityId'      => $priorityId,
+                'dueDate'         => $dueDate,
+                'senderUserId'    => $startedByUserId,
+                'assigneeUserIds' => $assigneeUserIds,
+                'createUser'      => $startedByUserId,
+            ]);
+            $messageId = (int) $msg->MessageID;
+
+            return $this->start(new StartWorkflowRequest(
+                entityType: 'MESSAGE',
+                entityId: $messageId,
+                startedByUserId: $startedByUserId,
+                definitionId: $definitionId,
+                context: [],
+                preCreatedMessageId: $messageId,
+            ));
         });
     }
 
@@ -244,6 +310,9 @@ class WorkflowEngine
             'entityOwnerUserId' => null,
             'entityUnitId'      => null,
             'entityTitle'       => null,
+            // preCreatedMessageId فقط برای اولین Taskِ بلافاصله‌بعدِ START (در start()) معنا دارد؛
+            // performAction() همیشه رویِ Instanceِ از‌قبل‌موجود کار می‌کند، پس همیشه null است.
+            'preCreatedMessageId' => null,
         ];
 
         $graph = $this->store->getVersionGraph($ctx->versionId);
@@ -553,6 +622,9 @@ class WorkflowEngine
         $createdMessageIds = [];
         $guard = 0;
         $currentTransition = $transition;
+        // فقط اولین گذاری که در همین فراخوانِ advance() پردازش می‌شود می‌تواند به
+        // preCreatedMessageId متصل شود (یعنی: بلافاصله بعدِ START، بدونِ CONDITIONِ میانی).
+        $isFirstStep = true;
 
         // Contextِ Snapshotشدهٔ همین Instance — یک‌بار خوانده می‌شود (در طولِ advance
         // تغییر نمی‌کند)؛ فقط برایِ Stepهایِ CONDITION لازم است.
@@ -667,7 +739,20 @@ class WorkflowEngine
                     ));
                     $assignees = $this->assignments->resolve($assignmentRows, $ctx);
 
-                    $messageId = $this->tasks->createStepTask($ctx, $target, $stepInstanceId, $assignees, $actorUserId);
+                    if (! empty($ctx->preCreatedMessageId)) {
+                        if (! $isFirstStep) {
+                            // پیش‌شرطِ «مسیرِ مستقیمِ START→Task، بدونِ CONDITIONِ میانی» نقض شده —
+                            // به‌جایِ Fallbackِ خاموش به createStepTask() (که Messageِ دوم می‌ساخت،
+                            // همان مشکلی که Pre-create+Adopt قرار است حل کند)، خطایِ صریح می‌دهیم.
+                            throw new WorkflowStateException(
+                                'پیامِ از‌پیش‌ساخته‌شده فقط برای اولین Task بلافاصله پس از START قابلِ اتصال است؛ این فرایند بینِ START و اولین Task مرحلهٔ دیگری (مثلاً Condition) دارد.'
+                            );
+                        }
+
+                        $messageId = $this->tasks->adoptStepTask($ctx, $target, $stepInstanceId, $assignees, $actorUserId, (int) $ctx->preCreatedMessageId);
+                    } else {
+                        $messageId = $this->tasks->createStepTask($ctx, $target, $stepInstanceId, $assignees, $actorUserId);
+                    }
                     $createdMessageIds[] = $messageId;
 
                     return new EngineResult(
@@ -721,6 +806,10 @@ class WorkflowEngine
                         "اجرای مرحلهٔ نوعِ «{$target->StepType}» در فاز ۱ پشتیبانی نمی‌شود (مرحلهٔ «{$target->Name}»)."
                     );
             }
+
+            // اینجا فقط برایِ حالاتِ START (loopback) و CONDITION اجرا می‌شود (END/USER_TASK/APPROVAL
+            // بالاتر return کرده‌اند) — یعنی گذارِ بعدی دیگر «اولین گذار بعدِ START» نیست.
+            $isFirstStep = false;
         }
 
         throw new WorkflowStateException('زنجیرهٔ مراحلِ خودکار بیش از حد طولانی شد.');

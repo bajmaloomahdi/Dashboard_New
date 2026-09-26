@@ -95,16 +95,29 @@
     "file": "assets/vazirmatn-latin-ext-700-normal-BfoXmNMx.woff2",
     "src": "node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-ext-700-normal.woff2"
   },
+  "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.css": {
+    "file": "assets/neshan-maplibre-sdk-BHt07eEx.css",
+    "src": "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.css"
+  },
+  "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.js": {
+    "file": "assets/neshan-maplibre-sdk-BkTP7MqV.js",
+    "name": "neshan-maplibre-sdk",
+    "src": "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.js",
+    "isDynamicEntry": true
+  },
   "resources/css/app.css": {
     "file": "assets/app-6zskJpN4.css",
     "src": "resources/css/app.css",
     "isEntry": true
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-CPzH60hK.js",
+    "file": "assets/app-BIACu-mc.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
+    "dynamicImports": [
+      "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.js"
+    ],
     "css": [
       "assets/app-0vtxen5F.css"
     ],

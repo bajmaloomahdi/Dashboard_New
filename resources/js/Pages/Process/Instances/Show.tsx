@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Table, Typography, Alert, Popconfirm, Modal, Input, Empty } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Table, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty } from 'antd';
 import {
     ApartmentOutlined,
     UserOutlined,
@@ -136,6 +136,17 @@ const eventCodeLabel: Record<string, string> = {
     TRANSITION_TAKEN: 'طیِ گذار',
 };
 
+const eventCodeColor: Record<string, string> = {
+    INSTANCE_STARTED: 'blue',
+    INSTANCE_COMPLETED: 'green',
+    INSTANCE_CANCELLED: 'red',
+    INSTANCE_SUSPENDED: 'orange',
+    INSTANCE_RESUMED: 'blue',
+    INSTANCE_FAILED: 'red',
+    TASK_COMPLETED: 'green',
+    TASK_CANCELLED: 'red',
+};
+
 interface InstanceData {
     instance: WfInstance;
     steps: WfStep[];
@@ -248,66 +259,6 @@ export default function ProcessInstanceShow() {
             width: 160,
             align: 'center',
             render: (v: string | null) => (v ? <Text style={{ fontSize: 12 }}>{gregorianToJalaliDateTimeDisplay(v)}</Text> : <Text type="secondary">—</Text>),
-        },
-    ];
-
-    const historyColumns: ColumnsType<WfHistoryItem> = [
-        {
-            title: 'زمان',
-            dataIndex: 'OccurredAt',
-            key: 'OccurredAt',
-            width: 160,
-            align: 'center',
-            render: (v: string) => <Text style={{ fontSize: 12 }}>{gregorianToJalaliDateTimeDisplay(v)}</Text>,
-        },
-        {
-            title: 'رویداد',
-            dataIndex: 'EventCode',
-            key: 'EventCode',
-            width: 150,
-            align: 'center',
-            render: (v: string) => <Tag style={{ borderRadius: 6 }}>{eventCodeLabel[v] ?? v}</Tag>,
-        },
-        {
-            title: 'کاربر',
-            key: 'Actor',
-            width: 130,
-            align: 'center',
-            render: (_, h) => (
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                    <UserOutlined /> {h.ActorName ?? (h.ActorType === 'SYSTEM' ? 'سیستم' : '—')}
-                </Text>
-            ),
-        },
-        {
-            title: 'مرحله',
-            key: 'Step',
-            width: 130,
-            align: 'center',
-            render: (_, h) => {
-                const s = h.StepInstanceID != null ? stepById.get(h.StepInstanceID) : null;
-                return s ? <Text style={{ fontSize: 12 }}>{s.StepCode}</Text> : <Text type="secondary">—</Text>;
-            },
-        },
-        {
-            title: 'پیام',
-            key: 'Message',
-            width: 90,
-            align: 'center',
-            render: (_, h) =>
-                h.MessageID ? (
-                    <Button size="small" type="link" onClick={() => router.visit(`/messages/${h.MessageID}`)}>
-                        مشاهده
-                    </Button>
-                ) : (
-                    <Text type="secondary">—</Text>
-                ),
-        },
-        {
-            title: 'خلاصه',
-            dataIndex: 'Summary',
-            key: 'Summary',
-            render: (v: string | null) => <Text className="wf-longtext">{v || '—'}</Text>,
         },
     ];
 
@@ -437,13 +388,43 @@ export default function ProcessInstanceShow() {
                     {data.history.length === 0 ? (
                         <Empty description="رویدادی ثبت نشده است" />
                     ) : (
-                        <Table
-                            rowKey="HistoryID"
-                            dataSource={data.history}
-                            columns={historyColumns}
-                            pagination={false}
-                            size="middle"
-                            scroll={{ x: 'max-content' }}
+                        <Timeline
+                            mode="left"
+                            items={data.history.map((h) => {
+                                const step = h.StepInstanceID != null ? stepById.get(h.StepInstanceID) : null;
+                                return {
+                                    key: h.HistoryID,
+                                    color: eventCodeColor[h.EventCode] ?? 'gray',
+                                    label: (
+                                        <Text style={{ fontSize: 12 }}>{gregorianToJalaliDateTimeDisplay(h.OccurredAt)}</Text>
+                                    ),
+                                    children: (
+                                        <div style={{ paddingBottom: 8 }}>
+                                            <Space wrap size={8}>
+                                                <Tag style={{ borderRadius: 6 }}>{eventCodeLabel[h.EventCode] ?? h.EventCode}</Tag>
+                                                {step ? <Tag color="default">{step.StepCode}</Tag> : null}
+                                                {h.ActorName ? (
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                                        <UserOutlined /> {h.ActorName}
+                                                    </Text>
+                                                ) : h.ActorType === 'SYSTEM' ? (
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>سیستم</Text>
+                                                ) : null}
+                                                {h.MessageID ? (
+                                                    <Button size="small" type="link" style={{ padding: 0, height: 'auto' }} onClick={() => router.visit(`/messages/${h.MessageID}`)}>
+                                                        مشاهدهٔ پیام
+                                                    </Button>
+                                                ) : null}
+                                            </Space>
+                                            {h.Summary ? (
+                                                <div>
+                                                    <Text className="wf-longtext" type="secondary" style={{ fontSize: 12 }}>{h.Summary}</Text>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ),
+                                };
+                            })}
                         />
                     )}
                 </Card>

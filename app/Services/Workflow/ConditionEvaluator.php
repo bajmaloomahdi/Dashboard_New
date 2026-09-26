@@ -144,8 +144,9 @@ class ConditionEvaluator
      * GT/GTE/LT/LTE — بدونِ هیچ float:
      *   - INTEGER (int در برابرِ int): مقایسهٔ Nativeِ PHP (دقیق، بدونِ float).
      *   - DECIMAL (رشتهٔ Decimalِ هر دو طرف): `DecimalMath::compare` (bcmath).
-     *   - DATE (رشتهٔ «YYYY-MM-DD» هر دو طرف): مقایسهٔ لغویِ رشته‌ای، که برایِ این
-     *     فرمتِ ثابت‌طول دقیقاً معادلِ مقایسهٔ زمانی است.
+     *   - DATE (رشتهٔ «YYYY-MM-DD» هر دو طرف) / TIME (رشتهٔ «HH:mm» هر دو طرف):
+     *     هر دو از همین شاخهٔ عمومیِ رشته‌ای عبور می‌کنند — مقایسهٔ لغویِ رشته‌ای، که
+     *     برایِ این فرمت‌هایِ ثابت‌طولِ zero-padded دقیقاً معادلِ مقایسهٔ زمانی است.
      */
     private function compareOrdered(string $operator, mixed $a, mixed $b): bool
     {

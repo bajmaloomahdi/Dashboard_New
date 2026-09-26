@@ -198,21 +198,44 @@ class CrmStore
         return $this->write('EXEC dbo.sp_Crm_ToggleProvinceActive @ProvinceID = ?, @UserID = ?', [$provinceId, $userId]);
     }
 
-    /* ---------- شهر (CrmCities) — زیرمجموعهٔ استان ---------- */
+    /* ---------- شهرستان (CrmCounties) — زیرمجموعهٔ استان ---------- */
 
-    public function getCities(?int $provinceId = null, ?string $search = null, ?bool $isActive = null): array
+    public function getCounties(?int $provinceId = null, ?string $search = null, ?bool $isActive = null): array
     {
         return DB::select(
-            'EXEC dbo.sp_Crm_GetCities @ProvinceID = ?, @SearchText = ?, @IsActive = ?',
+            'EXEC dbo.sp_Crm_GetCounties @ProvinceID = ?, @SearchText = ?, @IsActive = ?',
             [$provinceId, $search, $isActive]
+        );
+    }
+
+    public function saveCounty(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveCounty @CountyID = ?, @ProvinceID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['countyId'] ?? null, $p['provinceId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleCountyActive(int $countyId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_ToggleCountyActive @CountyID = ?, @UserID = ?', [$countyId, $userId]);
+    }
+
+    /* ---------- شهر (CrmCities) — زیرمجموعهٔ شهرستان ---------- */
+
+    public function getCities(?int $countyId = null, ?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select(
+            'EXEC dbo.sp_Crm_GetCities @CountyID = ?, @SearchText = ?, @IsActive = ?',
+            [$countyId, $search, $isActive]
         );
     }
 
     public function saveCity(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveCity @CityID = ?, @ProvinceID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
-            [$p['cityId'] ?? null, $p['provinceId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+            'EXEC dbo.sp_Crm_SaveCity @CityID = ?, @CountyID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['cityId'] ?? null, $p['countyId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
         );
     }
 
@@ -221,27 +244,27 @@ class CrmStore
         return $this->write('EXEC dbo.sp_Crm_ToggleCityActive @CityID = ?, @UserID = ?', [$cityId, $userId]);
     }
 
-    /* ---------- شهرستان (CrmCounties) — زیرمجموعهٔ شهر ---------- */
+    /* ---------- محله (CrmNeighborhoods) — زیرمجموعهٔ شهر ---------- */
 
-    public function getCounties(?int $cityId = null, ?string $search = null, ?bool $isActive = null): array
+    public function getNeighborhoods(?int $cityId = null, ?string $search = null, ?bool $isActive = null): array
     {
         return DB::select(
-            'EXEC dbo.sp_Crm_GetCounties @CityID = ?, @SearchText = ?, @IsActive = ?',
+            'EXEC dbo.sp_Crm_GetNeighborhoods @CityID = ?, @SearchText = ?, @IsActive = ?',
             [$cityId, $search, $isActive]
         );
     }
 
-    public function saveCounty(array $p): object
+    public function saveNeighborhood(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveCounty @CountyID = ?, @CityID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
-            [$p['countyId'] ?? null, $p['cityId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+            'EXEC dbo.sp_Crm_SaveNeighborhood @NeighborhoodID = ?, @CityID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['neighborhoodId'] ?? null, $p['cityId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
         );
     }
 
-    public function toggleCountyActive(int $countyId, int $userId): object
+    public function toggleNeighborhoodActive(int $neighborhoodId, int $userId): object
     {
-        return $this->write('EXEC dbo.sp_Crm_ToggleCountyActive @CountyID = ?, @UserID = ?', [$countyId, $userId]);
+        return $this->write('EXEC dbo.sp_Crm_ToggleNeighborhoodActive @NeighborhoodID = ?, @UserID = ?', [$neighborhoodId, $userId]);
     }
 
     /* ---------- منطقهٔ شهرداری (CrmMunicipalZones) ---------- */
@@ -302,24 +325,137 @@ class CrmStore
         return $this->write('EXEC dbo.sp_Crm_TogglePartyActive @PartyID = ?, @UserID = ?', [$partyId, $userId]);
     }
 
-    /* ---------- برند (CrmBrands) ---------- */
+    /* ---------- دسته‌بندیِ طرف‌حساب (CrmPartyClassifications) — چندگانه ---------- */
 
-    public function getBrands(int $partyId): array
+    public function getPartyClassifications(int $partyId): array
     {
-        return DB::select('EXEC dbo.sp_Crm_GetBrands @PartyID = ?', [$partyId]);
+        return DB::select('EXEC dbo.sp_Crm_GetPartyClassifications @PartyID = ?', [$partyId]);
     }
 
+    public function savePartyClassification(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SavePartyClassification @ClassificationID = ?, @PartyID = ?, @DepartmentID = ?, @PartyTypeID = ?, @ActivityID = ?, @UserID = ?',
+            [$p['classificationId'] ?? null, $p['partyId'], $p['departmentId'] ?? null, $p['partyTypeId'] ?? null, $p['activityId'] ?? null, $p['userId']]
+        );
+    }
+
+    public function togglePartyClassificationActive(int $classificationId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_TogglePartyClassificationActive @ClassificationID = ?, @UserID = ?', [$classificationId, $userId]);
+    }
+
+    /* ---------- تعاملات (CrmInteractions) ---------- */
+
+    public function getInteractions(?int $partyId = null, ?int $personId = null, ?string $type = null, ?string $status = null): array
+    {
+        return DB::select(
+            'EXEC dbo.sp_Crm_GetInteractions @PartyID = ?, @PersonID = ?, @Type = ?, @Status = ?',
+            [$partyId, $personId, $type, $status]
+        );
+    }
+
+    public function saveInteraction(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveInteraction @InteractionID = ?, @InteractionType = ?, @PartyID = ?, @PersonID = ?, @Subject = ?, '
+            . '@Description = ?, @Outcome = ?, @InteractionDate = ?, @Status = ?, @FollowUpOfID = ?, @OwnerUserID = ?, @UserID = ?',
+            [
+                $p['interactionId'] ?? null, $p['interactionType'], $p['partyId'], $p['personId'] ?? null, $p['subject'],
+                $p['description'] ?? null, $p['outcome'] ?? null, $p['interactionDate'], $p['status'] ?? null,
+                $p['followUpOfId'] ?? null, $p['ownerUserId'] ?? null, $p['userId'],
+            ]
+        );
+    }
+
+    public function setInteractionStatus(int $interactionId, string $status, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_SetInteractionStatus @InteractionID = ?, @Status = ?, @UserID = ?', [$interactionId, $status, $userId]);
+    }
+
+    public function toggleInteractionActive(int $interactionId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_ToggleInteractionActive @InteractionID = ?, @UserID = ?', [$interactionId, $userId]);
+    }
+
+    /* ---------- برند (CrmBrands) — موجودیتِ مستقل ---------- */
+
+    public function getBrands(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetBrands @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    public function getBrand(int $brandId): ?object
+    {
+        return DB::selectOne('EXEC dbo.sp_Crm_GetBrand @BrandID = ?', [$brandId]);
+    }
+
+    /** setLogo=true → logoPath/logoMimeType جایگزین می‌شوند (null = حذفِ لوگو)؛ OldLogoPath در پاسخ برمی‌گردد. */
     public function saveBrand(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveBrand @BrandID = ?, @PartyID = ?, @Name = ?, @Description = ?, @UserID = ?',
-            [$p['brandId'] ?? null, $p['partyId'], $p['name'], $p['description'] ?? null, $p['userId']]
+            'EXEC dbo.sp_Crm_SaveBrand @BrandID = ?, @Name = ?, @Description = ?, @UserID = ?, @SetLogo = ?, @LogoPath = ?, @LogoMimeType = ?',
+            [
+                $p['brandId'] ?? null, $p['name'], $p['description'] ?? null, $p['userId'],
+                ! empty($p['setLogo']) ? 1 : 0, $p['logoPath'] ?? null, $p['logoMimeType'] ?? null,
+            ]
         );
     }
 
     public function toggleBrandActive(int $brandId, int $userId): object
     {
         return $this->write('EXEC dbo.sp_Crm_ToggleBrandActive @BrandID = ?, @UserID = ?', [$brandId, $userId]);
+    }
+
+    /* ---------- طرف‌حساب‌هایِ یک برند (بر اساسِ ردیف‌هایِ فعالِ CrmPartyBrandCategories) ---------- */
+
+    public function getBrandParties(int $brandId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetBrandParties @BrandID = ?', [$brandId]);
+    }
+
+    /* ---------- دسته‌بندیِ محصولات (CrmProductCategories) — درختِ نامحدود ---------- */
+
+    public function getProductCategories(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetProductCategories @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    public function saveProductCategory(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveProductCategory @ProductCategoryID = ?, @ParentCategoryID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['productCategoryId'] ?? null, $p['parentCategoryId'] ?? null, $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleProductCategoryActive(int $productCategoryId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_ToggleProductCategoryActive @ProductCategoryID = ?, @UserID = ?', [$productCategoryId, $userId]);
+    }
+
+    /* ---------- دسته/تاریخ/درصدِ ارتباطِ Party↔Brand (CrmPartyBrandCategories) ---------- */
+
+    public function getPartyBrandCategories(?int $partyId = null, ?int $brandId = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyBrandCategories @PartyID = ?, @BrandID = ?', [$partyId, $brandId]);
+    }
+
+    public function savePartyBrandCategory(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SavePartyBrandCategory @PartyBrandCategoryID = ?, @PartyID = ?, @BrandID = ?, @ProductCategoryID = ?, '
+            . '@EntryDate = ?, @ExitDate = ?, @SharePercent = ?, @UserID = ?',
+            [
+                $p['partyBrandCategoryId'] ?? null, $p['partyId'] ?? null, $p['brandId'] ?? null, $p['productCategoryId'] ?? null,
+                $p['entryDate'] ?? null, $p['exitDate'] ?? null, $p['sharePercent'] ?? 0, $p['userId'],
+            ]
+        );
+    }
+
+    public function togglePartyBrandCategoryActive(int $partyBrandCategoryId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_TogglePartyBrandCategoryActive @PartyBrandCategoryID = ?, @UserID = ?', [$partyBrandCategoryId, $userId]);
     }
 
     /* ---------- آدرس (CrmAddresses) ---------- */
@@ -332,12 +468,14 @@ class CrmStore
     public function saveAddress(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveAddress @AddressID = ?, @PartyID = ?, @PersonID = ?, @AddressTitleID = ?, @ProvinceID = ?, @CityID = ?, '
-            . '@CountyID = ?, @MunicipalZoneID = ?, @PostalCode = ?, @AddressText = ?, @PlateNumber = ?, @Unit = ?, @UserID = ?',
+            'EXEC dbo.sp_Crm_SaveAddress @AddressID = ?, @PartyID = ?, @PersonID = ?, @AddressTitleID = ?, @ProvinceID = ?, @CountyID = ?, '
+            . '@CityID = ?, @NeighborhoodID = ?, @MunicipalZoneID = ?, @PostalCode = ?, @AddressText = ?, @PlateNumber = ?, @Unit = ?, @UserID = ?, '
+            . '@Latitude = ?, @Longitude = ?',
             [
-                $p['addressId'] ?? null, $p['partyId'] ?? null, $p['personId'] ?? null, $p['addressTitleId'], $p['provinceId'], $p['cityId'],
-                $p['countyId'], $p['municipalZoneId'] ?? null, $p['postalCode'] ?? null, $p['addressText'],
+                $p['addressId'] ?? null, $p['partyId'] ?? null, $p['personId'] ?? null, $p['addressTitleId'], $p['provinceId'], $p['countyId'],
+                $p['cityId'], $p['neighborhoodId'] ?? null, $p['municipalZoneId'] ?? null, $p['postalCode'] ?? null, $p['addressText'],
                 $p['plateNumber'] ?? null, $p['unit'] ?? null, $p['userId'],
+                $p['latitude'] ?? null, $p['longitude'] ?? null,
             ]
         );
     }
@@ -358,10 +496,10 @@ class CrmStore
     {
         return $this->write(
             'EXEC dbo.sp_Crm_SaveContact @ContactID = ?, @PartyID = ?, @PersonID = ?, @ContactTypeID = ?, @ContactValue = ?, '
-            . '@Extension = ?, @Description = ?, @IsPrimary = ?, @UserID = ?',
+            . '@Extension = ?, @Description = ?, @IsPrimary = ?, @RelatedPersonID = ?, @UserID = ?',
             [
                 $p['contactId'] ?? null, $p['partyId'] ?? null, $p['personId'] ?? null, $p['contactTypeId'], $p['contactValue'],
-                $p['extension'] ?? null, $p['description'] ?? null, $p['isPrimary'] ?? 0, $p['userId'],
+                $p['extension'] ?? null, $p['description'] ?? null, $p['isPrimary'] ?? 0, $p['relatedPersonId'] ?? null, $p['userId'],
             ]
         );
     }
@@ -405,6 +543,12 @@ class CrmStore
     public function getPartyRelations(int $partyId): array
     {
         return DB::select('EXEC dbo.sp_Crm_GetPartyRelations @PartyID = ?', [$partyId]);
+    }
+
+    /** رابطه‌هایِ یک شخص، از سمتِ مخاطب — نمایشِ دوطرفهٔ Party ↔ Person. */
+    public function getPersonRelations(int $personId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPersonRelations @PersonID = ?', [$personId]);
     }
 
     /** @return int[] */

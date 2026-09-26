@@ -1,5 +1,6 @@
-import { Button, Select, Input, InputNumber, Space, Typography, Tag, Radio, Alert } from 'antd';
+import { Button, Select, Input, InputNumber, Space, Typography, Tag, Radio, Alert, TimePicker } from 'antd';
 import { PlusOutlined, DeleteOutlined, ApartmentOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import PersianDateInput from '../../../../Components/PersianDateInput';
 import { THEME } from '../../../../theme';
 import type { RuleCondition, RuleGroup, RuleNode, RuleOperator } from '../versionEditor';
@@ -59,7 +60,7 @@ export default function RuleBuilder({ fields, value, onChange, readOnly }: RuleB
                 )}
                 {activeFields.length === 0 && (
                     <Text type="warning" style={{ fontSize: 12 }}>
-                        هیچ فیلدِ شرطِ فعالی برایِ این فرایند تعریف نشده — ابتدا از «مدیریتِ فیلدهایِ شرط» یک فیلد بسازید.
+                        هیچ فیلدِ شرطِ فعالی در Registry ثبت نشده — ابتدا از صفحهٔ «فیلدهایِ شروط» (/process/condition-fields) یک فیلد بسازید.
                     </Text>
                 )}
             </Space>
@@ -365,6 +366,17 @@ function ValueEditor({ field, listMode, readOnly, value, onChange }: ValueEditor
                     onChange={(v) => onChange(v ?? '')}
                     disabled={readOnly}
                     size="small"
+                />
+            );
+        case 'TIME':
+            return (
+                <TimePicker
+                    size="small"
+                    format="HH:mm"
+                    style={{ width: '100%' }}
+                    disabled={readOnly}
+                    value={typeof value === 'string' && value ? dayjs(value, 'HH:mm') : null}
+                    onChange={(v) => onChange(v ? v.format('HH:mm') : '')}
                 />
             );
         case 'SELECT': {

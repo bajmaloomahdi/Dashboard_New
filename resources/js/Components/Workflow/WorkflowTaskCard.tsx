@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Typography, Alert, Popconfirm, Empty, Modal, Input, Spin } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Popconfirm, Empty, Modal, Input, Spin } from 'antd';
 import {
     ApartmentOutlined,
     CheckCircleOutlined,
@@ -465,24 +465,27 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                         <Title level={5} style={{ marginTop: 8, marginBottom: 10, color: THEME.textPrimary }}>
                             <HistoryOutlined /> تاریخچهٔ فرایند
                         </Title>
-                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                            {history.map((h) => (
-                                <div
-                                    key={h.HistoryID}
-                                    style={{ background: '#fafafa', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}
-                                >
-                                    <Text style={{ flex: 1, minWidth: 200 }}>{h.Summary || h.EventCode}</Text>
-                                    <Space size={10} wrap>
-                                        {h.ActorName ? (
-                                            <Text type="secondary" style={{ fontSize: 12 }}><UserOutlined /> {h.ActorName}</Text>
-                                        ) : null}
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            <ClockCircleOutlined /> {gregorianToJalaliDateTimeDisplay(h.OccurredAt)}
-                                        </Text>
-                                    </Space>
-                                </div>
-                            ))}
-                        </Space>
+                        <Timeline
+                            style={{ marginTop: 8 }}
+                            items={history.map((h) => ({
+                                key: h.HistoryID,
+                                children: (
+                                    <div style={{ paddingBottom: 8 }}>
+                                        <Text>{h.Summary || h.EventCode}</Text>
+                                        <div>
+                                            <Space size={10} wrap>
+                                                {h.ActorName ? (
+                                                    <Text type="secondary" style={{ fontSize: 12 }}><UserOutlined /> {h.ActorName}</Text>
+                                                ) : null}
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    <ClockCircleOutlined /> {gregorianToJalaliDateTimeDisplay(h.OccurredAt)}
+                                                </Text>
+                                            </Space>
+                                        </div>
+                                    </div>
+                                ),
+                            }))}
+                        />
                     </>
                 )}
 

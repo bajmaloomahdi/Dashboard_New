@@ -46,13 +46,17 @@ class WorkflowTemplateParameterController extends WorkflowApiController
 
         $validated = $request->validate([
             'templateParameterId' => 'nullable|integer|exists:TemplateParameters,TemplateParameterID',
-            'code'                => 'required|string|max:64',
+            // Code هرگز از کلاینت گرفته نمی‌شود — Service آن را از caption/latinName
+            // می‌سازد؛ latinName فقط وقتی لازم است که caption حرفِ لاتینِ کافی نداشته باشد.
             'caption'             => 'required|string|max:200',
-            'groupCode'           => 'required|string|max:20',
+            'latinName'           => 'nullable|string|max:50',
             'entityType'          => 'nullable|string|max:64',
             'dataType'            => 'required|string|max:20',
             'sourceType'          => 'required|string|max:20',
-            'sourceKey'           => 'required|string|max:100',
+            // SourceKey برایِ Source=SYSTEM در Service خودکار تعیین می‌شود؛ برایِ USER
+            // باید یکی از مقادیرِ ثابتِ شناخته‌شده باشد؛ فقط برایِ FORM از کاربر می‌آید.
+            'sourceKey'           => 'nullable|string|max:100',
+            'description'         => 'nullable|string|max:500',
             'sortOrder'           => 'nullable|integer',
         ]);
 
@@ -60,8 +64,9 @@ class WorkflowTemplateParameterController extends WorkflowApiController
             $res = $this->params->save($validated, $this->actorId());
 
             return [
-                'message'             => $res->Message ?? 'پارامتر ذخیره شد.',
+                'message'             => ($res->Message ?? 'پارامتر ذخیره شد.') . " (Code: {$res->Code})",
                 'templateParameterId' => (int) $res->TemplateParameterID,
+                'code'                => $res->Code,
             ];
         });
     }

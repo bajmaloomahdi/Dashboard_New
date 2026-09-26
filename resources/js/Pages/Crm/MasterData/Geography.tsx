@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Card } from 'antd';
-import { EnvironmentOutlined, GlobalOutlined, BankOutlined, CompassOutlined } from '@ant-design/icons';
+import { EnvironmentOutlined, GlobalOutlined, BankOutlined, CompassOutlined, HomeOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -10,27 +10,28 @@ import { STYLES } from '../../../theme';
 
 interface PageProps {
     provinces: (MasterDataRow & { ProvinceID: number })[];
-    cities: (MasterDataRow & { CityID: number; ProvinceID: number; ProvinceName: string })[];
-    counties: (MasterDataRow & { CountyID: number; CityID: number; CityName: string; ProvinceID: number; ProvinceName: string })[];
+    counties: (MasterDataRow & { CountyID: number; ProvinceID: number; ProvinceName: string })[];
+    cities: (MasterDataRow & { CityID: number; CountyID: number; CountyName: string; ProvinceID: number; ProvinceName: string })[];
+    neighborhoods: (MasterDataRow & { NeighborhoodID: number; CityID: number; CityName: string; CountyID: number; CountyName: string })[];
     municipalZones: MasterDataRow[];
     canManage: boolean;
 }
 
-type TabKey = 'provinces' | 'cities' | 'counties' | 'municipalZones';
+type TabKey = 'provinces' | 'counties' | 'cities' | 'neighborhoods' | 'municipalZones';
 
 /**
- * جغرافیایِ آدرس: استان → شهر → شهرستان (سلسله‌مراتبِ اختصاصیِ Raga 360،
- * نه تقسیماتِ کشوریِ واقعی) + منطقهٔ شهرداری (کاملاً مستقل).
- * فعلاً هیچ دادهٔ واقعی Seed نشده — مدیر باید از همین صفحه تکمیل کند.
+ * جغرافیایِ آدرس: استان → شهرستان → شهر → محله + منطقهٔ شهرداری (کاملاً مستقل).
+ * فرمِ هر سطح فقط والدِ مستقیمِ خودش را می‌پرسد؛ سطحِ بالاتر فقط در نوارِ فیلترِ گرید است.
  */
 export default function CrmGeographyPage() {
-    const { provinces, cities, counties, municipalZones, canManage } = usePage().props as unknown as PageProps;
+    const { provinces, counties, cities, neighborhoods, municipalZones, canManage } = usePage().props as unknown as PageProps;
     const [activeTab, setActiveTab] = useState<TabKey>('provinces');
 
     const tabDefs = [
         { key: 'provinces' as const, label: 'استان', icon: <GlobalOutlined />, count: (provinces || []).length },
-        { key: 'cities' as const, label: 'شهر', icon: <BankOutlined />, count: (cities || []).length },
         { key: 'counties' as const, label: 'شهرستان', icon: <EnvironmentOutlined />, count: (counties || []).length },
+        { key: 'cities' as const, label: 'شهر', icon: <BankOutlined />, count: (cities || []).length },
+        { key: 'neighborhoods' as const, label: 'محله', icon: <HomeOutlined />, count: (neighborhoods || []).length },
         { key: 'municipalZones' as const, label: 'منطقهٔ شهرداری', icon: <CompassOutlined />, count: (municipalZones || []).length },
     ];
 
@@ -39,7 +40,7 @@ export default function CrmGeographyPage() {
             <PageHeader
                 icon={<EnvironmentOutlined />}
                 title="جغرافیایِ آدرس"
-                subtitle="استان → شهر → شهرستان + منطقهٔ شهرداری — Master Dataهایِ CRM"
+                subtitle="استان → شهرستان → شهر → محله + منطقهٔ شهرداری — Master Dataهایِ CRM"
                 backHref="/crm/classification"
                 backLabel="بازگشت"
             />
@@ -59,15 +60,15 @@ export default function CrmGeographyPage() {
                 </Card>
             )}
 
-            {activeTab === 'cities' && (
+            {activeTab === 'counties' && (
                 <Card style={STYLES.card}>
                     <MasterDataManager
-                        idField="CityID"
-                        items={cities || []}
-                        apiBase="/crm/geography/cities"
+                        idField="CountyID"
+                        items={counties || []}
+                        apiBase="/crm/geography/counties"
                         canManage={canManage}
-                        entityLabel="شهر"
-                        namePlaceholder="تهران"
+                        entityLabel="شهرستان"
+                        namePlaceholder="شمیرانات"
                         parentSelect={{
                             label: 'استان',
                             paramName: 'provinceId',
@@ -79,27 +80,55 @@ export default function CrmGeographyPage() {
                 </Card>
             )}
 
-            {activeTab === 'counties' && (
+            {activeTab === 'cities' && (
                 <Card style={STYLES.card}>
                     <MasterDataManager
-                        idField="CountyID"
-                        items={counties || []}
-                        apiBase="/crm/geography/counties"
+                        idField="CityID"
+                        items={cities || []}
+                        apiBase="/crm/geography/cities"
                         canManage={canManage}
-                        entityLabel="شهرستان"
-                        namePlaceholder="منطقهٔ یک"
+                        entityLabel="شهر"
+                        namePlaceholder="تجریش"
                         parentSelect={{
-                            label: 'شهر',
-                            paramName: 'cityId',
-                            idField: 'CityID',
-                            apiBase: '/crm/geography/cities',
-                            displayColumn: { title: 'شهر', dataIndex: 'CityName' },
+                            label: 'شهرستان',
+                            paramName: 'countyId',
+                            idField: 'CountyID',
+                            apiBase: '/crm/geography/counties',
+                            displayColumn: { title: 'شهرستان', dataIndex: 'CountyName' },
+                            optionContextField: 'ProvinceName',
                         }}
                         grandParentSelect={{
                             label: 'استان',
                             apiBase: '/crm/geography/provinces',
                             idField: 'ProvinceID',
                             displayColumn: { title: 'استان', dataIndex: 'ProvinceName' },
+                        }}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'neighborhoods' && (
+                <Card style={STYLES.card}>
+                    <MasterDataManager
+                        idField="NeighborhoodID"
+                        items={neighborhoods || []}
+                        apiBase="/crm/geography/neighborhoods"
+                        canManage={canManage}
+                        entityLabel="محله"
+                        namePlaceholder="ونک"
+                        parentSelect={{
+                            label: 'شهر',
+                            paramName: 'cityId',
+                            idField: 'CityID',
+                            apiBase: '/crm/geography/cities',
+                            displayColumn: { title: 'شهر', dataIndex: 'CityName' },
+                            optionContextField: 'CountyName',
+                        }}
+                        grandParentSelect={{
+                            label: 'شهرستان',
+                            apiBase: '/crm/geography/counties',
+                            idField: 'CountyID',
+                            displayColumn: { title: 'شهرستان', dataIndex: 'CountyName' },
                         }}
                     />
                 </Card>

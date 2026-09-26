@@ -8,7 +8,7 @@ use Tests\TestCase;
 
 /**
  * CRM Phase 1 — Master Data (۱۲ Registry): دپارتمان، نوع، فعالیت (زیرمجموعهٔ نوع)،
- * استان، شهر (زیرمجموعهٔ استان)، شهرستان (زیرمجموعهٔ شهر)، منطقهٔ شهرداری، عنوانِ
+ * استان، شهرستان (زیرمجموعهٔ استان)، شهر (زیرمجموعهٔ شهرستان)، محله (زیرمجموعهٔ شهر)، منطقهٔ شهرداری، عنوانِ
  * فرد، سمت، نقش، نوعِ تماس، عنوانِ آدرس.
  *
  * همهٔ این‌ها از یک الگویِ مشترک (list/save/toggle) پیروی می‌کنند؛ به‌جایِ تکرارِ
@@ -229,30 +229,108 @@ class CrmMasterDataTest extends TestCase
     }
 
     /* ==================================================================== */
-    /*  استان → شهر → شهرستان — سلسله‌مراتبِ جغرافیایی                       */
+    /*  استان → شهرستان → شهر → محله — سلسله‌مراتبِ جغرافیایی                */
     /* ==================================================================== */
 
-    public function test_geography_hierarchy_province_city_county(): void
+    /** @return array{provinceId:int, countyId:int, cityId:int, neighborhoodId:int} */
+    private function createGeoChain(): array
     {
         $province = $this->as(self::USER_FULL)->postJson('/crm/geography/provinces', [
             'displayName' => 'استانِ تستی',
         ])->assertOk()->json();
 
-        $city = $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
-            'provinceId' => $province['provinceId'], 'displayName' => 'شهرِ تستی',
-        ])->assertOk()->json();
-
         $county = $this->as(self::USER_FULL)->postJson('/crm/geography/counties', [
-            'cityId' => $city['cityId'], 'displayName' => 'شهرستانِ تستی',
+            'provinceId' => $province['provinceId'], 'displayName' => 'شهرستانِ تستی',
         ])->assertOk()->json();
 
-        $this->assertTrue($county['success']);
+        $city = $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
+            'countyId' => $county['countyId'], 'displayName' => 'شهرِ تستی',
+        ])->assertOk()->json();
 
-        $cities = $this->as(self::USER_FULL)->getJson('/crm/geography/cities?provinceId=' . $province['provinceId'])->json('items');
-        $this->assertSame('استانِ تستی', collect($cities)->first()['ProvinceName']);
+        $neighborhood = $this->as(self::USER_FULL)->postJson('/crm/geography/neighborhoods', [
+            'cityId' => $city['cityId'], 'displayName' => 'محلهٔ تستی',
+        ])->assertOk()->json();
 
-        $counties = $this->as(self::USER_FULL)->getJson('/crm/geography/counties?cityId=' . $city['cityId'])->json('items');
-        $this->assertSame('شهرِ تستی', collect($counties)->first()['CityName']);
+        return [
+            'provinceId' => $province['provinceId'], 'countyId' => $county['countyId'],
+            'cityId' => $city['cityId'], 'neighborhoodId' => $neighborhood['neighborhoodId'],
+        ];
+    }
+
+    public function test_geography_hierarchy_province_county_city_neighborhood(): void
+    {
+        $geo = $this->createGeoChain();
+
+        $counties = $this->as(self::USER_FULL)->getJson('/crm/geography/counties?provinceId=' . $geo['provinceId'])->json('items');
+        $this->assertCount(1, $counties);
+        $this->assertSame('استانِ تستی', $counties[0]['ProvinceName']);
+
+        $cities = $this->as(self::USER_FULL)->getJson('/crm/geography/cities?countyId=' . $geo['countyId'])->json('items');
+        $this->assertCount(1, $cities);
+        $this->assertSame('شهرستانِ تستی', $cities[0]['CountyName']);
+        $this->assertSame('استانِ تستی', $cities[0]['ProvinceName']);
+
+        $neighborhoods = $this->as(self::USER_FULL)->getJson('/crm/geography/neighborhoods?cityId=' . $geo['cityId'])->json('items');
+        $this->assertCount(1, $neighborhoods);
+        $this->assertSame('محلهٔ تستی', $neighborhoods[0]['DisplayName']);
+        $this->assertSame('شهرِ تستی', $neighborhoods[0]['CityName']);
+        $this->assertSame('شهرستانِ تستی', $neighborhoods[0]['CountyName']);
+    }
+
+    public function test_each_geography_level_requires_only_its_direct_parent(): void
+    {
+        $geo = $this->createGeoChain();
+
+        // شهر با استان (بدونِ شهرستان) پذیرفته نمی‌شود — فقط والدِ مستقیم معتبر است
+        $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
+            'provinceId' => $geo['provinceId'], 'displayName' => 'شهرِ بی‌شهرستان',
+        ])->assertStatus(422)->assertJsonValidationErrors('countyId');
+
+        // شهرستان با شهر پذیرفته نمی‌شود؛ باید استان داشته باشد
+        $this->as(self::USER_FULL)->postJson('/crm/geography/counties', [
+            'cityId' => $geo['cityId'], 'displayName' => 'شهرستانِ بی‌استان',
+        ])->assertStatus(422)->assertJsonValidationErrors('provinceId');
+
+        // محله فقط شهر می‌خواهد
+        $this->as(self::USER_FULL)->postJson('/crm/geography/neighborhoods', [
+            'countyId' => $geo['countyId'], 'displayName' => 'محلهٔ بی‌شهر',
+        ])->assertStatus(422)->assertJsonValidationErrors('cityId');
+    }
+
+    public function test_geography_parent_cannot_be_deactivated_while_it_has_active_children(): void
+    {
+        $geo = $this->createGeoChain();
+
+        $this->as(self::USER_FULL)->postJson("/crm/geography/provinces/{$geo['provinceId']}/toggle")->assertStatus(422)->assertJson(['success' => false]);
+        $this->as(self::USER_FULL)->postJson("/crm/geography/counties/{$geo['countyId']}/toggle")->assertStatus(422)->assertJson(['success' => false]);
+        $this->as(self::USER_FULL)->postJson("/crm/geography/cities/{$geo['cityId']}/toggle")->assertStatus(422)->assertJson(['success' => false]);
+
+        // از پایین به بالا غیرفعال‌سازی مجاز است
+        $this->as(self::USER_FULL)->postJson("/crm/geography/neighborhoods/{$geo['neighborhoodId']}/toggle")->assertOk()->assertJson(['success' => true]);
+        $this->as(self::USER_FULL)->postJson("/crm/geography/cities/{$geo['cityId']}/toggle")->assertOk()->assertJson(['success' => true]);
+        $this->as(self::USER_FULL)->postJson("/crm/geography/counties/{$geo['countyId']}/toggle")->assertOk()->assertJson(['success' => true]);
+        $this->as(self::USER_FULL)->postJson("/crm/geography/provinces/{$geo['provinceId']}/toggle")->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_neighborhood_edit_updates_in_place(): void
+    {
+        $geo = $this->createGeoChain();
+
+        $res = $this->as(self::USER_FULL)->postJson('/crm/geography/neighborhoods', [
+            'neighborhoodId' => $geo['neighborhoodId'], 'cityId' => $geo['cityId'], 'displayName' => 'محلهٔ ویرایش‌شده',
+        ])->assertOk()->json();
+        $this->assertSame($geo['neighborhoodId'], $res['neighborhoodId']);
+
+        $items = $this->as(self::USER_FULL)->getJson('/crm/geography/neighborhoods?cityId=' . $geo['cityId'])->json('items');
+        $this->assertCount(1, $items);
+        $this->assertSame('محلهٔ ویرایش‌شده', $items[0]['DisplayName']);
+    }
+
+    public function test_neighborhood_endpoints_require_master_data_permission(): void
+    {
+        $this->as(self::USER_NOPERM)->getJson('/crm/geography/neighborhoods')->assertStatus(403);
+        $this->as(self::USER_NOPERM)->postJson('/crm/geography/neighborhoods', ['cityId' => 1, 'displayName' => 'ن'])->assertStatus(403);
+        $this->as(self::USER_NOPERM)->postJson('/crm/geography/neighborhoods/1/toggle')->assertStatus(403);
     }
 
     /* ==================================================================== */

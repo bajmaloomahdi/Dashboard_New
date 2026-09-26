@@ -147,6 +147,8 @@ class TemplateRenderer
             // PersianDateInput مقدارِ فرم را همیشه ISOِ میلادی (YYYY-MM-DD) می‌دهد؛ متنِ نهاییِ
             // Renderشده باید شمسی باشد، پس همین‌جا (با همان gregorianToJalali موجود) تبدیل می‌شود.
             'DATE' => $this->formatDateValue($str),
+            // زمان تقویم‌محور نیست؛ فقط فرمتِ HH:mm اعتبارسنجی و همان‌طور بازگردانده می‌شود.
+            'TIME' => $this->formatTimeValue($str, $caption),
             'INTEGER' => (function () use ($str, $caption) {
                 $v = filter_var($str, FILTER_VALIDATE_INT);
                 if ($v === false) {
@@ -164,6 +166,16 @@ class TemplateRenderer
             })(),
             default => $str,
         };
+    }
+
+    /** اعتبارسنجیِ فرمتِ HH:mm (خروجیِ AntD TimePicker) — بدونِ هیچ تبدیلِ تقویمی. */
+    private function formatTimeValue(string $value, string $caption): string
+    {
+        if (! preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $value)) {
+            throw new WorkflowValidationException("مقدارِ پارامترِ «{$caption}» باید به‌صورتِ ساعت:دقیقهٔ معتبر (HH:mm) باشد.");
+        }
+
+        return $value;
     }
 
     /** ISOِ میلادیِ (YYYY-MM-DD) خروجیِ PersianDateInput را به نمایشِ شمسی (YYYY/MM/DD) تبدیل می‌کند. */

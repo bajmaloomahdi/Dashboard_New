@@ -16,6 +16,11 @@ final class StartWorkflowRequest
      * @param  int|null      $entityOwnerUserId مالکِ موجودیت (برای ENTITY_OWNER)
      * @param  int|null      $entityUnitId      واحدِ سازمانیِ موجودیت (برای UNIT_MANAGER)
      * @param  array<string,mixed>  $context     داده‌های زمینه‌ای (برای فازهای بعد: شرط‌ها/فرم‌ها)
+     * @param  int|null  $preCreatedMessageId  شناسهٔ Messageای که پیش‌تر با sp_Wf_CreateTaskMessage
+     *         ساخته شده و باید به‌جایِ ساختِ Messageِ تازه، به اولین USER_TASK/APPROVALِ
+     *         بلافاصله‌بعدِ START متصل (Adopt) شود — فقط برایِ EntityType=MESSAGE و فقط
+     *         وقتی هیچ CONDITIONای بینِ START و آن اولین Task نباشد (WorkflowEngine::advance()
+     *         این پیش‌شرط را خودش دوباره بررسی و در نقضِ آن خطا می‌دهد، نه Fallback خاموش).
      */
     public function __construct(
         public string $entityType,
@@ -26,6 +31,7 @@ final class StartWorkflowRequest
         public ?int $entityOwnerUserId = null,
         public ?int $entityUnitId = null,
         public array $context = [],
+        public ?int $preCreatedMessageId = null,
     ) {
     }
 }

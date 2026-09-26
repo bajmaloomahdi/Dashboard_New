@@ -3,13 +3,22 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\Workflow\ConditionFieldService;
+use App\Services\Workflow\Dto\StartWorkflowRequest;
 use App\Services\Workflow\WorkflowDefinitionService;
+use App\Services\Workflow\WorkflowEngine;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
 
 /**
- * فیلدهایِ شرط (WorkflowConditionFields) — Definition-level: CRUD، Uniqueness،
- * Immutabilityِ Code پس از استفاده در یک Rule، و Toggleِ بدونِ Guardِ وابستگی.
+ * فیلدهایِ شرط (WorkflowConditionFields) — Global Registry (Phase 2): CRUD،
+ * تولیدِ خودکارِ Code (ساده‌سازیِ UX)، Uniquenessِ سراسری، Immutabilityِ کاملِ Code
+ * پس از ایجاد، Toggleِ بدونِ Guardِ وابستگی، و سازگاریِ Runtime با فیلدهایِ Inactive.
+ *
+ * ساده‌سازیِ UX (دورِ Code): Code دیگر ورودیِ مستقیمِ کاربر/کلاینت نیست — Service آن
+ * را از displayName (یا latinName، وقتی displayName حرفِ لاتینِ کافی ندارد) می‌سازد و
+ * برایِ ویرایش همیشه همان Codeِ موجود را حفظ می‌کند (نگاه کن به ConditionFieldService::save()).
  *
  * کاربران: 2 → شاملِ WORKFLOW_MANAGE_CONDITION_FIELDS تازه
  *          3 → بدونِ هیچ دسترسیِ WORKFLOW_
@@ -17,16 +26,23 @@ use Tests\TestCase;
 class WorkflowConditionFieldTest extends TestCase
 {
     use DatabaseTransactions;
+    use RegistersTestEntityType;
 
     private const USER_FULL = 2;
     private const USER_NOPERM = 3;
+    private const USER_MGR7 = 4;
 
     private WorkflowDefinitionService $defs;
+    private ConditionFieldService $conditionFields;
+    private WorkflowEngine $engine;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->registerTestEntityType();
         $this->defs = $this->app->make(WorkflowDefinitionService::class);
+        $this->conditionFields = $this->app->make(ConditionFieldService::class);
+        $this->engine = $this->app->make(WorkflowEngine::class);
     }
 
     private function as(int $userId): self
@@ -44,227 +60,294 @@ class WorkflowConditionFieldTest extends TestCase
     private function createDefinition(): int
     {
         $def = $this->defs->save([
-            'code' => $this->uniqueCode('CF_DEF'), 'name' => 'فرایندِ تستِ فیلد', 'entityType' => 'MESSAGE',
+            'latinName' => $this->uniqueCode('CF_DEF'), 'name' => 'فرایندِ تستِ فیلد', 'entityType' => 'TEST_ENTITY',
         ], self::USER_FULL);
 
         return (int) $def->DefinitionID;
     }
 
-    private function basePayload(int $definitionId, ?string $code = null): array
+    /**
+     * displayName عمداً فارسی است (رفتارِ واقعیِ اکثرِ کاربرانِ این سیستم) — پس هر
+     * تستی که به یک Codeِ مشخص نیاز دارد باید latinName بدهد؛ چون uniqueCode() از
+     * قبل با الگویِ Code سازگار است، Codeِ نهایی همیشه دقیقاً برابرِ همان latinName می‌شود.
+     */
+    private function basePayload(?string $latinName = null): array
     {
         return [
-            'code'        => $code ?? $this->uniqueCode('AMOUNT'),
+            'latinName'   => $latinName ?? $this->uniqueCode('AMOUNT'),
             'displayName' => 'مبلغ',
             'dataType'    => 'DECIMAL',
-            'sourceType'  => 'START_CONTEXT',
-            'sourceKey'   => 'amount',
         ];
     }
 
-    /* ============================ CRUD پایه ============================ */
+    /* ============================ CRUD پایه — Global Registry ============================ */
 
     public function test_manage_condition_fields_permission_is_granted_to_admin_role(): void
     {
-        $definitionId = $this->createDefinition();
-
-        $res = $this->as(self::USER_FULL)->postJson(
-            "/workflow/definitions/{$definitionId}/condition-fields",
-            $this->basePayload($definitionId)
-        );
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $this->basePayload());
         $res->assertOk();
         $this->assertTrue($res->json('success'));
         $this->assertNotNull($res->json('fieldId'));
     }
 
-    public function test_list_condition_fields_requires_workflow_view(): void
+    /** توضیحِ اختیاری (ساده‌سازیِ UX) — نبودش خطا نیست، بودش رفت‌وبرگشت می‌کند. */
+    public function test_description_is_optional_and_round_trips(): void
     {
-        $definitionId = $this->createDefinition();
-        $this->defs->saveConditionField($this->basePayload($definitionId) + ['definitionId' => $definitionId], self::USER_FULL);
+        $withDesc = $this->uniqueCode('DESC');
+        $res = $this->conditionFields->save($this->basePayload($withDesc) + ['description' => 'توضیحِ کوتاه.'], self::USER_FULL);
+        $this->assertTrue((bool) $res->Success);
+        $row = collect($this->conditionFields->list(true))->firstWhere('Code', $withDesc);
+        $this->assertSame('توضیحِ کوتاه.', $row->Description);
 
-        $this->as(self::USER_NOPERM)
-            ->getJson("/workflow/definitions/{$definitionId}/condition-fields")
-            ->assertStatus(403);
+        $withoutDesc = $this->uniqueCode('NODESC');
+        $this->conditionFields->save($this->basePayload($withoutDesc), self::USER_FULL);
+        $row2 = collect($this->conditionFields->list(true))->firstWhere('Code', $withoutDesc);
+        $this->assertNull($row2->Description);
+    }
 
-        $res = $this->as(self::USER_FULL)->getJson("/workflow/definitions/{$definitionId}/condition-fields");
+    public function test_get_global_condition_fields_requires_workflow_view(): void
+    {
+        $latinName = $this->uniqueCode('LIST');
+        $this->conditionFields->save($this->basePayload($latinName), self::USER_FULL);
+
+        $this->as(self::USER_NOPERM)->getJson('/workflow/condition-fields')->assertStatus(403);
+
+        $res = $this->as(self::USER_FULL)->getJson('/workflow/condition-fields');
         $res->assertOk();
-        $this->assertCount(1, $res->json('items'));
+        $this->assertTrue(collect($res->json('items'))->contains(fn ($f) => $f['Code'] === $latinName));
     }
 
     public function test_store_condition_field_requires_manage_permission(): void
     {
-        $definitionId = $this->createDefinition();
-
         $this->as(self::USER_NOPERM)
-            ->postJson("/workflow/definitions/{$definitionId}/condition-fields", $this->basePayload($definitionId))
+            ->postJson('/workflow/condition-fields', $this->basePayload())
             ->assertStatus(403);
     }
 
-    public function test_store_condition_field_rejects_invalid_code_format(): void
+    /* ============================ تولیدِ خودکارِ Code ============================ */
+
+    /** وقتی خودِ عنوان حرفِ لاتینِ کافی دارد، Code مستقیماً از رویِ همان ساخته می‌شود — نیازی به latinName نیست. */
+    public function test_code_is_generated_directly_from_latin_display_name(): void
     {
-        $definitionId = $this->createDefinition();
-
-        foreach (['amount', '1AMOUNT', 'AMOUNT-X', 'AM OUNT'] as $badCode) {
-            $res = $this->as(self::USER_FULL)->postJson(
-                "/workflow/definitions/{$definitionId}/condition-fields",
-                $this->basePayload($definitionId, $badCode)
-            );
-            $res->assertStatus(422);
-            $this->assertFalse($res->json('success'));
-        }
-
-        // رشتهٔ خالی از همان لایهٔ required بودنِ HTTP Validation رد می‌شود (شکلِ
-        // پاسخِ متفاوتی دارد؛ همین 422 برایِ اثباتِ رد کافی است).
-        $this->as(self::USER_FULL)->postJson(
-            "/workflow/definitions/{$definitionId}/condition-fields",
-            $this->basePayload($definitionId, '')
-        )->assertStatus(422);
-    }
-
-    public function test_store_condition_field_rejects_duplicate_code_in_same_definition(): void
-    {
-        $definitionId = $this->createDefinition();
-        $code = $this->uniqueCode('DUP');
-        $this->defs->saveConditionField($this->basePayload($definitionId, $code) + ['definitionId' => $definitionId], self::USER_FULL);
-
-        $res = $this->as(self::USER_FULL)->postJson(
-            "/workflow/definitions/{$definitionId}/condition-fields",
-            $this->basePayload($definitionId, $code)
-        );
-        $res->assertStatus(422);
-        $this->assertStringContainsString('قبلاً استفاده شده', $res->json('message'));
-    }
-
-    public function test_same_code_is_allowed_across_different_definitions(): void
-    {
-        $defA = $this->createDefinition();
-        $defB = $this->createDefinition();
-        $code = $this->uniqueCode('SHARED');
-
-        $this->defs->saveConditionField($this->basePayload($defA, $code) + ['definitionId' => $defA], self::USER_FULL);
-
-        $res = $this->as(self::USER_FULL)->postJson(
-            "/workflow/definitions/{$defB}/condition-fields",
-            $this->basePayload($defB, $code)
-        );
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', [
+            'displayName' => 'Test Amount Field',
+            // اگر displayName خودش قابلِ‌استفاده باشد، حتی اگر latinName هم فرستاده شود، نادیده گرفته می‌شود.
+            'latinName'   => 'SHOULD_BE_IGNORED',
+            'dataType'    => 'DECIMAL',
+        ]);
         $res->assertOk();
         $this->assertTrue($res->json('success'));
+        $this->assertSame('TEST_AMOUNT_FIELD', $res->json('code'));
     }
 
-    public function test_store_condition_field_rejects_unsupported_source_type(): void
+    /** عنوانِ کاملاً فارسی بدونِ latinName باید با پیامِ روشن رد شود، نه با یک Codeِ خالی/نامعتبر. */
+    public function test_fully_persian_display_name_without_latin_name_is_rejected(): void
     {
-        $definitionId = $this->createDefinition();
-        $payload = $this->basePayload($definitionId);
-        $payload['sourceType'] = 'ENTITY_FIELD'; // فعلاً فقط START_CONTEXT در فاز ۱ مجاز است
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', [
+            'displayName' => 'مبلغِ درخواست', 'dataType' => 'DECIMAL',
+        ]);
+        $res->assertStatus(422);
+        $this->assertFalse($res->json('success'));
+        $this->assertStringContainsString('نامِ لاتین', $res->json('message'));
+    }
 
-        $res = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
+    /** latinNameِ نامعتبر (فقط عدد — بعدِ پاک‌سازی خالی می‌ماند) باید با پیامِ روشن رد شود. */
+    public function test_invalid_latin_name_is_rejected(): void
+    {
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', [
+            'displayName' => 'یک عنوانِ کاملاً فارسیِ دیگر', 'latinName' => '99999', 'dataType' => 'STRING',
+        ]);
         $res->assertStatus(422);
         $this->assertFalse($res->json('success'));
     }
 
+    /**
+     * برخوردِ Codeِ تکراری: به‌جایِ خطا یا Codeِ تصادفی/بی‌معنا، یک پسوندِ عددیِ
+     * قابلِ‌پیش‌بینی امتحان می‌شود (AMOUNT، سپس AMOUNT_2، ...).
+     */
+    public function test_duplicate_latin_name_gets_a_predictable_numeric_suffix(): void
+    {
+        $latinName = $this->uniqueCode('DUP');
+
+        $first = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $this->basePayload($latinName));
+        $first->assertOk();
+        $this->assertSame($latinName, $first->json('code'));
+
+        $second = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $this->basePayload($latinName));
+        $second->assertOk();
+        $this->assertSame($latinName . '_2', $second->json('code'));
+    }
+
     public function test_select_field_requires_allowed_values(): void
     {
-        $definitionId = $this->createDefinition();
-        $payload = $this->basePayload($definitionId);
+        $payload = $this->basePayload();
         $payload['dataType'] = 'SELECT';
 
-        $res = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $payload);
         $res->assertStatus(422);
 
         $payload['allowedValues'] = ['A', 'B'];
-        $res2 = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
+        $res2 = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $payload);
         $res2->assertOk();
         $this->assertTrue($res2->json('success'));
+    }
+
+    /** SourceType/SourceKey جزئیاتِ فنیِ صرفِ Backendاند — هرگز از ورودیِ کلاینت گرفته نمی‌شوند. */
+    public function test_source_type_and_source_key_are_always_system_controlled(): void
+    {
+        $latinName = $this->uniqueCode('SRCFIXED');
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $this->basePayload($latinName) + [
+            'sourceType' => 'ENTITY_FIELD', 'sourceKey' => 'whatever',
+        ]);
+        $res->assertOk();
+
+        $row = collect($this->conditionFields->list(true))->firstWhere('Code', $latinName);
+        $this->assertSame('START_CONTEXT', $row->SourceType);
+        $this->assertSame($latinName, $row->SourceKey);
+    }
+
+    /** سازگاریِ عقب‌رو — مسیرِ قدیمیِ definition-scoped هنوز باید کار کند (Designer UIِ فعلی از همین استفاده می‌کند). */
+    public function test_legacy_definition_scoped_route_still_works(): void
+    {
+        $definitionId = $this->createDefinition();
+        $latinName = $this->uniqueCode('LEGACY');
+
+        $storeRes = $this->as(self::USER_FULL)->postJson(
+            "/workflow/definitions/{$definitionId}/condition-fields",
+            $this->basePayload($latinName)
+        );
+        $storeRes->assertOk();
+        $this->assertTrue($storeRes->json('success'));
+
+        $listRes = $this->as(self::USER_FULL)->getJson("/workflow/definitions/{$definitionId}/condition-fields");
+        $listRes->assertOk();
+        $this->assertTrue(collect($listRes->json('items'))->contains(fn ($f) => $f['Code'] === $latinName));
     }
 
     /* ============================ Toggle ============================ */
 
     public function test_toggle_condition_field_active_requires_manage_permission(): void
     {
-        $definitionId = $this->createDefinition();
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId) + ['definitionId' => $definitionId], self::USER_FULL);
+        $field = $this->conditionFields->save($this->basePayload(), self::USER_FULL);
 
         $this->as(self::USER_NOPERM)
             ->postJson("/workflow/condition-fields/{$field->FieldID}/toggle")
             ->assertStatus(403);
     }
 
-    public function test_toggle_condition_field_active_has_no_dependency_guard(): void
+    public function test_toggle_active_inactive_has_no_dependency_guard(): void
     {
         // بر خلافِ WorkflowCategories، غیرفعال‌کردنِ فیلد همیشه مجاز است — حتی اگر
         // در Draftِ دیگری استفاده شده باشد (طبقِ تصمیمِ صریحِ Final Design).
-        $definitionId = $this->createDefinition();
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId) + ['definitionId' => $definitionId], self::USER_FULL);
+        $field = $this->conditionFields->save($this->basePayload(), self::USER_FULL);
 
         $res = $this->as(self::USER_FULL)->postJson("/workflow/condition-fields/{$field->FieldID}/toggle");
         $res->assertOk();
         $this->assertTrue($res->json('success'));
 
-        $items = collect($this->defs->listConditionFields($definitionId, includeInactive: true));
+        $items = collect($this->conditionFields->list(includeInactive: true));
         $this->assertSame(0, (int) $items->firstWhere('FieldID', (int) $field->FieldID)->IsActive);
+
+        // برگرداندن به فعال هم با همان Endpoint کار می‌کند
+        $res2 = $this->as(self::USER_FULL)->postJson("/workflow/condition-fields/{$field->FieldID}/toggle");
+        $res2->assertOk();
+        $items2 = collect($this->conditionFields->list(includeInactive: true));
+        $this->assertSame(1, (int) $items2->firstWhere('FieldID', (int) $field->FieldID)->IsActive);
     }
 
-    public function test_inactive_field_does_not_appear_in_default_listing(): void
+    /**
+     * فیلدِ Inactive باید در Registry (با includeInactive=true) قابلِ‌مشاهده بماند،
+     * اما از فهرستِ پیش‌فرض (برایِ انتخاب در Conditionِ جدید) کنار گذاشته شود.
+     */
+    public function test_inactive_field_is_visible_with_includeInactive_but_excluded_from_default_listing(): void
     {
-        $definitionId = $this->createDefinition();
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId) + ['definitionId' => $definitionId], self::USER_FULL);
-        $this->defs->toggleConditionFieldActive((int) $field->FieldID, self::USER_FULL);
+        $field = $this->conditionFields->save($this->basePayload(), self::USER_FULL);
+        $this->conditionFields->toggleActive((int) $field->FieldID, self::USER_FULL);
 
-        $this->assertCount(0, $this->defs->listConditionFields($definitionId));
-        $this->assertCount(1, $this->defs->listConditionFields($definitionId, includeInactive: true));
+        $default = collect($this->conditionFields->list());
+        $this->assertNull($default->firstWhere('FieldID', (int) $field->FieldID), 'فیلدِ Inactive نباید در فهرستِ پیش‌فرض (برایِ Conditionِ جدید) باشد.');
+
+        $all = collect($this->conditionFields->list(includeInactive: true));
+        $this->assertNotNull($all->firstWhere('FieldID', (int) $field->FieldID), 'فیلدِ Inactive باید در Registry با includeInactive=true دیده شود.');
     }
 
-    /* ============================ Immutabilityِ Code ============================ */
+    /* ============================ Immutabilityِ کاملِ Code ============================ */
 
-    public function test_display_name_can_change_freely_before_any_rule_usage(): void
+    public function test_display_name_can_change_freely(): void
     {
-        $definitionId = $this->createDefinition();
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId) + ['definitionId' => $definitionId], self::USER_FULL);
+        $field = $this->conditionFields->save($this->basePayload(), self::USER_FULL);
 
-        $payload = $this->basePayload($definitionId);
+        $payload = $this->basePayload();
         $payload['fieldId'] = (int) $field->FieldID;
         $payload['displayName'] = 'نامِ جدید';
 
-        $res = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
-        $res->assertOk();
+        $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $payload)->assertOk();
     }
 
-    public function test_code_can_change_before_any_rule_uses_it(): void
+    /**
+     * قلبِ ساده‌سازیِ UX: Code پس از ایجاد هرگز تغییر نمی‌کند — چه فیلد در هیچ Ruleای
+     * استفاده نشده باشد، چه در یک Definition/Version استفاده شده باشد. Service همیشه
+     * Codeِ موجود را از DB می‌خواند و هر latinName/displayNameِ متفاوتی که کلاینت
+     * بفرستد را برایِ Code نادیده می‌گیرد — نه خطا، فقط بی‌اثر برایِ Code (DisplayName
+     * همچنان آزادانه به‌روزرسانی می‌شود). Guardِ Immutabilityِ SPِ قدیمی دست‌نخورده
+     * مانده (لایهٔ دومِ دفاعی)، اما دیگر هرگز از طریقِ این Service فعال نمی‌شود.
+     */
+    public function test_code_never_changes_via_edit_regardless_of_rule_usage(): void
     {
         $definitionId = $this->createDefinition();
-        $oldCode = $this->uniqueCode('OLDC');
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId, $oldCode) + ['definitionId' => $definitionId], self::USER_FULL);
+        $originalLatinName = $this->uniqueCode('LOCKEDCF');
+        $field = $this->conditionFields->save($this->basePayload($originalLatinName), self::USER_FULL);
 
-        $payload = $this->basePayload($definitionId, $this->uniqueCode('NEWC'));
+        $version = $this->defs->createDraft($definitionId, self::USER_FULL);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph($originalLatinName), self::USER_FULL);
+
+        $payload = $this->basePayload('TOTALLY_DIFFERENT_LATIN_NAME');
         $payload['fieldId'] = (int) $field->FieldID;
+        $payload['displayName'] = 'نامِ نمایشیِ جدید';
 
-        $res = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
+        $res = $this->as(self::USER_FULL)->postJson('/workflow/condition-fields', $payload);
         $res->assertOk();
         $this->assertTrue($res->json('success'));
+        $this->assertSame($originalLatinName, $res->json('code'));
+
+        $stored = collect($this->conditionFields->list(true))->firstWhere('FieldID', (int) $field->FieldID);
+        $this->assertSame($originalLatinName, $stored->Code);
+        $this->assertSame('نامِ نمایشیِ جدید', $stored->DisplayName);
     }
 
-    public function test_code_is_immutable_once_referenced_by_a_rule(): void
+    /* ============================ Runtime compatibility — فیلدِ Inactive ============================ */
+
+    /**
+     * قاعدهٔ کلیدی: غیرفعال‌کردنِ فیلدی که یک Versionِ منتشرشده از قبل در RuleJsonِ
+     * خودش به آن ارجاع می‌دهد، نباید اجرایِ (Start) آن Version را خراب کند — فقط
+     * ساختِ Ruleِ جدید با آن فیلد باید مسدود شود.
+     */
+    public function test_running_a_published_version_still_works_after_its_field_becomes_inactive(): void
     {
         $definitionId = $this->createDefinition();
-        $code = $this->uniqueCode('LOCKED');
-        $field = $this->defs->saveConditionField($this->basePayload($definitionId, $code) + ['definitionId' => $definitionId], self::USER_FULL);
+        $latinName = $this->uniqueCode('RTOK');
+        $field = $this->conditionFields->save($this->basePayload($latinName), self::USER_FULL);
 
-        // ساختِ یک Draft با گذاری که RuleJson اش به همین Code ارجاع می‌دهد (بدونِ Publish؛
-        // Immutability از همان لحظهٔ Save در هر Draftی اعمال می‌شود، نه فقط بعدِ Publish).
         $version = $this->defs->createDraft($definitionId, self::USER_FULL);
-        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph($code), self::USER_FULL);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph($latinName), self::USER_FULL);
+        $this->defs->publish((int) $version->VersionID, self::USER_FULL);
 
-        $payload = $this->basePayload($definitionId, $this->uniqueCode('TRY_RENAME'));
-        $payload['fieldId'] = (int) $field->FieldID;
+        // اکنون فیلد را غیرفعال می‌کنیم — Versionِ منتشرشده از قبل به آن ارجاع می‌دهد
+        $this->conditionFields->toggleActive((int) $field->FieldID, self::USER_FULL);
 
-        $res = $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload);
-        $res->assertStatus(422);
-        $this->assertStringContainsString('قابلِ‌تغییر نیست', $res->json('message'));
+        $meta = $this->defs->getGraph((int) $version->VersionID)['meta'];
 
-        // ولی DisplayName هنوز آزادانه قابلِ‌ویرایش است
-        $payload2 = $this->basePayload($definitionId, $code);
-        $payload2['fieldId'] = (int) $field->FieldID;
-        $payload2['displayName'] = 'نامِ جدید بعدِ استفاده';
-        $this->as(self::USER_FULL)->postJson("/workflow/definitions/{$definitionId}/condition-fields", $payload2)->assertOk();
+        // SourceKey همیشه برابرِ Code است (ساده‌سازیِ UX) — Contextِ ورودی هم باید با همان کلید باشد.
+        $result = $this->engine->start(new StartWorkflowRequest(
+            entityType: 'TEST_ENTITY',
+            entityId: random_int(90000, 99999),
+            startedByUserId: self::USER_FULL,
+            definitionCode: $meta->DefinitionCode,
+            context: [$latinName => '500'],
+        ));
+
+        $this->assertSame('COMPLETED', $result->instanceStatus);
+        $this->assertSame('END_A', $result->enteredStepCode, 'Ruleِ فیلدِ Inactiveِ ارجاع‌شده در Version منتشرشده باید همچنان درست ارزیابی شود.');
     }
 
     /** گرافِ START → COND → END_A/END_B با یک Ruleِ CONSTANT رویِ گذارِ COND→END_A. */

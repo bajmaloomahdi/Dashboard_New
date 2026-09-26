@@ -172,6 +172,58 @@ class CrmPartyTest extends TestCase
         $this->assertSame('خرده‌فروشی', $found['ActivityName']);
     }
 
+    /* ==================================================================== */
+    /*  دسته‌بندیِ چندگانهٔ طرف‌حساب (CrmPartyClassifications)               */
+    /* ==================================================================== */
+
+    public function test_party_can_have_multiple_classifications(): void
+    {
+        $party = $this->createParty();
+
+        $deptA = $this->as(self::USER_FULL)->postJson('/crm/classification/departments', ['displayName' => 'دپارتمانِ الف'])->assertOk()->json();
+        $deptB = $this->as(self::USER_FULL)->postJson('/crm/classification/departments', ['displayName' => 'دپارتمانِ ب'])->assertOk()->json();
+
+        $this->as(self::USER_FULL)->postJson('/crm/classifications', [
+            'partyId' => $party['partyId'], 'departmentId' => $deptA['departmentId'],
+        ])->assertOk()->assertJson(['success' => true]);
+
+        $this->as(self::USER_FULL)->postJson('/crm/classifications', [
+            'partyId' => $party['partyId'], 'departmentId' => $deptB['departmentId'],
+        ])->assertOk()->assertJson(['success' => true]);
+
+        $items = $this->as(self::USER_FULL)->getJson("/crm/classifications?partyId={$party['partyId']}")->assertOk()->json('items');
+        $this->assertCount(2, $items);
+
+        $list = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list')->json('items'));
+        $found = $list->firstWhere('PartyID', $party['partyId']);
+        $this->assertSame(2, (int) $found['ClassificationCount']);
+    }
+
+    public function test_classification_requires_at_least_one_dimension(): void
+    {
+        $party = $this->createParty();
+
+        $res = $this->as(self::USER_FULL)->postJson('/crm/classifications', ['partyId' => $party['partyId']]);
+        $res->assertStatus(422)->assertJson(['success' => false]);
+    }
+
+    public function test_toggle_classification_active_excludes_it_from_active_count(): void
+    {
+        $party = $this->createParty();
+        $department = $this->as(self::USER_FULL)->postJson('/crm/classification/departments', ['displayName' => 'دپارتمانِ تاگل'])->assertOk()->json();
+
+        $created = $this->as(self::USER_FULL)->postJson('/crm/classifications', [
+            'partyId' => $party['partyId'], 'departmentId' => $department['departmentId'],
+        ])->assertOk()->json();
+
+        $this->as(self::USER_FULL)->postJson("/crm/classifications/{$created['classificationId']}/toggle")
+            ->assertOk()->assertJson(['success' => true]);
+
+        $list = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list')->json('items'));
+        $found = $list->firstWhere('PartyID', $party['partyId']);
+        $this->assertSame(0, (int) $found['ClassificationCount']);
+    }
+
     public function test_edit_party_updates_fields(): void
     {
         $created = $this->createParty();
@@ -209,45 +261,29 @@ class CrmPartyTest extends TestCase
         $this->as(self::USER_FULL)->get("/crm/parties/{$created['partyId']}")->assertOk();
     }
 
-    /* ==================================================================== */
-    /*  برند                                                                 */
-    /* ==================================================================== */
-
-    public function test_create_multiple_brands_for_a_party(): void
-    {
-        $party = $this->createParty();
-
-        $this->as(self::USER_FULL)->postJson('/crm/brands', ['partyId' => $party['partyId'], 'name' => 'برندِ یک'])->assertOk();
-        $this->as(self::USER_FULL)->postJson('/crm/brands', ['partyId' => $party['partyId'], 'name' => 'برندِ دو'])->assertOk();
-
-        $list = $this->as(self::USER_FULL)->getJson("/crm/brands?partyId={$party['partyId']}")->json('items');
-        $this->assertCount(2, $list);
-    }
-
-    public function test_toggle_brand_active(): void
-    {
-        $party = $this->createParty();
-        $brand = $this->as(self::USER_FULL)->postJson('/crm/brands', ['partyId' => $party['partyId'], 'name' => 'برند'])->assertOk()->json();
-
-        $this->as(self::USER_FULL)->postJson("/crm/brands/{$brand['brandId']}/toggle")->assertOk()->assertJson(['success' => true]);
-    }
+    /* برند و ارتباطِ طرف‌حساب ↔ برند: tests/Feature/CrmBrandTest.php */
 
     /* ==================================================================== */
-    /*  آدرس — سلسله‌مراتبِ استان→شهر→شهرستان                                */
+    /*  آدرس — سلسله‌مراتبِ استان→شهرستان→شهر(→محلهٔ اختیاری)                */
     /* ==================================================================== */
 
-    private function geoTriplet(): array
+    /** زنجیرهٔ کاملِ جغرافیایی + عنوانِ آدرس؛ neighborhoodId جدا برمی‌گردد چون در آدرس اختیاری است. */
+    private function geoChain(): array
     {
         $province = $this->as(self::USER_FULL)->postJson('/crm/geography/provinces', [
             'displayName' => 'استانِ تست',
         ])->assertOk()->json();
 
-        $city = $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
-            'provinceId' => $province['provinceId'], 'displayName' => 'شهرِ تست',
+        $county = $this->as(self::USER_FULL)->postJson('/crm/geography/counties', [
+            'provinceId' => $province['provinceId'], 'displayName' => 'شهرستانِ تست',
         ])->assertOk()->json();
 
-        $county = $this->as(self::USER_FULL)->postJson('/crm/geography/counties', [
-            'cityId' => $city['cityId'], 'displayName' => 'شهرستانِ تست',
+        $city = $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
+            'countyId' => $county['countyId'], 'displayName' => 'شهرِ تست',
+        ])->assertOk()->json();
+
+        $neighborhood = $this->as(self::USER_FULL)->postJson('/crm/geography/neighborhoods', [
+            'cityId' => $city['cityId'], 'displayName' => 'محلهٔ تست',
         ])->assertOk()->json();
 
         $addressTitle = $this->as(self::USER_FULL)->postJson('/crm/directory/address-titles', [
@@ -255,54 +291,122 @@ class CrmPartyTest extends TestCase
         ])->assertOk()->json();
 
         return [
-            'provinceId' => $province['provinceId'], 'cityId' => $city['cityId'], 'countyId' => $county['countyId'],
-            'addressTitleId' => $addressTitle['addressTitleId'],
+            'address' => [
+                'provinceId' => $province['provinceId'], 'countyId' => $county['countyId'], 'cityId' => $city['cityId'],
+                'addressTitleId' => $addressTitle['addressTitleId'],
+            ],
+            'neighborhoodId' => $neighborhood['neighborhoodId'],
         ];
     }
 
     public function test_create_multiple_addresses_with_full_geography_hierarchy(): void
     {
         $party = $this->createParty();
-        $geo = $this->geoTriplet();
+        $geo = $this->geoChain();
 
-        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo, [
-            'partyId' => $party['partyId'], 'addressText' => 'خیابانِ اصلی، پلاکِ ۱',
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
+            'partyId' => $party['partyId'], 'neighborhoodId' => $geo['neighborhoodId'], 'addressText' => 'خیابانِ اصلی، پلاکِ ۱',
         ]));
         $res->assertOk()->assertJson(['success' => true]);
 
+        // آدرسِ دوم بدونِ محله — محله اختیاری است
+        $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
+            'partyId' => $party['partyId'], 'addressText' => 'خیابانِ فرعی',
+        ]))->assertOk()->assertJson(['success' => true]);
+
         $list = $this->as(self::USER_FULL)->getJson("/crm/addresses?partyId={$party['partyId']}")->json('items');
-        $this->assertCount(1, $list);
+        $this->assertCount(2, $list);
         $this->assertSame('استانِ تست', $list[0]['ProvinceName']);
-        $this->assertSame('شهرِ تست', $list[0]['CityName']);
         $this->assertSame('شهرستانِ تست', $list[0]['CountyName']);
+        $this->assertSame('شهرِ تست', $list[0]['CityName']);
+        $this->assertSame('محلهٔ تست', $list[0]['NeighborhoodName']);
+        $this->assertNull($list[1]['NeighborhoodID']);
     }
 
-    public function test_address_city_must_belong_to_selected_province(): void
+    public function test_address_county_must_belong_to_selected_province(): void
     {
         $party = $this->createParty();
-        $geo = $this->geoTriplet();
+        $geo = $this->geoChain();
 
         $otherProvince = $this->as(self::USER_FULL)->postJson('/crm/geography/provinces', [
             'displayName' => 'استانِ دیگر',
         ])->assertOk()->json();
 
-        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', [
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
             'partyId' => $party['partyId'],
-            'addressTitleId' => $geo['addressTitleId'],
-            'provinceId' => $otherProvince['provinceId'], // مغایر با CityID
-            'cityId' => $geo['cityId'],
-            'countyId' => $geo['countyId'],
+            'provinceId' => $otherProvince['provinceId'], // مغایر با CountyID
             'addressText' => 'آدرس',
-        ]);
+        ]));
 
         $res->assertStatus(422)->assertJson(['success' => false]);
+    }
+
+    public function test_address_city_must_belong_to_selected_county(): void
+    {
+        $party = $this->createParty();
+        $geo = $this->geoChain();
+
+        $otherCounty = $this->as(self::USER_FULL)->postJson('/crm/geography/counties', [
+            'provinceId' => $geo['address']['provinceId'], 'displayName' => 'شهرستانِ دیگر',
+        ])->assertOk()->json();
+
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
+            'partyId' => $party['partyId'],
+            'countyId' => $otherCounty['countyId'], // هم‌استان، اما شهر زیرمجموعه‌اش نیست
+            'addressText' => 'آدرس',
+        ]));
+
+        $res->assertStatus(422)->assertJson(['success' => false]);
+    }
+
+    public function test_address_neighborhood_must_belong_to_selected_city(): void
+    {
+        $party = $this->createParty();
+        $geo = $this->geoChain();
+
+        $otherCity = $this->as(self::USER_FULL)->postJson('/crm/geography/cities', [
+            'countyId' => $geo['address']['countyId'], 'displayName' => 'شهرِ دیگر',
+        ])->assertOk()->json();
+
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
+            'partyId' => $party['partyId'],
+            'cityId' => $otherCity['cityId'],
+            'neighborhoodId' => $geo['neighborhoodId'], // محلهٔ شهرِ دیگر
+            'addressText' => 'آدرس',
+        ]));
+
+        $res->assertStatus(422)->assertJson(['success' => false]);
+    }
+
+    public function test_address_geography_lookups_follow_hierarchy(): void
+    {
+        $geo = $this->geoChain();
+
+        $counties = $this->as(self::USER_FULL)->getJson("/crm/addresses/counties?provinceId={$geo['address']['provinceId']}")->assertOk()->json('items');
+        $this->assertSame([$geo['address']['countyId']], collect($counties)->pluck('CountyID')->map(fn ($v) => (int) $v)->all());
+
+        $cities = $this->as(self::USER_FULL)->getJson("/crm/addresses/cities?countyId={$geo['address']['countyId']}")->assertOk()->json('items');
+        $this->assertSame([$geo['address']['cityId']], collect($cities)->pluck('CityID')->map(fn ($v) => (int) $v)->all());
+
+        $neighborhoods = $this->as(self::USER_FULL)->getJson("/crm/addresses/neighborhoods?cityId={$geo['address']['cityId']}")->assertOk()->json('items');
+        $this->assertSame([$geo['neighborhoodId']], collect($neighborhoods)->pluck('NeighborhoodID')->map(fn ($v) => (int) $v)->all());
+
+        $this->as(self::USER_FULL)->getJson('/crm/addresses/municipal-zones')->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_address_geography_lookups_require_view_permission(): void
+    {
+        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/counties?provinceId=1')->assertStatus(403);
+        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/cities?countyId=1')->assertStatus(403);
+        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/neighborhoods?cityId=1')->assertStatus(403);
+        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/municipal-zones')->assertStatus(403);
     }
 
     public function test_toggle_address_active(): void
     {
         $party = $this->createParty();
-        $geo = $this->geoTriplet();
-        $address = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo, [
+        $geo = $this->geoChain();
+        $address = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
             'partyId' => $party['partyId'], 'addressText' => 'آدرس',
         ]))->assertOk()->json();
 
@@ -336,6 +440,27 @@ class CrmPartyTest extends TestCase
         $list = collect($this->as(self::USER_FULL)->getJson("/crm/contacts?partyId={$party['partyId']}")->json('items'));
         $this->assertFalse((bool) $list->firstWhere('ContactID', $first['contactId'])['IsPrimary']);
         $this->assertTrue((bool) $list->firstWhere('ContactID', $second['contactId'])['IsPrimary']);
+    }
+
+    public function test_party_contact_can_be_linked_to_a_related_person(): void
+    {
+        $party = $this->createParty();
+        $typeId = $this->contactTypeId();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'سارا', 'lastName' => 'احمدی'])->assertOk()->json();
+
+        $this->as(self::USER_FULL)->postJson('/crm/relations', [
+            'partyId' => $party['partyId'], 'personId' => $person['personId'],
+        ])->assertOk();
+
+        $contact = $this->as(self::USER_FULL)->postJson('/crm/contacts', [
+            'partyId' => $party['partyId'], 'contactTypeId' => $typeId, 'contactValue' => '09120000003',
+            'relatedPersonId' => $person['personId'],
+        ])->assertOk()->json();
+
+        $list = collect($this->as(self::USER_FULL)->getJson("/crm/contacts?partyId={$party['partyId']}")->json('items'));
+        $found = $list->firstWhere('ContactID', $contact['contactId']);
+        $this->assertSame($person['personId'], (int) $found['RelatedPersonID']);
+        $this->assertSame('سارا احمدی', $found['RelatedPersonName']);
     }
 
     public function test_toggle_contact_active(): void
@@ -425,16 +550,18 @@ class CrmPartyTest extends TestCase
     public function test_address_can_be_created_directly_for_a_person_without_a_party(): void
     {
         $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ق', 'lastName' => 'ق'])->assertOk()->json();
-        $geo = $this->geoTriplet();
+        $geo = $this->geoChain();
 
-        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo, [
-            'personId' => $person['personId'], 'addressText' => 'آدرسِ مخاطب',
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
+            'personId' => $person['personId'], 'neighborhoodId' => $geo['neighborhoodId'], 'addressText' => 'آدرسِ مخاطب',
         ]));
         $res->assertOk()->assertJson(['success' => true]);
 
         $list = $this->as(self::USER_FULL)->getJson("/crm/addresses?personId={$person['personId']}")->json('items');
         $this->assertCount(1, $list);
         $this->assertNull($list[0]['PartyID']);
+        $this->assertSame('شهرستانِ تست', $list[0]['CountyName']);
+        $this->assertSame('محلهٔ تست', $list[0]['NeighborhoodName']);
     }
 
     public function test_contact_requires_exactly_one_of_party_or_person(): void
@@ -467,6 +594,36 @@ class CrmPartyTest extends TestCase
         $this->as(self::USER_FULL)->postJson('/crm/relations', [
             'partyId' => $partyB['partyId'], 'personId' => $person['personId'],
         ])->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_person_show_page_lists_related_parties_with_role_position_and_primary_flag(): void
+    {
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'نیما', 'lastName' => 'رستمی'])->assertOk()->json();
+        $party = $this->createParty(['officialName' => 'شرکتِ رابطهٔ‌معکوس']);
+
+        $position = $this->as(self::USER_FULL)->postJson('/crm/directory/positions', ['displayName' => 'مدیرِفروش'])->assertOk()->json();
+        $role = $this->as(self::USER_FULL)->postJson('/crm/directory/contact-roles', ['displayName' => 'رابطِ‌خرید'])->assertOk()->json();
+
+        $this->as(self::USER_FULL)->postJson('/crm/relations', [
+            'partyId' => $party['partyId'],
+            'personId' => $person['personId'],
+            'positionId' => $position['positionId'],
+            'roleIds' => [$role['contactRoleId']],
+            'isPrimaryContact' => true,
+        ])->assertOk()->assertJson(['success' => true]);
+
+        $response = $this->as(self::USER_FULL)->get("/crm/persons/{$person['personId']}")->assertOk();
+        $relations = $response->viewData('page')['props']['relations'];
+
+        $this->assertCount(1, $relations);
+        $found = $relations[0];
+        $this->assertSame($party['partyId'], (int) $found->PartyID);
+        $this->assertSame('شرکتِ رابطهٔ‌معکوس', $found->PartyDisplayName);
+        $this->assertSame('LEGAL', $found->PartyNature);
+        $this->assertSame('مدیرِفروش', $found->PositionName);
+        $this->assertSame('رابطِ‌خرید', $found->RoleNames);
+        $this->assertTrue((bool) $found->IsPrimaryContact);
+        $this->assertTrue((bool) $found->IsActive);
     }
 
     public function test_relation_requires_position_role_primary_and_status(): void

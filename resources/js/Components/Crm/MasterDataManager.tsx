@@ -34,6 +34,9 @@ export interface ParentSelectConfig {
     apiBase: string;
     /** نامِ ستونِ نمایشیِ والد که از سرور برمی‌گردد، مثلاً 'PartyTypeName' */
     displayColumn: { title: string; dataIndex: string };
+    /** اختیاری — فیلدی رویِ ردیف‌هایِ والد که کنارِ نامِ هر گزینه نمایش داده می‌شود
+     * تا والدهایِ هم‌نام قابلِ‌تشخیص باشند، مثلاً 'ProvinceName' برایِ گزینه‌هایِ شهرستان. */
+    optionContextField?: string;
 }
 
 export interface GrandParentSelectConfig {
@@ -59,9 +62,9 @@ interface MasterDataManagerProps {
     /** برایِ پیام‌ها/Placeholder، مثلاً 'دپارتمان' */
     entityLabel: string;
     parentSelect?: ParentSelectConfig;
-    /** فقط برایِ شهرستان: یک سطحِ فیلترِ اضافه (استان) که گزینه‌هایِ Selectِ
-     * «شهر» را در فرم/نوارِ فیلترِ گرید محدود می‌کند و امکانِ فیلترِ مستقیمِ
-     * گرید بر اساسِ استان را هم می‌دهد. */
+    /** فقط برایِ نوارِ فیلترِ بالایِ گرید: یک سطحِ فیلترِ اضافه (جدِّ بزرگ‌تر، مثلاً
+     * استان برایِ شهر) که گزینه‌هایِ فیلترِ والد را محدود می‌کند. فرمِ ایجاد/ویرایش
+     * عمداً فقط والدِ مستقیم را می‌پرسد و این سطح را نشان نمی‌دهد. */
     grandParentSelect?: GrandParentSelectConfig;
     namePlaceholder?: string;
 }
@@ -71,16 +74,13 @@ interface RowDraft {
     displayName: string;
     sortOrder: number;
     parentId: number | null;
-    /** فقط UX — برایِ فیلترکردنِ گزینه‌هایِ Selectِ والد در فرم (مثلاً استان
-     * برایِ محدودکردنِ فهرستِ شهرها هنگامِ تعریفِ شهرستان)؛ به سرور ارسال نمی‌شود. */
-    grandParentId: number | null;
 }
 
-const emptyDraft: RowDraft = { id: null, displayName: '', sortOrder: 0, parentId: null, grandParentId: null };
+const emptyDraft: RowDraft = { id: null, displayName: '', sortOrder: 0, parentId: null };
 
 /**
  * مدیرِ عمومیِ Master Data — برایِ همهٔ فهرست‌هایِ سادهٔ CRM (دپارتمان/نوع/فعالیت/
- * عنوان/سمت/نقش/نوعِ تماس/عنوانِ آدرس/استان/شهر/شهرستان/منطقهٔ شهرداری) به‌جایِ
+ * عنوان/سمت/نقش/نوعِ تماس/عنوانِ آدرس/استان/شهرستان/شهر/محله/منطقهٔ شهرداری) به‌جایِ
  * ۱۲ صفحهٔ تکراری — هم‌الگو با Process/EntityTypes/Index.tsx (Table + فرمِ درون‌خطی
  * + Popconfirm)، فقط پارامتری‌شده تا یک بار نوشته و ۱۲ بار استفاده شود.
  */
@@ -127,16 +127,16 @@ export default function MasterDataManager({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    /** گزینه‌هایِ Selectِ والد — اگر جدِّ بزرگ‌تری انتخاب شده باشد (مثلاً استان
-     * برایِ شهرستان)، فقط والدهایِ زیرمجموعهٔ همان جد نمایش داده می‌شوند. یک
-     * نسخه برایِ فرمِ ایجاد/ویرایش (بر اساسِ draft.grandParentId) و یک نسخه
-     * برایِ نوارِ فیلترِ بالایِ گرید (بر اساسِ gridGrandParentFilterId). */
-    const toParentOptions = (rows: any[]) => rows.map((row: any) => ({ value: row[parentSelect?.idField ?? ''], label: row.DisplayName }));
-    const formParentOptions = toParentOptions(
-        grandParentSelect && draft.grandParentId
-            ? parentRows.filter((r) => r[grandParentSelect.idField] === draft.grandParentId)
-            : parentRows
-    );
+    /** گزینه‌هایِ Selectِ والد — فرم همهٔ والدها را نشان می‌دهد (فقط والدِ مستقیم پرسیده
+     * می‌شود)؛ نوارِ فیلترِ گرید اگر جدِّ بزرگ‌تری انتخاب شده باشد، فقط والدهایِ زیرمجموعهٔ
+     * همان جد را نشان می‌دهد. */
+    const contextField = parentSelect?.optionContextField;
+    const toParentOptions = (rows: any[]) =>
+        rows.map((row: any) => ({
+            value: row[parentSelect?.idField ?? ''],
+            label: contextField && row[contextField] ? `${row.DisplayName} — ${row[contextField]}` : row.DisplayName,
+        }));
+    const formParentOptions = toParentOptions(parentRows);
     const gridParentOptions = toParentOptions(
         grandParentSelect && gridGrandParentFilterId
             ? parentRows.filter((r) => r[grandParentSelect.idField] === gridGrandParentFilterId)
@@ -183,7 +183,6 @@ export default function MasterDataManager({
             displayName: row.DisplayName,
             sortOrder: row.SortOrder,
             parentId: parentSelect ? row[parentSelect.idField] ?? null : null,
-            grandParentId: grandParentSelect ? row[grandParentSelect.idField] ?? null : null,
         });
         setError(null);
         setFormOpen(true);
@@ -191,7 +190,7 @@ export default function MasterDataManager({
 
     const handleSave = async () => {
         if (!draft.displayName.trim()) {
-            setError('نامِ نمایشی الزامی است.');
+            setError('نام الزامی است.');
             return;
         }
         if (parentSelect && !draft.parentId) {
@@ -240,15 +239,19 @@ export default function MasterDataManager({
         reload();
     };
 
+    const codeColumn = { title: 'کد', dataIndex: 'Code', key: 'Code', width: 140, render: (v: string) => <Text code dir="ltr" style={{ whiteSpace: 'nowrap' }}>{v}</Text> };
+    const nameColumn = { title: 'نام', dataIndex: 'DisplayName', key: 'DisplayName' };
+
+    // در گریدهایِ سلسله‌مراتبی (فعالیت/شهر/شهرستان) ستون‌هایِ سطوحِ بالادستی اول می‌آیند، بعد کد، بعد نام
     const columns: ColumnsType<MasterDataRow> = [
-        { title: 'کد', dataIndex: 'Code', key: 'Code', width: 140, render: (v: string) => <Text code dir="ltr" style={{ whiteSpace: 'nowrap' }}>{v}</Text> },
-        { title: 'نامِ نمایشی', dataIndex: 'DisplayName', key: 'DisplayName' },
         ...(grandParentSelect?.displayColumn
             ? [{ title: grandParentSelect.displayColumn.title, dataIndex: grandParentSelect.displayColumn.dataIndex, key: grandParentSelect.displayColumn.dataIndex } as const]
             : []),
         ...(parentSelect
             ? [{ title: parentSelect.displayColumn.title, dataIndex: parentSelect.displayColumn.dataIndex, key: parentSelect.displayColumn.dataIndex } as const]
             : []),
+        codeColumn,
+        nameColumn,
         {
             title: 'وضعیت',
             key: 'status',
@@ -308,26 +311,11 @@ export default function MasterDataManager({
                 <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }} size={12}>
                     {error ? <Alert type="error" showIcon message={error} style={{ borderRadius: 8 }} /> : null}
                     <Space style={{ width: '100%' }} wrap>
-                        {grandParentSelect ? (
-                            <div>
-                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>{grandParentSelect.label}</Text>
-                                <Select
-                                    style={{ width: 220 }}
-                                    value={draft.grandParentId ?? undefined}
-                                    onChange={(v) => setDraft((d) => ({ ...d, grandParentId: v ?? null, parentId: null }))}
-                                    options={grandParentOptions}
-                                    placeholder={grandParentSelect.label}
-                                    showSearch
-                                    allowClear
-                                    filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                                />
-                            </div>
-                        ) : null}
                         {parentSelect ? (
                             <div>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>{parentSelect.label}</Text>
                                 <Select
-                                    style={{ width: 220 }}
+                                    style={{ width: 260 }}
                                     value={draft.parentId ?? undefined}
                                     onChange={(v) => setDraft((d) => ({ ...d, parentId: v }))}
                                     options={formParentOptions}
@@ -338,7 +326,7 @@ export default function MasterDataManager({
                             </div>
                         ) : null}
                         <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نامِ نمایشی</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نام</Text>
                             <Input
                                 style={{ width: 220 }}
                                 value={draft.displayName}

@@ -143,15 +143,21 @@ class WorkflowStore
         return DB::selectOne('EXEC dbo.sp_Wf_GetTemplateParameterByCode @Code = ?', [$code]);
     }
 
+    /** برایِ خواندنِ Codeِ فعلی هنگامِ ویرایش — Code هرگز بر اساسِ ورودیِ کلاینت تغییر نمی‌کند. */
+    public function getTemplateParameterById(int $templateParameterId): ?object
+    {
+        return DB::selectOne('SELECT TOP 1 * FROM dbo.TemplateParameters WHERE TemplateParameterID = ?', [$templateParameterId]);
+    }
+
     public function saveTemplateParameter(array $p): object
     {
         return $this->write(
             'EXEC dbo.sp_Wf_SaveTemplateParameter
                 @TemplateParameterID = ?, @Code = ?, @Caption = ?, @GroupCode = ?, @EntityType = ?,
-                @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @SortOrder = ?, @UserID = ?',
+                @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @Description = ?, @SortOrder = ?, @UserID = ?',
             [
                 $p['templateParameterId'] ?? null, $p['code'], $p['caption'], $p['groupCode'], $p['entityType'] ?? null,
-                $p['dataType'], $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
+                $p['dataType'], $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['description'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
             ]
         );
     }
@@ -210,23 +216,35 @@ class WorkflowStore
         );
     }
 
-    /* ---------- فیلدهایِ شرط (WorkflowConditionFields) ---------- */
+    /* ---------- فیلدهایِ شرط (WorkflowConditionFields) — Global Registry ---------- */
 
-    public function getConditionFields(int $definitionId, bool $includeInactive = false): array
+    public function getConditionFields(bool $includeInactive = false): array
     {
         return DB::select(
-            'EXEC dbo.sp_Wf_GetConditionFields @DefinitionID = ?, @IncludeInactive = ?',
-            [$definitionId, $includeInactive]
+            'EXEC dbo.sp_Wf_GetConditionFields @IncludeInactive = ?',
+            [$includeInactive]
         );
+    }
+
+    /** برایِ خواندنِ Codeِ فعلی هنگامِ ویرایش — Code هرگز بر اساسِ ورودیِ کلاینت تغییر نمی‌کند. */
+    public function getConditionFieldById(int $fieldId): ?object
+    {
+        return DB::selectOne('SELECT TOP 1 * FROM dbo.WorkflowConditionFields WHERE FieldID = ?', [$fieldId]);
+    }
+
+    /** لوکاپِ سبک برایِ چکِ Uniquenessِ Code در سمتِ PHP، قبل از فراخوانیِ SP (هم‌الگو با getEntityTypeByCode). */
+    public function getConditionFieldByCode(string $code): ?object
+    {
+        return DB::selectOne('SELECT TOP 1 * FROM dbo.WorkflowConditionFields WHERE Code = ?', [$code]);
     }
 
     public function saveConditionField(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Wf_SaveConditionField @FieldID = ?, @DefinitionID = ?, @Code = ?, @DisplayName = ?, @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @SortOrder = ?, @UserID = ?',
+            'EXEC dbo.sp_Wf_SaveConditionField @FieldID = ?, @Code = ?, @DisplayName = ?, @DataType = ?, @SourceType = ?, @SourceKey = ?, @AllowedValuesJson = ?, @Description = ?, @SortOrder = ?, @UserID = ?',
             [
-                $p['fieldId'] ?? null, $p['definitionId'], $p['code'], $p['displayName'], $p['dataType'],
-                $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
+                $p['fieldId'] ?? null, $p['code'], $p['displayName'], $p['dataType'],
+                $p['sourceType'], $p['sourceKey'], $p['allowedValuesJson'] ?? null, $p['description'] ?? null, $p['sortOrder'] ?? 0, $p['userId'],
             ]
         );
     }
@@ -394,6 +412,25 @@ class WorkflowStore
                 ),
                 $p['createUser'] ?? $p['senderUserId'],
             ]
+        );
+    }
+
+    /**
+     * بررسیِ Read-Only پیش از Adoptِ یک Messageِ از‌پیش‌ساخته‌شده — TaskService::adoptStepTask()
+     * این خروجی را برایِ سه شرطِ لازم (نوعِ «وظیفه»، تعلق به همان فرستنده، عدمِ اتصالِ قبلی
+     * به هیچ StepInstanceای) بررسی می‌کند.
+     */
+    public function getAdoptableTaskMessage(int $messageId): ?object
+    {
+        return DB::selectOne(
+            'SELECT m.MessageID, m.MessageTypeID, mt.MessageTypeName, m.SenderUserID,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.WorkflowStepInstances wsi WHERE wsi.MessageID = m.MessageID
+                    ) THEN 1 ELSE 0 END AS AlreadyAttached
+             FROM dbo.Messages m
+             JOIN dbo.MessageTypes mt ON mt.MessageTypeID = m.MessageTypeID
+             WHERE m.MessageID = ?',
+            [$messageId]
         );
     }
 

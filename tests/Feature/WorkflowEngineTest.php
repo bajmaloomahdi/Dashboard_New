@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\Workflow\ConditionFieldService;
 use App\Services\Workflow\Dto\EngineResult;
 use App\Services\Workflow\Dto\StartWorkflowRequest;
 use App\Services\Workflow\Dto\TaskActionRequest;
@@ -46,6 +47,7 @@ class WorkflowEngineTest extends TestCase
     private WorkflowEngine $engine;
     private WorkflowQueryService $query;
     private WorkflowStore $store;
+    private ConditionFieldService $conditionFields;
 
     protected function setUp(): void
     {
@@ -55,6 +57,7 @@ class WorkflowEngineTest extends TestCase
         $this->engine = $this->app->make(WorkflowEngine::class);
         $this->query = $this->app->make(WorkflowQueryService::class);
         $this->store = $this->app->make(WorkflowStore::class);
+        $this->conditionFields = $this->app->make(ConditionFieldService::class);
     }
 
     /* ============================ سازنده‌ها ============================ */
@@ -1783,12 +1786,26 @@ class WorkflowEngineTest extends TestCase
         ];
     }
 
-    private function defineAmountField(int $definitionId, string $code = 'AMOUNT'): void
+    /**
+     * فیلدها اکنون سراسری‌اند (Global Registry) — Code باید در کلِ سیستم یکتا باشد،
+     * از‌جمله دادهٔ واقعیِ از‌پیش‌موجود (مثلاً AMOUNT از COND_TASK_DEMO). به‌جایِ ساختِ
+     * دوبارهٔ همان Code (که با خطایِ «قبلاً استفاده شده» رد می‌شود)، اگر فیلدی با همین
+     * Code از قبل وجود دارد (چه از دادهٔ واقعی، چه از یک تستِ دیگر) همان استفاده می‌شود
+     * — دقیقاً معنایِ واقعیِ «استفادهٔ مجدد در چند Workflow»یِ همین Registry.
+     */
+    private function defineAmountField(int $definitionId, string $code = 'AMOUNT'): object
     {
-        $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => $code, 'displayName' => 'مبلغ',
+        $existing = collect($this->conditionFields->list(includeInactive: true))->firstWhere('Code', $code);
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $res = $this->conditionFields->save([
+            'latinName' => $code, 'displayName' => 'مبلغ',
             'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
         ], self::USER_A);
+
+        return (object) ['FieldID' => (int) $res->FieldID, 'Code' => $code];
     }
 
     private function startWfWithContext(string $code, int $entityId, array $context): EngineResult
@@ -1801,7 +1818,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_condition_gateway_picks_matching_rule_by_priority(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1821,7 +1838,7 @@ class WorkflowEngineTest extends TestCase
     public function test_condition_gateway_short_circuits_on_first_true_rule_by_priority(): void
     {
         // هر دو Ruleِ TRUE هستند؛ برنده باید همیشه Priorityِ کمتر باشد.
-        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1839,7 +1856,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_condition_gateway_falls_back_to_default_when_no_rule_matches(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1857,7 +1874,7 @@ class WorkflowEngineTest extends TestCase
     public function test_condition_gateway_missing_context_value_never_matches_and_uses_default(): void
     {
         // طبقِ قاعدهٔ NULL: غیابِ amount در Context یعنی هر مقایسه FALSE است.
-        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1874,7 +1891,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_condition_gateway_controlled_failure_when_no_rule_matches_and_no_default(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CG_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'گیت‌وی', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         // ساختِ گرافِ بدونِ Default و Publishِ آن از طریقِ Store مستقیم (نه Service) تا
@@ -1898,20 +1915,22 @@ class WorkflowEngineTest extends TestCase
 
     /* ==================== Context Snapshot (Start) ==================== */
 
+    /**
+     * از زمانِ Global Condition Registry، Contextِ قابلِ‌پذیرش دیگر «هر فیلدِ ثبت‌شده
+     * برایِ این Definition» نیست (آن مفهوم اصلاً دیگر وجود ندارد) — بلکه فقط فیلدهایی
+     * که واقعاً در RuleJsonِ همین Version ارجاع شده‌اند. پس این تست اکنون به یک
+     * CONDITIONِ واقعی (هرچند حداقلی) نیاز دارد تا AMOUNT «استفاده‌شده» حساب شود؛
+     * هدفِ اصلیِ تست (Cast/Validate/Snapshot صحیح در ContextJson) بدونِ تغییر می‌ماند.
+     */
     public function test_start_context_is_validated_cast_and_snapshotted(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'CTX_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Context', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CTX_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'زمینه', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
-        $this->defs->saveGraph((int) $version->VersionID, [
-            'steps' => [
-                ['code' => 'START', 'name' => 'شروع', 'stepType' => 'START', 'sortOrder' => 0],
-                ['code' => 'END', 'name' => 'پایان', 'stepType' => 'END', 'sortOrder' => 1],
-            ],
-            'actions' => [], 'assignments' => [],
-            'transitions' => [['code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'END', 'isDefault' => true]],
-        ], self::USER_A);
+        $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
+            ['toStepCode' => 'END_HIGH', 'priority' => 10, 'rule' => $this->amountRule('AMOUNT', 'GT', 100)],
+        ]), self::USER_A);
         $this->defs->publish((int) $version->VersionID, self::USER_A);
 
         $meta = $this->store->getVersionMeta((int) $version->VersionID);
@@ -1922,11 +1941,13 @@ class WorkflowEngineTest extends TestCase
         $decoded = json_decode($rawContext, true);
         // DECIMAL دیگر float نیست — رشتهٔ Canonicalِ دقیق در ContextJson ذخیره می‌شود.
         $this->assertSame('150.5', $decoded['AMOUNT']);
+        // اثباتِ ضمنی که Ruleِ AMOUNT>100 واقعاً با همین مقدارِ Snapshotشده ارزیابی شد.
+        $this->assertSame('END_HIGH', $result->enteredStepCode);
     }
 
     public function test_start_with_invalid_context_creates_no_instance(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'CTXBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Context بد', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'CTXBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'زمینهٔ نادرست', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1955,7 +1976,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_transition_taken_history_includes_rule_evaluation_detail(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'HIST_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'History', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'HIST_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'تاریخچه', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -1984,7 +2005,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_publish_is_blocked_when_condition_step_has_no_default(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'NODEF_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'بدونِ Default', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'NODEF_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'بدونِ پیش‌فرض', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -2002,11 +2023,8 @@ class WorkflowEngineTest extends TestCase
 
     public function test_publish_is_blocked_when_rule_references_inactive_field(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'INACT_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'فیلدِ غیرفعال', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
-        $field = $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
-            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
-        ], self::USER_A);
+        $definitionId = (int) $this->defs->save(['latinName' => 'INACT_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'فیلدِ غیرفعال', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $field = $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
         $this->defs->saveGraph((int) $version->VersionID, $this->conditionGraph([
@@ -2014,7 +2032,7 @@ class WorkflowEngineTest extends TestCase
         ]), self::USER_A);
 
         // Save همچنان موفق است (Ruleِ اشاره‌کننده به فیلدِ غیرفعال قابلِ Save است، فقط Publish را مسدود می‌کند)
-        $this->defs->toggleConditionFieldActive((int) $field->FieldID, self::USER_A);
+        $this->conditionFields->toggleActive((int) $field->FieldID, self::USER_A);
 
         $result = $this->defs->validate((int) $version->VersionID, self::USER_A, persist: false);
         $this->assertFalse($result['ok']);
@@ -2026,7 +2044,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_publish_is_blocked_when_rule_json_is_on_non_condition_transition(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'MISPLACED_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'نادرست', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'MISPLACED_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'نادرست', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -2050,7 +2068,7 @@ class WorkflowEngineTest extends TestCase
     /** یافتهٔ Auditِ Final: گذارِ Default نباید هم‌زمان RuleJson داشته باشد — باید Publish را مسدود کند. */
     public function test_publish_is_blocked_when_a_default_transition_also_has_rule_json(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'DEFRULE_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Default+Rule', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => 'DEFRULE_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'پیش‌فرض+شرط', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
@@ -2087,11 +2105,8 @@ class WorkflowEngineTest extends TestCase
      */
     public function test_decimal_comparison_is_exact_and_float_independent(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'DEC_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Decimal دقیق', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
-        $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
-            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
-        ], self::USER_A);
+        $definitionId = (int) $this->defs->save(['latinName' => 'DEC_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'اعشاریِ دقیق', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
 
         // RuleJson عمداً غیر-Canonical است («0.300» به‌جایِ «0.3») تا اثبات شود مقایسه
         // با bccomp (که فرمت‌هایِ هم‌ارزِ متفاوت را هم‌مقدار می‌داند) انجام می‌شود، نه
@@ -2135,11 +2150,8 @@ class WorkflowEngineTest extends TestCase
      */
     public function test_context_contract_end_to_end_chain_produces_true_result(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'E2E_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'End to End', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
-        $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
-            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
-        ], self::USER_A);
+        $definitionId = (int) $this->defs->save(['latinName' => 'E2E_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'سرتاسری', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
 
         $rule = [
             'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
@@ -2171,11 +2183,8 @@ class WorkflowEngineTest extends TestCase
      */
     public function test_context_contract_rejects_unknown_context_key(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'E2EBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'End to End Bad', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
-        $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => 'AMOUNT', 'displayName' => 'مبلغ',
-            'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
-        ], self::USER_A);
+        $definitionId = (int) $this->defs->save(['latinName' => 'E2EBAD_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'سرتاسریِ نادرست', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);
         $this->defs->saveGraph((int) $version->VersionID, [
@@ -2212,17 +2221,18 @@ class WorkflowEngineTest extends TestCase
      */
     public function test_context_contract_uses_source_key_not_code_for_raw_context_lookup(): void
     {
-        $definitionId = (int) $this->defs->save(['code' => 'MAP_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'Mapping', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
-        // Code و SourceKey عمداً کاملاً متفاوتند.
-        $this->defs->saveConditionField([
-            'definitionId' => $definitionId, 'code' => 'TOTAL_AMOUNT', 'displayName' => 'جمعِ مبلغ',
+        $definitionId = (int) $this->defs->save(['latinName' => 'MAP_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'نگاشت', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        // Code و SourceKey عمداً کاملاً متفاوتند. Codeِ یکتا (نه ثابت) چون فیلدها اکنون سراسری‌اند.
+        $totalAmountCode = 'TOTAL_AMOUNT_' . strtoupper(bin2hex(random_bytes(4)));
+        $this->conditionFields->save([
+            'latinName' => $totalAmountCode, 'displayName' => 'جمعِ مبلغ',
             'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'raw_amt_field_x',
         ], self::USER_A);
 
         $rule = [
             'version' => 1, 'type' => 'GROUP', 'logic' => 'AND',
             'children' => [
-                ['type' => 'CONDITION', 'field' => 'TOTAL_AMOUNT', 'operator' => 'GT', 'value' => ['kind' => 'CONSTANT', 'data' => '1000']],
+                ['type' => 'CONDITION', 'field' => $totalAmountCode, 'operator' => 'GT', 'value' => ['kind' => 'CONSTANT', 'data' => '1000']],
             ],
         ];
 
@@ -2234,20 +2244,20 @@ class WorkflowEngineTest extends TestCase
 
         $meta = $this->store->getVersionMeta((int) $version->VersionID);
 
-        // اگر Evaluator به‌اشتباه به‌دنبالِ کلیدِ «TOTAL_AMOUNT» در Contextِ خام
+        // اگر Evaluator به‌اشتباه به‌دنبالِ کلیدِ Codeِ فیلد در Contextِ خام
         // می‌گشت (به‌جایِ SourceKeyِ صحیح «raw_amt_field_x»)، این مقدار هرگز پیدا
         // نمی‌شد و طبقِ قاعدهٔ NULL، Ruleِ GT همیشه FALSE می‌ماند → END_DEFAULT.
         $result = $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['raw_amt_field_x' => '2000']);
 
         $rawContext = $this->store->getInstanceContext($result->instanceId);
-        $this->assertSame('{"TOTAL_AMOUNT":"2000"}', $rawContext, 'ContextJson باید با کلیدِ Code ذخیره شود، نه SourceKey.');
+        $this->assertSame('{"' . $totalAmountCode . '":"2000"}', $rawContext, 'ContextJson باید با کلیدِ Code ذخیره شود، نه SourceKey.');
         $this->assertSame('END_HIGH', $result->enteredStepCode, 'Evaluator باید از SourceKeyِ صحیح مقدار را خوانده باشد.');
 
-        // برعکسِ آزمایش: اگر کلیدِ Contextِ ورودی به‌اشتباه «TOTAL_AMOUNT» (خودِ Code) باشد
-        // نه SourceKeyِ واقعی، باید به‌عنوانِ کلیدِ ناشناخته Reject شود (طبقِ همان تستِ بالا) —
-        // یعنی سیستم هرگز به‌صورتِ نرم/Fallback بینِ Code و SourceKey سوییچ نمی‌کند.
+        // برعکسِ آزمایش: اگر کلیدِ Contextِ ورودی به‌اشتباه خودِ Code باشد نه SourceKeyِ
+        // واقعی، باید به‌عنوانِ کلیدِ ناشناخته Reject شود (طبقِ همان تستِ بالا) — یعنی
+        // سیستم هرگز به‌صورتِ نرم/Fallback بینِ Code و SourceKey سوییچ نمی‌کند.
         $this->expectException(WorkflowValidationException::class);
-        $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), ['TOTAL_AMOUNT' => '2000']);
+        $this->startWfWithContext($meta->DefinitionCode, random_int(90000, 99999), [$totalAmountCode => '2000']);
     }
 
     /* ==================== Condition Engine بعد از یک اقدامِ واقعیِ تسک ==================== */
@@ -2261,7 +2271,7 @@ class WorkflowEngineTest extends TestCase
     public function test_condition_gateway_evaluated_after_real_task_action(): void
     {
         $code = 'CGT_' . strtoupper(bin2hex(random_bytes(4)));
-        $definitionId = (int) $this->defs->save(['code' => $code, 'name' => 'گیت‌وی بعدِ تسک', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $definitionId = (int) $this->defs->save(['latinName' => $code, 'name' => 'گیت‌وی بعدِ تسک', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);

@@ -70,7 +70,7 @@ export default function ProjectFormModal({
         ProjectCode: '',
         ProjectTitle: '',
         Description: '',
-        ProjectStatusID: 2,
+        ProjectStatusID: 1, // «ثبت‌شده» — وضعیت پیش‌فرضِ پروژه‌ی جدید
         ProjectPriorityID: null as number | null,
         ProgressPercent: 0,
         StartDate: null as string | null,
@@ -88,7 +88,7 @@ export default function ProjectFormModal({
                     ProjectCode: editingProject.ProjectCode || '',
                     ProjectTitle: editingProject.ProjectTitle || '',
                     Description: editingProject.Description || '',
-                    ProjectStatusID: editingProject.ProjectStatusID ?? 2,
+                    ProjectStatusID: editingProject.ProjectStatusID ?? 1,
                     ProjectPriorityID: editingProject.ProjectPriorityID ?? null,
                     ProgressPercent: editingProject.ProgressPercent ?? 0,
                     StartDate: editingProject.StartDate || null,
@@ -109,6 +109,9 @@ export default function ProjectFormModal({
                 reset();
                 form.resetFields();
                 form.setFieldsValue({ IsActive: true });
+                // وضعیت پیش‌فرض = نخستین وضعیت بر اساس ترتیب (معمولاً «ثبت‌شده»)
+                const defaultStatus = (statuses || [])[0]?.ProjectStatusID ?? 1;
+                setData('ProjectStatusID', defaultStatus);
             }
             setCodeError('');
             clearErrors();

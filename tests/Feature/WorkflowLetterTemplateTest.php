@@ -269,7 +269,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('INACTIVE_TP');
         $created = $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'پارامترِ غیرفعال', 'groupCode' => 'FORM',
+            'latinName' => $paramCode, 'caption' => 'پارامترِ غیرفعال', 'groupCode' => 'FORM',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'someField',
         ])->json();
         $this->as(self::USER_FULL)->postJson("/workflow/template-parameters/{$created['templateParameterId']}/toggle")->assertOk();
@@ -283,7 +283,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('PROJECT_ONLY_TP');
         $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'مخصوصِ پروژه', 'groupCode' => 'FORM', 'entityType' => 'PROJECT',
+            'latinName' => $paramCode, 'caption' => 'مخصوصِ پروژه', 'groupCode' => 'FORM', 'entityType' => 'PROJECT',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'projectField',
         ])->assertOk();
 
@@ -297,7 +297,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('GLOBAL_TP');
         $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'سراسری', 'groupCode' => 'FORM',
+            'latinName' => $paramCode, 'caption' => 'سراسری', 'groupCode' => 'FORM',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'globalField',
         ])->assertOk();
 
@@ -376,7 +376,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('REQUIRED_TP');
         $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'الزامی', 'groupCode' => 'FORM',
+            'latinName' => $paramCode, 'caption' => 'الزامی', 'groupCode' => 'FORM',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'requiredField',
         ])->assertOk();
 
@@ -403,7 +403,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('LATER_INACTIVE');
         $param = $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'بعداً غیرفعال', 'groupCode' => 'FORM',
+            'latinName' => $paramCode, 'caption' => 'بعداً غیرفعال', 'groupCode' => 'FORM',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'laterField',
         ])->json();
 
@@ -453,7 +453,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $paramCode = $this->uniqueCode('MSGREQUIRED');
         $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', [
-            'code' => $paramCode, 'caption' => 'الزامی برایِ پیام', 'groupCode' => 'FORM',
+            'latinName' => $paramCode, 'caption' => 'الزامی برایِ پیام', 'groupCode' => 'FORM',
             'dataType' => 'STRING', 'sourceType' => 'FORM', 'sourceKey' => 'msgRequiredField',
         ])->assertOk();
 

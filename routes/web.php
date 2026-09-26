@@ -27,10 +27,14 @@ use App\Http\Controllers\Crm\CrmClassificationController;
 use App\Http\Controllers\Crm\CrmContactController;
 use App\Http\Controllers\Crm\CrmDirectoryController;
 use App\Http\Controllers\Crm\CrmGeographyController;
+use App\Http\Controllers\Crm\CrmInteractionController;
+use App\Http\Controllers\Crm\CrmProductCategoryController;
+use App\Http\Controllers\Crm\CrmPartyClassificationController;
 use App\Http\Controllers\Crm\CrmPartyController;
 use App\Http\Controllers\Crm\CrmPersonController;
 use App\Http\Controllers\MsgPriorityController;
 use App\Http\Controllers\ProjectsController;
+use App\Http\Controllers\Process\ProcessConditionFieldController;
 use App\Http\Controllers\Process\ProcessDefinitionController;
 use App\Http\Controllers\Process\ProcessEntityTypeController;
 use App\Http\Controllers\Process\ProcessInstanceController;
@@ -282,13 +286,19 @@ Route::middleware('auth')->group(function () {
         Route::post('templates/{letterTemplateId}/render', [WorkflowLetterTemplateController::class, 'render'])
             ->whereNumber('letterTemplateId')->name('templates.render');
 
-        // --- فیلدهایِ شرط (Condition Engine — Definition-level) ---
-        Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'index'])
-            ->whereNumber('definitionId')->name('condition-fields.index');
-        Route::post('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'store'])
-            ->whereNumber('definitionId')->name('condition-fields.store');
+        // --- فیلدهایِ شرط (Condition Engine — Global Registry، مثلِ template-parameters) ---
+        Route::get('condition-fields', [WorkflowConditionFieldController::class, 'index'])->name('condition-fields.index');
+        Route::post('condition-fields', [WorkflowConditionFieldController::class, 'store'])->name('condition-fields.store');
         Route::post('condition-fields/{fieldId}/toggle', [WorkflowConditionFieldController::class, 'toggleActive'])
             ->whereNumber('fieldId')->name('condition-fields.toggle');
+
+        // --- سازگاریِ عقب‌رو: Designer UIِ فعلی هنوز مسیرِ definition-scoped قدیمی را صدا می‌زند؛
+        // definitionId در این دو Route فقط در URL باقی مانده و در منطق استفاده نمی‌شود
+        // (نگاه کن به WorkflowConditionFieldController::indexForDefinition/storeForDefinition).
+        Route::get('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'indexForDefinition'])
+            ->whereNumber('definitionId')->name('condition-fields.index-legacy');
+        Route::post('definitions/{definitionId}/condition-fields', [WorkflowConditionFieldController::class, 'storeForDefinition'])
+            ->whereNumber('definitionId')->name('condition-fields.store-legacy');
 
         // --- نسخه‌ها ---
         Route::prefix('versions/{versionId}')->whereNumber('versionId')->name('versions.')->group(function () {
@@ -349,6 +359,7 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('versionId')->name('versions.show');
         Route::get('entity-types', [ProcessEntityTypeController::class, 'index'])->name('entity-types.index');
         Route::get('template-parameters', [ProcessTemplateParameterController::class, 'index'])->name('template-parameters.index');
+        Route::get('condition-fields', [ProcessConditionFieldController::class, 'index'])->name('condition-fields.index');
         Route::get('templates', [ProcessLetterTemplateController::class, 'index'])->name('templates.index');
     });
 
@@ -373,14 +384,18 @@ Route::middleware('auth')->group(function () {
         Route::post('geography/provinces', [CrmGeographyController::class, 'provincesStore'])->name('geography.provinces.store');
         Route::post('geography/provinces/{provinceId}/toggle', [CrmGeographyController::class, 'provincesToggle'])
             ->whereNumber('provinceId')->name('geography.provinces.toggle');
-        Route::get('geography/cities', [CrmGeographyController::class, 'citiesIndex'])->name('geography.cities.index');
-        Route::post('geography/cities', [CrmGeographyController::class, 'citiesStore'])->name('geography.cities.store');
-        Route::post('geography/cities/{cityId}/toggle', [CrmGeographyController::class, 'citiesToggle'])
-            ->whereNumber('cityId')->name('geography.cities.toggle');
         Route::get('geography/counties', [CrmGeographyController::class, 'countiesIndex'])->name('geography.counties.index');
         Route::post('geography/counties', [CrmGeographyController::class, 'countiesStore'])->name('geography.counties.store');
         Route::post('geography/counties/{countyId}/toggle', [CrmGeographyController::class, 'countiesToggle'])
             ->whereNumber('countyId')->name('geography.counties.toggle');
+        Route::get('geography/cities', [CrmGeographyController::class, 'citiesIndex'])->name('geography.cities.index');
+        Route::post('geography/cities', [CrmGeographyController::class, 'citiesStore'])->name('geography.cities.store');
+        Route::post('geography/cities/{cityId}/toggle', [CrmGeographyController::class, 'citiesToggle'])
+            ->whereNumber('cityId')->name('geography.cities.toggle');
+        Route::get('geography/neighborhoods', [CrmGeographyController::class, 'neighborhoodsIndex'])->name('geography.neighborhoods.index');
+        Route::post('geography/neighborhoods', [CrmGeographyController::class, 'neighborhoodsStore'])->name('geography.neighborhoods.store');
+        Route::post('geography/neighborhoods/{neighborhoodId}/toggle', [CrmGeographyController::class, 'neighborhoodsToggle'])
+            ->whereNumber('neighborhoodId')->name('geography.neighborhoods.toggle');
         Route::get('geography/municipal-zones', [CrmGeographyController::class, 'municipalZonesIndex'])->name('geography.municipal-zones.index');
         Route::post('geography/municipal-zones', [CrmGeographyController::class, 'municipalZonesStore'])->name('geography.municipal-zones.store');
         Route::post('geography/municipal-zones/{municipalZoneId}/toggle', [CrmGeographyController::class, 'municipalZonesToggle'])
@@ -416,14 +431,44 @@ Route::middleware('auth')->group(function () {
         Route::post('parties/{partyId}/toggle', [CrmPartyController::class, 'toggleActive'])
             ->whereNumber('partyId')->name('parties.toggle');
 
-        Route::get('brands', [CrmBrandController::class, 'index'])->name('brands.index'); // ?partyId=
+        Route::get('classifications', [CrmPartyClassificationController::class, 'index'])->name('classifications.index'); // ?partyId=
+        Route::post('classifications', [CrmPartyClassificationController::class, 'store'])->name('classifications.store');
+        Route::post('classifications/{classificationId}/toggle', [CrmPartyClassificationController::class, 'toggleActive'])
+            ->whereNumber('classificationId')->name('classifications.toggle');
+
+        Route::get('interactions', [CrmInteractionController::class, 'index'])->name('interactions.index'); // ?partyId=&type=&status=
+        Route::post('interactions', [CrmInteractionController::class, 'store'])->name('interactions.store');
+        Route::post('interactions/{interactionId}/status', [CrmInteractionController::class, 'setStatus'])
+            ->whereNumber('interactionId')->name('interactions.status');
+        Route::post('interactions/{interactionId}/toggle', [CrmInteractionController::class, 'toggleActive'])
+            ->whereNumber('interactionId')->name('interactions.toggle');
+
+        Route::get('brands-page', [CrmBrandController::class, 'page'])->name('brands.page');
+        Route::get('brands', [CrmBrandController::class, 'index'])->name('brands.index'); // ?search=&isActive=
+        Route::get('brands/{brandId}', [CrmBrandController::class, 'show'])->whereNumber('brandId')->name('brands.show');
         Route::post('brands', [CrmBrandController::class, 'store'])->name('brands.store');
+        Route::get('brands/{brandId}/logo', [CrmBrandController::class, 'logo'])->whereNumber('brandId')->name('brands.logo');
         Route::post('brands/{brandId}/toggle', [CrmBrandController::class, 'toggleActive'])
             ->whereNumber('brandId')->name('brands.toggle');
+        // سهمِ برند در دستهٔ محصول — فقط از تبِ «برندها»ی جزئیاتِ طرف‌حساب
+        Route::get('party-brand-categories', [CrmPartyController::class, 'brandCategoriesIndex'])->name('party-brand-categories.index'); // ?partyId=
+        Route::post('party-brand-categories', [CrmPartyController::class, 'brandCategoriesStore'])->name('party-brand-categories.store');
+        Route::post('party-brand-categories/{partyBrandCategoryId}/toggle', [CrmPartyController::class, 'brandCategoriesToggle'])
+            ->whereNumber('partyBrandCategoryId')->name('party-brand-categories.toggle');
+
+        Route::get('product-categories', [CrmProductCategoryController::class, 'page'])->name('product-categories.page');
+        Route::get('product-categories-list', [CrmProductCategoryController::class, 'index'])->name('product-categories.index'); // ?search=&isActive=
+        Route::post('product-categories', [CrmProductCategoryController::class, 'store'])->name('product-categories.store');
+        Route::post('product-categories/{productCategoryId}/toggle', [CrmProductCategoryController::class, 'toggleActive'])
+            ->whereNumber('productCategoryId')->name('product-categories.toggle');
 
         Route::get('addresses', [CrmAddressController::class, 'index'])->name('addresses.index'); // ?partyId=
-        Route::get('addresses/cities', [CrmAddressController::class, 'citiesByProvince'])->name('addresses.cities');
-        Route::get('addresses/counties', [CrmAddressController::class, 'countiesByCity'])->name('addresses.counties');
+        Route::get('addresses/counties', [CrmAddressController::class, 'countiesByProvince'])->name('addresses.counties'); // ?provinceId=
+        Route::get('addresses/cities', [CrmAddressController::class, 'citiesByCounty'])->name('addresses.cities'); // ?countyId=
+        Route::get('addresses/neighborhoods', [CrmAddressController::class, 'neighborhoodsByCity'])->name('addresses.neighborhoods'); // ?cityId=
+        Route::get('addresses/municipal-zones', [CrmAddressController::class, 'municipalZones'])->name('addresses.municipal-zones');
+        Route::get('addresses/location-search', [CrmAddressController::class, 'locationSearch'])
+            ->middleware('throttle:60,1')->name('addresses.location-search'); // ?term=&city= — proxyِ «تبدیل آدرس به نقطه» نشان
         Route::post('addresses', [CrmAddressController::class, 'store'])->name('addresses.store');
         Route::post('addresses/{addressId}/toggle', [CrmAddressController::class, 'toggleActive'])
             ->whereNumber('addressId')->name('addresses.toggle');

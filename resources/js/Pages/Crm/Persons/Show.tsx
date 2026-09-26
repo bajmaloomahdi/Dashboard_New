@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined } from '@ant-design/icons';
+import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -12,6 +12,7 @@ import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import PersonFormModal, { Person } from './PersonFormModal';
 import AddressesPanel from '../Parties/AddressesPanel';
 import ContactsPanel from '../Parties/ContactsPanel';
+import RelatedPartiesPanel from './RelatedPartiesPanel';
 
 const { Text } = Typography;
 
@@ -29,6 +30,7 @@ export default function CrmPersonShow() {
         person: PersonDetail;
         contacts: any[];
         addresses: any[];
+        relations: any[];
         addressTitles: any[];
         provinces: any[];
         contactTypes: any[];
@@ -36,17 +38,18 @@ export default function CrmPersonShow() {
         canManage: boolean;
     };
 
-    const { person: currentPerson, contacts, addresses, addressTitles, provinces, contactTypes, titles, canManage } = props;
+    const { person: currentPerson, contacts, addresses, relations, addressTitles, provinces, contactTypes, titles, canManage } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses'>('contacts');
+    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations'>('contacts');
 
     const isActive = toBool(currentPerson.IsActive);
 
     const tabDefs = [
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
+        { key: 'relations' as const, label: 'طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -103,6 +106,12 @@ export default function CrmPersonShow() {
             {activeTab === 'addresses' && (
                 <Card style={STYLES.card}>
                     <AddressesPanel personId={currentPerson.PersonID} items={addresses || []} addressTitles={addressTitles || []} provinces={provinces || []} canManage={canManage} />
+                </Card>
+            )}
+
+            {activeTab === 'relations' && (
+                <Card style={STYLES.card}>
+                    <RelatedPartiesPanel items={relations || []} />
                 </Card>
             )}
 

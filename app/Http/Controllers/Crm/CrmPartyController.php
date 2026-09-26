@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Crm;
 use App\Services\Crm\CrmMasterDataService;
 use App\Services\Crm\CrmPartyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 /**
@@ -52,10 +53,14 @@ class CrmPartyController extends CrmApiController
 
         return Inertia::render('Crm/Parties/Show', [
             'party' => $party,
-            'brands' => $this->parties->listBrands($partyId),
+            'brandCategories' => $this->parties->listPartyBrandCategories($partyId),
             'addresses' => $this->parties->listAddresses($partyId),
             'contacts' => $this->parties->listContacts($partyId),
             'relations' => $this->parties->listRelations($partyId),
+            'classifications' => $this->parties->listClassifications($partyId),
+            'interactions' => $this->parties->listInteractions($partyId),
+            'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))
+                ->map(fn ($u) => ['UserID' => (int) $u->UserID, 'FullName' => $u->FullName])->values()->all(),
             'addressTitles' => $this->masterData->listAddressTitles(null, true),
             'provinces' => $this->masterData->listProvinces(null, true),
             'contactTypes' => $this->masterData->listContactTypes(null, true),
@@ -66,6 +71,10 @@ class CrmPartyController extends CrmApiController
             'partyTypes' => $this->masterData->listPartyTypes(null, true),
             'activities' => $this->masterData->listActivities(null, null, true),
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            // Map Keyِ نقشهٔ وبِ نشان — فقط از .env، فقط برایِ این صفحه (فرمِ آدرسِ طرف‌حساب)
+            'neshanMapKey' => config('services.neshan.map_key'),
+            // فقط وجودِ کلیدِ Service (نه خودِ کلید) — تا UI بداند جست‌وجویِ محل (Geocoding) در دسترس است
+            'neshanSearchEnabled' => (string) config('services.neshan.service_key') !== '',
         ]);
     }
 
@@ -122,6 +131,50 @@ class CrmPartyController extends CrmApiController
             $res = $this->parties->togglePartyActive($partyId, $this->actorId());
 
             return ['message' => $res->Message ?? 'وضعیتِ طرف‌حساب تغییر کرد.'];
+        });
+    }
+
+    /* ---------- تعریفِ برند برایِ طرف‌حساب (CrmPartyBrandCategories + ارتباطِ داخلیِ CrmPartyBrands) — تنها مسیرِ ثبت ---------- */
+
+    /** GET crm/party-brand-categories?partyId= */
+    public function brandCategoriesIndex(Request $request)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+        $validated = $request->validate(['partyId' => 'required|integer']);
+
+        return $this->runCrm(fn () => ['items' => $this->parties->listPartyBrandCategories($validated['partyId'])]);
+    }
+
+    /** POST crm/party-brand-categories — ایجاد یا ویرایشِ کاملِ ردیف (دسته/برند/درصد/تاریخ‌ها). */
+    public function brandCategoriesStore(Request $request)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        $validated = $request->validate([
+            'partyBrandCategoryId' => 'nullable|integer|exists:CrmPartyBrandCategories,PartyBrandCategoryID',
+            'partyId' => 'nullable|integer|exists:CrmParties,PartyID',
+            'brandId' => 'nullable|integer|exists:CrmBrands,BrandID',
+            'productCategoryId' => 'nullable|integer|exists:CrmProductCategories,ProductCategoryID',
+            'entryDate' => 'nullable|date',
+            'exitDate' => 'nullable|date',
+            'sharePercent' => 'nullable',
+        ]);
+
+        return $this->runCrm(function () use ($validated) {
+            $res = $this->parties->savePartyBrandCategory($validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'ذخیره شد.', 'partyBrandCategoryId' => (int) $res->PartyBrandCategoryID];
+        });
+    }
+
+    public function brandCategoriesToggle(int $partyBrandCategoryId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return $this->runCrm(function () use ($partyBrandCategoryId) {
+            $res = $this->parties->togglePartyBrandCategoryActive($partyBrandCategoryId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'وضعیتِ ردیف تغییر کرد.'];
         });
     }
 }

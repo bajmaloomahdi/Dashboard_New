@@ -17,7 +17,6 @@ import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import DesignerCanvas from './Designer/DesignerCanvas';
-import ConditionFieldManagerModal from './Designer/ConditionFieldManagerModal';
 import type { ConditionField } from './Designer/ruleTypes';
 import DefinitionFormModal from '../Definitions/DefinitionFormModal';
 import type { WorkflowCategory } from '../Definitions/CategoryManagerModal';
@@ -114,8 +113,9 @@ export default function ProcessVersionShow() {
     const [editingDefinitionData, setEditingDefinitionData] = useState<FullDefinition | null>(null);
     const [loadingDefinition, setLoadingDefinition] = useState(false);
 
-    const [conditionFields, setConditionFields] = useState<ConditionField[]>(props.conditionFields || []);
-    const [conditionFieldModalOpen, setConditionFieldModalOpen] = useState(false);
+    // فقط Read-Only در این صفحه — مدیریتِ خودِ Fieldها (ایجاد/ویرایش/فعال‌سازی) اکنون
+    // منحصراً در /process/condition-fields انجام می‌شود.
+    const conditionFields: ConditionField[] = props.conditionFields || [];
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false, type: 'success', message: '',
@@ -245,14 +245,6 @@ export default function ProcessVersionShow() {
         await reloadGraph(); // meta (Name/EntityType/CategoryName) را هم تازه می‌کند
     };
 
-    /** بازخوانیِ فیلدهایِ شرط از همان GET /workflow/definitions/{id}/condition-fields موجود */
-    const refreshConditionFields = async () => {
-        const res = await wfApi(`/workflow/definitions/${meta.DefinitionID}/condition-fields?includeInactive=1`);
-        if (res.ok && res.success) {
-            setConditionFields(res.items || []);
-        }
-    };
-
     return (
         <MainLayout>
             <PageHeader
@@ -275,8 +267,8 @@ export default function ProcessVersionShow() {
                             </Button>
                         )}
                         {hasManageConditionFields && (
-                            <Button icon={<FilterOutlined />} onClick={() => setConditionFieldModalOpen(true)}>
-                                مدیریتِ فیلدهایِ شرط
+                            <Button icon={<FilterOutlined />} onClick={() => router.visit('/process/condition-fields')}>
+                                فیلدهایِ شرط
                             </Button>
                         )}
                         {isEditable && (
@@ -416,14 +408,6 @@ export default function ProcessVersionShow() {
                 editingDefinition={editingDefinitionData}
                 categories={props.categories || []}
                 onSuccess={handleDefinitionModalSuccess}
-            />
-
-            <ConditionFieldManagerModal
-                open={conditionFieldModalOpen}
-                onClose={() => setConditionFieldModalOpen(false)}
-                definitionId={meta.DefinitionID}
-                fields={conditionFields}
-                onChanged={refreshConditionFields}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((prev) => ({ ...prev, open: false }))} />

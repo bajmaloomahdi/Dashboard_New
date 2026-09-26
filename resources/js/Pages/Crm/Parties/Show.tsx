@@ -1,20 +1,21 @@
-import { useEffect, useState } from 'react';
-import { Card, Typography, Button, Descriptions, Select, Space, Alert } from 'antd';
+import { useState } from 'react';
+import { Card, Typography, Button, Descriptions } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, SaveOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
-import { crmApi } from '../../../Components/Crm/crmApi';
 import { STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import PartyFormModal, { Party } from './PartyFormModal';
-import BrandsPanel from './BrandsPanel';
+import BrandCategoriesPanel, { BrandCategoryRow } from './BrandCategoriesPanel';
 import AddressesPanel from './AddressesPanel';
 import ContactsPanel from './ContactsPanel';
 import RelationsPanel from './RelationsPanel';
+import ClassificationsPanel from './ClassificationsPanel';
+import InteractionsPanel from './InteractionsPanel';
 
 const { Text } = Typography;
 
@@ -23,6 +24,7 @@ interface PartyDetail extends Party {
     DepartmentName: string | null;
     PartyTypeName: string | null;
     ActivityName: string | null;
+    ClassificationCount: number;
     CreatedByName: string | null;
     ModifiedByName: string | null;
     Date_InsertFirst: string;
@@ -32,10 +34,13 @@ interface PartyDetail extends Party {
 export default function CrmPartyShow() {
     const props = usePage().props as unknown as {
         party: PartyDetail;
-        brands: any[];
+        brandCategories: BrandCategoryRow[];
         addresses: any[];
         contacts: any[];
         relations: any[];
+        classifications: any[];
+        interactions: any[];
+        users: { UserID: number; FullName: string }[];
         addressTitles: any[];
         provinces: any[];
         contactTypes: any[];
@@ -46,68 +51,32 @@ export default function CrmPartyShow() {
         partyTypes: { PartyTypeID: number; DisplayName: string }[];
         activities: { ActivityID: number; DisplayName: string; PartyTypeID: number }[];
         canManage: boolean;
+        neshanMapKey: string | null;
+        neshanSearchEnabled: boolean;
     };
 
     const {
-        party: currentParty, brands, addresses, contacts, relations, addressTitles, provinces, contactTypes,
-        positions, contactRoles, titles, departments, partyTypes, activities, canManage,
+        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, users, addressTitles, provinces, contactTypes,
+        positions, contactRoles, titles, departments, partyTypes, activities, canManage, neshanMapKey, neshanSearchEnabled,
     } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'brands' | 'addresses' | 'contacts' | 'relations'>('brands');
-
-    const [classification, setClassification] = useState({
-        departmentId: currentParty.DepartmentID,
-        partyTypeId: currentParty.PartyTypeID,
-        activityId: currentParty.ActivityID,
-    });
-    const [classificationSaving, setClassificationSaving] = useState(false);
-    const [classificationError, setClassificationError] = useState<string | null>(null);
-    const filteredActivities = (activities || []).filter((a) => !classification.partyTypeId || a.PartyTypeID === classification.partyTypeId);
-
-    useEffect(() => {
-        setClassification({
-            departmentId: currentParty.DepartmentID,
-            partyTypeId: currentParty.PartyTypeID,
-            activityId: currentParty.ActivityID,
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentParty.PartyID, currentParty.DepartmentID, currentParty.PartyTypeID, currentParty.ActivityID]);
-
-    const handleSaveClassification = async () => {
-        setClassificationSaving(true);
-        setClassificationError(null);
-        const res = await crmApi('/crm/parties', 'POST', {
-            partyId: currentParty.PartyID,
-            partyNature: currentParty.PartyNature,
-            officialName: currentParty.OfficialName,
-            tradeName: currentParty.TradeName || undefined,
-            registrationNumber: currentParty.RegistrationNumber || undefined,
-            economicCode: currentParty.EconomicCode || undefined,
-            identifierNumber: currentParty.IdentifierNumber,
-            identifierDate: currentParty.IdentifierDate || undefined,
-            description: currentParty.Description || undefined,
-            departmentId: classification.departmentId ?? undefined,
-            partyTypeId: classification.partyTypeId ?? undefined,
-            activityId: classification.activityId ?? undefined,
-        });
-        setClassificationSaving(false);
-        if (!res.ok || !res.success) {
-            setClassificationError(res.message);
-            return;
-        }
-        setNotification({ open: true, type: 'success', message: res.message });
-        router.reload({ only: ['party'] });
-    };
+    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations'>('classifications');
 
     const isActive = toBool(currentParty.IsActive);
 
+    const relatedPersons = Array.from(
+        new Map((relations || []).filter((r: any) => toBool(r.IsActive)).map((r: any) => [r.PersonID, { PersonID: r.PersonID, DisplayName: r.PersonName }])).values()
+    );
+
     const tabDefs = [
-        { key: 'brands' as const, label: 'برندها', icon: <TagOutlined />, count: (brands || []).length },
-        { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
-        { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
+        { key: 'classifications' as const, label: 'دسته‌بندی‌ها', icon: <ApartmentOutlined />, count: (classifications || []).length },
         { key: 'relations' as const, label: 'مخاطبین', icon: <TeamOutlined />, count: (relations || []).length },
+        { key: 'interactions' as const, label: 'تعاملات', icon: <CommentOutlined />, count: (interactions || []).length },
+        { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
+        { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
+        { key: 'brands' as const, label: 'برندها', icon: <TagOutlined />, count: (brandCategories || []).filter((r) => toBool(r.IsActive)).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -131,8 +100,7 @@ export default function CrmPartyShow() {
                 backLabel="بازگشت به طرف‌حساب‌ها"
                 tags={[
                     { label: isActive ? 'فعال' : 'غیرفعال' },
-                    ...(currentParty.DepartmentName ? [{ label: currentParty.DepartmentName }] : []),
-                    ...(currentParty.PartyTypeName ? [{ label: currentParty.PartyTypeName }] : []),
+                    ...(Number(currentParty.ClassificationCount) > 0 ? [{ label: `${currentParty.ClassificationCount} دسته‌بندی` }] : []),
                 ]}
                 actions={
                     canManage ? (
@@ -170,79 +138,74 @@ export default function CrmPartyShow() {
                 </Descriptions>
             </Card>
 
-            <Card
-                style={{ marginBottom: 16, ...STYLES.card }}
-                title={<Space><ApartmentOutlined />دسته‌بندی</Space>}
-                extra={canManage ? (
-                    <Button type="primary" size="small" icon={<SaveOutlined />} loading={classificationSaving} onClick={handleSaveClassification}>
-                        ذخیره
-                    </Button>
-                ) : undefined}
-            >
-                {classificationError ? <Alert type="error" showIcon message={classificationError} style={{ marginBottom: 12, borderRadius: 8 }} /> : null}
-                <Space wrap size={16}>
-                    <div>
-                        <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>دپارتمان</Text>
-                        <Select
-                            allowClear
-                            disabled={!canManage}
-                            placeholder="دپارتمان"
-                            style={{ width: 220 }}
-                            value={classification.departmentId ?? undefined}
-                            onChange={(v) => setClassification((s) => ({ ...s, departmentId: v ?? null }))}
-                            options={(departments || []).map((d) => ({ value: d.DepartmentID, label: d.DisplayName }))}
-                        />
-                    </div>
-                    <div>
-                        <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نوع</Text>
-                        <Select
-                            allowClear
-                            disabled={!canManage}
-                            placeholder="نوع"
-                            style={{ width: 220 }}
-                            value={classification.partyTypeId ?? undefined}
-                            onChange={(v) => setClassification((s) => ({ ...s, partyTypeId: v ?? null, activityId: null }))}
-                            options={(partyTypes || []).map((t) => ({ value: t.PartyTypeID, label: t.DisplayName }))}
-                        />
-                    </div>
-                    <div>
-                        <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>فعالیت</Text>
-                        <Select
-                            allowClear
-                            disabled={!canManage || !classification.partyTypeId}
-                            placeholder="فعالیت"
-                            style={{ width: 220 }}
-                            value={classification.activityId ?? undefined}
-                            onChange={(v) => setClassification((s) => ({ ...s, activityId: v ?? null }))}
-                            options={filteredActivities.map((a) => ({ value: a.ActivityID, label: a.DisplayName }))}
-                        />
-                    </div>
-                </Space>
-            </Card>
-
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
 
-            {activeTab === 'brands' && (
+            {activeTab === 'classifications' && (
                 <Card style={STYLES.card}>
-                    <BrandsPanel partyId={currentParty.PartyID} items={brands || []} canManage={canManage} />
-                </Card>
-            )}
-
-            {activeTab === 'addresses' && (
-                <Card style={STYLES.card}>
-                    <AddressesPanel partyId={currentParty.PartyID} items={addresses || []} addressTitles={addressTitles || []} provinces={provinces || []} canManage={canManage} />
-                </Card>
-            )}
-
-            {activeTab === 'contacts' && (
-                <Card style={STYLES.card}>
-                    <ContactsPanel partyId={currentParty.PartyID} items={contacts || []} contactTypes={contactTypes || []} canManage={canManage} />
+                    <ClassificationsPanel
+                        partyId={currentParty.PartyID}
+                        items={classifications || []}
+                        departments={departments || []}
+                        partyTypes={partyTypes || []}
+                        activities={activities || []}
+                        canManage={canManage}
+                    />
                 </Card>
             )}
 
             {activeTab === 'relations' && (
                 <Card style={STYLES.card}>
                     <RelationsPanel partyId={currentParty.PartyID} items={relations || []} positions={positions || []} contactRoles={contactRoles || []} titles={titles || []} canManage={canManage} />
+                </Card>
+            )}
+
+            {activeTab === 'interactions' && (
+                <Card style={STYLES.card}>
+                    <InteractionsPanel
+                        partyId={currentParty.PartyID}
+                        items={interactions || []}
+                        relatedPersons={relatedPersons}
+                        users={users || []}
+                        canManage={canManage}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'contacts' && (
+                <Card style={STYLES.card}>
+                    <ContactsPanel
+                        partyId={currentParty.PartyID}
+                        items={contacts || []}
+                        contactTypes={contactTypes || []}
+                        relatedPersons={relatedPersons}
+                        canManage={canManage}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'addresses' && (
+                <Card style={STYLES.card}>
+                    <AddressesPanel
+                        partyId={currentParty.PartyID}
+                        items={addresses || []}
+                        addressTitles={addressTitles || []}
+                        provinces={provinces || []}
+                        canManage={canManage}
+                        showMap
+                        neshanMapKey={neshanMapKey}
+                        neshanSearchEnabled={neshanSearchEnabled}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'brands' && (
+                <Card style={STYLES.card}>
+                    <BrandCategoriesPanel
+                        partyId={currentParty.PartyID}
+                        items={brandCategories || []}
+                        canManage={canManage}
+                        onChanged={() => router.reload({ only: ['brandCategories'] })}
+                    />
                 </Card>
             )}
 

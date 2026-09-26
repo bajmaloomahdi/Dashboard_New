@@ -16,17 +16,23 @@ export interface CrmApiResult {
     [key: string]: any;
 }
 
-export async function crmApi(url: string, method: 'GET' | 'POST' | 'PUT' = 'GET', body?: any): Promise<CrmApiResult> {
+/**
+ * `signal` (اختیاری) برایِ لغوِ درخواستِ قدیمی (مثلاً Autocomplete)؛ در صورتِ لغو، AbortError پرتاب می‌شود.
+ * اگر `body` یک FormData باشد (آپلودِ فایل) همان‌طور ارسال می‌شود و Content-Type را مرورگر (multipart + boundary) می‌گذارد.
+ */
+export async function crmApi(url: string, method: 'GET' | 'POST' | 'PUT' = 'GET', body?: any, signal?: AbortSignal): Promise<CrmApiResult> {
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
     const res = await fetch(url, {
+        signal,
         method,
         headers: {
             'X-XSRF-TOKEN': getXsrfToken(),
             'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json',
+            ...(isForm ? {} : { 'Content-Type': 'application/json' }),
             Accept: 'application/json',
         },
         credentials: 'same-origin',
-        body: body ? JSON.stringify(body) : undefined,
+        body: isForm ? body : body ? JSON.stringify(body) : undefined,
     });
     const data = await res.json().catch(() => ({}));
 

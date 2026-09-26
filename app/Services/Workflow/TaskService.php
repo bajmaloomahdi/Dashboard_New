@@ -83,6 +83,74 @@ class TaskService
     }
 
     /**
+     * اتصالِ (Adopt) یک Messageِ از‌پیش‌ساخته‌شده (با sp_Wf_CreateTaskMessage) به «تسکِ مرحله»
+     * — برخلافِ createStepTask()، هیچ Messageِ تازه‌ای نمی‌سازد؛ فقط StepInstance را به همان
+     * MessageID موجود متصل و WorkflowTaskAssignees را برایِ همان Assigneeها ثبت می‌کند.
+     *
+     * فقط برایِ مسیرِ Pre-create + Adopt (اولین USER_TASK/APPROVALِ بلافاصله‌بعدِ START،
+     * بدونِ CONDITIONِ میانی) از WorkflowEngine::advance() فراخوانی می‌شود؛ آن‌جا مسئولِ
+     * تضمینِ همین پیش‌شرط است. اینجا مستقلاً و به‌صورتِ دفاعی همان سه شرطِ لازم را
+     * دوباره روی خودِ Message بررسی می‌کند (هیچ ورودیِ فرانت‌اندی بدونِ این بررسی پذیرفته
+     * نمی‌شود): نوعِ «وظیفه»، تعلق به همان آغازگر، عدمِ اتصالِ قبلی.
+     *
+     * @param  ResolvedAssignee[]  $assignees
+     * @return int  MessageID (همان ورودی — بدونِ تغییر)
+     */
+    public function adoptStepTask(object $ctx, object $step, int $stepInstanceId, array $assignees, ?int $actorUserId, int $messageId): int
+    {
+        if ($assignees === []) {
+            throw new WorkflowValidationException(
+                "مرحلهٔ «{$step->Name}» هیچ انجام‌دهنده‌ای ندارد؛ فرایند نمی‌تواند ادامه یابد."
+            );
+        }
+
+        $senderUserId = $ctx->initiatorUserId
+            ?? throw new WorkflowValidationException('فرایندِ بدونِ آغازگر نمی‌تواند آیتمِ کارتابلی بسازد.');
+
+        $msg = $this->store->getAdoptableTaskMessage($messageId);
+        if ($msg === null) {
+            throw new WorkflowValidationException('پیامِ از‌پیش‌ساخته‌شده یافت نشد.');
+        }
+        if ($msg->MessageTypeName !== 'وظیفه') {
+            throw new WorkflowValidationException('پیامِ از‌پیش‌ساخته‌شده باید از نوعِ «وظیفه» باشد.');
+        }
+        if ((int) $msg->SenderUserID !== (int) $senderUserId) {
+            throw new WorkflowValidationException('پیامِ از‌پیش‌ساخته‌شده متعلق به آغازگرِ همین فرایند نیست.');
+        }
+        if ((int) $msg->AlreadyAttached === 1) {
+            throw new WorkflowStateException('این پیام قبلاً به مرحلهٔ دیگری از یک فرایند متصل شده است.');
+        }
+
+        $policy = $step->AssignPolicy ?? 'ANY';
+        $required = $step->RequiredApprovals !== null ? (int) $step->RequiredApprovals : null;
+
+        if ($policy === 'N_OF_M' && ($required === null || $required < 1)) {
+            throw new WorkflowValidationException("مرحلهٔ «{$step->Name}» با سیاستِ N_OF_M نیازمندِ RequiredApprovals معتبر است.");
+        }
+
+        $this->store->attachStepMessage($stepInstanceId, $messageId, $policy, $required, $actorUserId);
+
+        foreach ($assignees as $a) {
+            $this->store->insertTaskAssignee($stepInstanceId, $a->userId, $a->sourceType, $a->sourceRefId, $actorUserId);
+        }
+
+        $this->history->record([
+            'entityType'  => $ctx->entityType,
+            'entityId'    => $ctx->entityId,
+            'eventCode'   => WorkflowHistoryRecorder::TASK_CREATED,
+            'instanceId'  => $ctx->instanceId,
+            'stepInstanceId' => $stepInstanceId,
+            'messageId'   => $messageId,
+            'actorUserId' => $actorUserId,
+            'actorType'   => $actorUserId ? 'USER' : 'SYSTEM',
+            'summary'     => "تسکِ «{$step->Name}» به Messageِ از‌پیش‌ساخته‌شده متصل شد",
+            'detail'      => ['assignees' => array_map(fn ($a) => $a->userId, $assignees), 'policy' => $policy, 'adopted' => true],
+        ]);
+
+        return $messageId;
+    }
+
+    /**
      * پیش‌بینیِ نتیجهٔ یک اقدام «بدونِ نوشتن» — از روی snapshotِ انجام‌دهندگان.
      *
      * موتور اول این را صدا می‌زند تا تصمیم بگیرد آیا باید تسک را ببندد (و بنابراین

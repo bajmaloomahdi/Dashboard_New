@@ -41,6 +41,7 @@ class CrmContactController extends CrmApiController
             'extension' => 'nullable|string|max:20',
             'description' => 'nullable|string|max:200',
             'isPrimary' => 'nullable|boolean',
+            'relatedPersonId' => 'nullable|integer|exists:CrmPersons,PersonID',
         ]);
 
         return $this->runCrm(function () use ($validated) {

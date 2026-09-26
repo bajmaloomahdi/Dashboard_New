@@ -7,8 +7,8 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 /**
- * جغرافیایِ آدرس: استان → شهر → شهرستان (سلسله‌مراتبِ اختصاصیِ Raga 360،
- * نه تقسیماتِ کشوریِ واقعی) + منطقهٔ شهرداری (کاملاً مستقل).
+ * جغرافیایِ آدرس: استان → شهرستان → شهر → محله (هر سطح فقط والدِ مستقیمِ خود را می‌گیرد)
+ * + منطقهٔ شهرداری (کاملاً مستقل از این زنجیره).
  */
 class CrmGeographyController extends CrmApiController
 {
@@ -18,15 +18,16 @@ class CrmGeographyController extends CrmApiController
     {
     }
 
-    /** GET crm/geography — صفحهٔ Inertia با هر چهار فهرست. */
+    /** GET crm/geography — صفحهٔ Inertia با هر پنج فهرست. */
     public function page()
     {
         $this->authorizeCrm(self::PERM);
 
         return Inertia::render('Crm/MasterData/Geography', [
             'provinces'      => $this->masterData->listProvinces(),
-            'cities'         => $this->masterData->listCities(),
             'counties'       => $this->masterData->listCounties(),
+            'cities'         => $this->masterData->listCities(),
+            'neighborhoods'  => $this->masterData->listNeighborhoods(),
             'municipalZones' => $this->masterData->listMunicipalZones(),
             'canManage'      => true,
         ]);
@@ -72,9 +73,9 @@ class CrmGeographyController extends CrmApiController
         });
     }
 
-    /* ---------- شهر (زیرمجموعهٔ استان) ---------- */
+    /* ---------- شهرستان (زیرمجموعهٔ استان) ---------- */
 
-    public function citiesIndex(Request $request)
+    public function countiesIndex(Request $request)
     {
         $this->authorizeCrm(self::PERM);
         $validated = $request->validate([
@@ -83,8 +84,54 @@ class CrmGeographyController extends CrmApiController
             'isActive'   => 'nullable|boolean',
         ]);
 
-        return $this->runCrm(fn () => ['items' => $this->masterData->listCities(
+        return $this->runCrm(fn () => ['items' => $this->masterData->listCounties(
             $validated['provinceId'] ?? null,
+            $validated['search'] ?? null,
+            array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+        )]);
+    }
+
+    public function countiesStore(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate([
+            'countyId'    => 'nullable|integer|exists:CrmCounties,CountyID',
+            'provinceId'  => 'required|integer|exists:CrmProvinces,ProvinceID',
+            'displayName' => 'required|string|max:200',
+            'sortOrder'   => 'nullable|integer',
+        ]);
+
+        return $this->runCrm(function () use ($validated) {
+            $res = $this->masterData->saveCounty($validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'شهرستان ذخیره شد.', 'countyId' => (int) $res->CountyID];
+        });
+    }
+
+    public function countiesToggle(int $countyId)
+    {
+        $this->authorizeCrm(self::PERM);
+
+        return $this->runCrm(function () use ($countyId) {
+            $res = $this->masterData->toggleCountyActive($countyId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'وضعیتِ شهرستان تغییر کرد.'];
+        });
+    }
+
+    /* ---------- شهر (زیرمجموعهٔ شهرستان) ---------- */
+
+    public function citiesIndex(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate([
+            'countyId' => 'nullable|integer',
+            'search'   => 'nullable|string|max:200',
+            'isActive' => 'nullable|boolean',
+        ]);
+
+        return $this->runCrm(fn () => ['items' => $this->masterData->listCities(
+            $validated['countyId'] ?? null,
             $validated['search'] ?? null,
             array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
         )]);
@@ -95,7 +142,7 @@ class CrmGeographyController extends CrmApiController
         $this->authorizeCrm(self::PERM);
         $validated = $request->validate([
             'cityId'      => 'nullable|integer|exists:CrmCities,CityID',
-            'provinceId'  => 'required|integer|exists:CrmProvinces,ProvinceID',
+            'countyId'    => 'required|integer|exists:CrmCounties,CountyID',
             'displayName' => 'required|string|max:200',
             'sortOrder'   => 'nullable|integer',
         ]);
@@ -118,9 +165,9 @@ class CrmGeographyController extends CrmApiController
         });
     }
 
-    /* ---------- شهرستان (زیرمجموعهٔ شهر) ---------- */
+    /* ---------- محله (زیرمجموعهٔ شهر) ---------- */
 
-    public function countiesIndex(Request $request)
+    public function neighborhoodsIndex(Request $request)
     {
         $this->authorizeCrm(self::PERM);
         $validated = $request->validate([
@@ -129,38 +176,38 @@ class CrmGeographyController extends CrmApiController
             'isActive' => 'nullable|boolean',
         ]);
 
-        return $this->runCrm(fn () => ['items' => $this->masterData->listCounties(
+        return $this->runCrm(fn () => ['items' => $this->masterData->listNeighborhoods(
             $validated['cityId'] ?? null,
             $validated['search'] ?? null,
             array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
         )]);
     }
 
-    public function countiesStore(Request $request)
+    public function neighborhoodsStore(Request $request)
     {
         $this->authorizeCrm(self::PERM);
         $validated = $request->validate([
-            'countyId'    => 'nullable|integer|exists:CrmCounties,CountyID',
-            'cityId'      => 'required|integer|exists:CrmCities,CityID',
-            'displayName' => 'required|string|max:200',
-            'sortOrder'   => 'nullable|integer',
+            'neighborhoodId' => 'nullable|integer|exists:CrmNeighborhoods,NeighborhoodID',
+            'cityId'         => 'required|integer|exists:CrmCities,CityID',
+            'displayName'    => 'required|string|max:200',
+            'sortOrder'      => 'nullable|integer',
         ]);
 
         return $this->runCrm(function () use ($validated) {
-            $res = $this->masterData->saveCounty($validated, $this->actorId());
+            $res = $this->masterData->saveNeighborhood($validated, $this->actorId());
 
-            return ['message' => $res->Message ?? 'شهرستان ذخیره شد.', 'countyId' => (int) $res->CountyID];
+            return ['message' => $res->Message ?? 'محله ذخیره شد.', 'neighborhoodId' => (int) $res->NeighborhoodID];
         });
     }
 
-    public function countiesToggle(int $countyId)
+    public function neighborhoodsToggle(int $neighborhoodId)
     {
         $this->authorizeCrm(self::PERM);
 
-        return $this->runCrm(function () use ($countyId) {
-            $res = $this->masterData->toggleCountyActive($countyId, $this->actorId());
+        return $this->runCrm(function () use ($neighborhoodId) {
+            $res = $this->masterData->toggleNeighborhoodActive($neighborhoodId, $this->actorId());
 
-            return ['message' => $res->Message ?? 'وضعیتِ شهرستان تغییر کرد.'];
+            return ['message' => $res->Message ?? 'وضعیتِ محله تغییر کرد.'];
         });
     }
 

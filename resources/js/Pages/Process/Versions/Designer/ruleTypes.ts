@@ -8,17 +8,17 @@
  */
 import type { RuleCondition, RuleGroup, RuleNode, RuleOperator } from '../versionEditor';
 
-export type ConditionDataType = 'STRING' | 'INTEGER' | 'DECIMAL' | 'DATE' | 'BOOLEAN' | 'SELECT' | 'USER' | 'UNIT';
+export type ConditionDataType = 'STRING' | 'INTEGER' | 'DECIMAL' | 'DATE' | 'TIME' | 'BOOLEAN' | 'SELECT' | 'USER' | 'UNIT';
 
 export interface ConditionField {
     FieldID: number;
-    DefinitionID: number;
     Code: string;
     DisplayName: string;
     DataType: ConditionDataType;
     SourceType: 'START_CONTEXT';
     SourceKey: string;
     AllowedValuesJson: string | null;
+    Description: string | null;
     SortOrder: number;
     IsActive: boolean | number | string;
 }
@@ -28,6 +28,7 @@ export const DATA_TYPE_OPTIONS: { value: ConditionDataType; label: string }[] = 
     { value: 'INTEGER', label: 'عددِ صحیح (INTEGER)' },
     { value: 'DECIMAL', label: 'عددِ اعشاری (DECIMAL)' },
     { value: 'DATE', label: 'تاریخ (DATE)' },
+    { value: 'TIME', label: 'ساعت (TIME)' },
     { value: 'BOOLEAN', label: 'درست/نادرست (BOOLEAN)' },
     { value: 'SELECT', label: 'انتخابی (SELECT)' },
     { value: 'USER', label: 'کاربر (USER)' },
@@ -39,6 +40,7 @@ export const OPERATORS_BY_DATATYPE: Record<ConditionDataType, RuleOperator[]> = 
     INTEGER: ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
     DECIMAL: ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
     DATE: ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
+    TIME: ['EQ', 'NE', 'GT', 'GTE', 'LT', 'LTE'],
     BOOLEAN: ['IS_TRUE', 'IS_FALSE'],
     STRING: ['EQ', 'NE', 'CONTAINS', 'IS_EMPTY', 'IS_NOT_EMPTY'],
     SELECT: ['EQ', 'NE', 'IN', 'NOT_IN'],
@@ -82,6 +84,7 @@ export function parseAllowedValues(json: string | null): string[] {
 export const DECIMAL_PATTERN = /^-?\d+(\.\d+)?$/;
 export const INTEGER_PATTERN = /^-?\d+$/;
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export function emptyCondition(fieldCode: string, operator: RuleOperator): RuleCondition {
     return { type: 'CONDITION', field: fieldCode, operator };

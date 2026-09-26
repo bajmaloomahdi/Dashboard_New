@@ -14,11 +14,6 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowDefinitionService
 {
-    /** الگویِ مجازِ Codeِ فیلدِ شرط — کلیدِ JSON در RuleJson/ContextJson، پس باید Injection-safe باشد. */
-    private const CONDITION_FIELD_CODE_PATTERN = '/^[A-Z][A-Z0-9_]{1,49}$/';
-
-    private const CONDITION_FIELD_DATA_TYPES = ['STRING', 'INTEGER', 'DECIMAL', 'DATE', 'BOOLEAN', 'SELECT', 'USER', 'UNIT'];
-
     private const CODE_PATTERN = '/^[A-Z][A-Z0-9_]{1,49}$/';
 
     /** سقفِ تلاش برایِ یافتنِ یک Codeِ یکتا با پسوندِ عددی، قبل از خطایِ صریح. */
@@ -28,6 +23,7 @@ class WorkflowDefinitionService
         private WorkflowStore $store,
         private EntityResolverRegistry $entities,
         private ConditionRuleValidator $ruleValidator,
+        private ConditionFieldService $conditionFields,
     ) {
     }
 
@@ -217,92 +213,6 @@ class WorkflowDefinitionService
         return $row === null || (bool) $row->IsActive;
     }
 
-    /* ---------- فیلدهایِ شرط (WorkflowConditionFields) — Definition-level ---------- */
-
-    public function listConditionFields(int $definitionId, bool $includeInactive = false): array
-    {
-        return $this->store->getConditionFields($definitionId, $includeInactive);
-    }
-
-    /**
-     * ایجاد/ویرایشِ یک فیلدِ شرط. Code پس از اولین استفاده در هر RuleJsonی (در هر
-     * نسخه‌ای، حتی Archived) Immutable می‌شود — تا Ruleهایِ Snapshotشده هرگز با
-     * تغییرِ نام خراب نشوند (طبقِ اصلِ Immutabilityِ Final Design).
-     */
-    public function saveConditionField(array $input, int $userId): object
-    {
-        $definitionId = (int) ($input['definitionId'] ?? 0);
-        $code = trim($input['code'] ?? '');
-        $dataType = $input['dataType'] ?? '';
-        $sourceType = $input['sourceType'] ?? '';
-        $fieldId = isset($input['fieldId']) ? (int) $input['fieldId'] : null;
-
-        if (! preg_match(self::CONDITION_FIELD_CODE_PATTERN, $code)) {
-            throw new WorkflowValidationException('کدِ فیلد باید با حرفِ بزرگِ لاتین شروع شود و فقط شاملِ حروفِ بزرگ/عدد/Underscore باشد (حداکثر ۵۰ کاراکتر).');
-        }
-        if (! in_array($dataType, self::CONDITION_FIELD_DATA_TYPES, true)) {
-            throw new WorkflowValidationException("نوعِ دادهٔ «{$dataType}» شناخته‌شده نیست.");
-        }
-        if ($sourceType !== 'START_CONTEXT') {
-            throw new WorkflowValidationException('در فاز ۱ فقط SourceType=START_CONTEXT پشتیبانی می‌شود.');
-        }
-        if (trim($input['sourceKey'] ?? '') === '') {
-            throw new WorkflowValidationException('SourceKey الزامی است.');
-        }
-
-        $allowedValuesJson = null;
-        if ($dataType === 'SELECT') {
-            $allowedValues = $input['allowedValues'] ?? null;
-            if (! is_array($allowedValues) || $allowedValues === [] || ! array_is_list($allowedValues)) {
-                throw new WorkflowValidationException('برایِ DataType=SELECT فهرستِ گزینه‌هایِ مجاز (allowedValues) الزامی است.');
-            }
-            $allowedValuesJson = json_encode(array_values(array_map('strval', $allowedValues)), JSON_UNESCAPED_UNICODE);
-        }
-
-        if ($fieldId !== null) {
-            $existing = collect($this->store->getConditionFields($definitionId, includeInactive: true))
-                ->firstWhere('FieldID', $fieldId);
-
-            if ($existing && $existing->Code !== $code && $this->isConditionFieldCodeInUse($definitionId, $existing->Code)) {
-                throw new WorkflowValidationException("فیلدِ «{$existing->Code}» در یک یا چند Rule استفاده شده است؛ Code آن قابلِ‌تغییر نیست.");
-            }
-        }
-
-        return $this->store->saveConditionField([
-            'fieldId'           => $fieldId,
-            'definitionId'      => $definitionId,
-            'code'              => $code,
-            'displayName'       => trim($input['displayName'] ?? ''),
-            'dataType'          => $dataType,
-            'sourceType'        => $sourceType,
-            'sourceKey'         => trim($input['sourceKey'] ?? ''),
-            'allowedValuesJson' => $allowedValuesJson,
-            'sortOrder'         => $input['sortOrder'] ?? 0,
-            'userId'            => $userId,
-        ]);
-    }
-
-    public function toggleConditionFieldActive(int $fieldId, int $userId): object
-    {
-        return $this->store->toggleConditionFieldActive($fieldId, $userId);
-    }
-
-    /** آیا Codeِ داده‌شده در RuleJsonِ هر Transitionی، در هر نسخه‌ای از این Definition، ارجاع شده؟ */
-    private function isConditionFieldCodeInUse(int $definitionId, string $code): bool
-    {
-        foreach ($this->store->getDefinitionRuleJsons($definitionId) as $row) {
-            $rule = json_decode((string) $row->RuleJson, true);
-            if (! is_array($rule)) {
-                continue;
-            }
-            if (in_array($code, $this->ruleValidator->extractFieldCodes($rule), true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public function createDraft(int $definitionId, int $userId): object
     {
         return $this->store->createDraftVersion($definitionId, $userId);
@@ -342,7 +252,9 @@ class WorkflowDefinitionService
         $errors = [];
         $warnings = [];
 
-        $fieldsByCode = collect($this->store->getConditionFields((int) $meta->DefinitionID, includeInactive: true))
+        // فیلدها اکنون سراسری‌اند (Global Registry)، نه Definition-level — همان یک فهرست
+        // برایِ اعتبارسنجیِ Ruleهایِ هر Definitionی استفاده می‌شود.
+        $fieldsByCode = collect($this->conditionFields->list(includeInactive: true))
             ->keyBy('Code')
             ->all();
 

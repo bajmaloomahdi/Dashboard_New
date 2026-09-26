@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Process;
 
 use App\Http\Controllers\Controller;
+use App\Services\Workflow\ConditionFieldService;
 use App\Services\Workflow\WorkflowDefinitionService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -25,8 +26,10 @@ use Inertia\Inertia;
  */
 class ProcessVersionController extends Controller
 {
-    public function __construct(private WorkflowDefinitionService $defs)
-    {
+    public function __construct(
+        private WorkflowDefinitionService $defs,
+        private ConditionFieldService $conditionFields,
+    ) {
     }
 
     /** GET process/versions/{versionId} → Pages/Process/Versions/Show.tsx */
@@ -53,7 +56,9 @@ class ProcessVersionController extends Controller
             'positions'   => DB::select('EXEC sp_GetPositions @SearchText = NULL, @UnitID = NULL, @IsActive = 1'),
             'units'       => DB::select('EXEC sp_GetOrganizationalUnits @SearchText = NULL, @IsActive = 1'),
             'categories'  => $this->defs->listCategories(),
-            'conditionFields' => $this->defs->listConditionFields((int) $data['meta']->DefinitionID, includeInactive: true),
+            // فیلدها اکنون سراسری‌اند (Global Registry) — فهرستِ کاملِ فیلدهایِ فعال/غیرفعال،
+            // بدونِ وابستگی به این Definitionِ خاص.
+            'conditionFields' => $this->conditionFields->list(includeInactive: true),
         ]);
     }
 

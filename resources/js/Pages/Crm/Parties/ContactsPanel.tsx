@@ -19,6 +19,8 @@ interface Contact {
     Description: string | null;
     IsPrimary: boolean | number | string;
     IsActive: boolean | number | string;
+    RelatedPersonID: number | null;
+    RelatedPersonName: string | null;
 }
 
 interface ContactsPanelProps {
@@ -27,13 +29,15 @@ interface ContactsPanelProps {
     personId?: number;
     items: Contact[];
     contactTypes: { ContactTypeID: number; DisplayName: string }[];
+    /** فقط در حالتِ partyId معنا دارد — این تماس مالِ کدام مخاطبِ مرتبط با این طرف‌حساب است. */
+    relatedPersons?: { PersonID: number; DisplayName: string }[];
     canManage: boolean;
 }
 
-const emptyDraft = { id: null as number | null, contactTypeId: null as number | null, value: '', extension: '', description: '', isPrimary: false };
+const emptyDraft = { id: null as number | null, contactTypeId: null as number | null, value: '', extension: '', description: '', isPrimary: false, relatedPersonId: null as number | null };
 
 /** اطلاعاتِ تماسِ یک طرف‌حساب یا یک مخاطب — «داخلی» فیلدی کنارِ مقدار است، نه نوعِ تماسِ جدا. */
-export default function ContactsPanel({ partyId, personId, items: initialItems, contactTypes, canManage }: ContactsPanelProps) {
+export default function ContactsPanel({ partyId, personId, items: initialItems, contactTypes, relatedPersons, canManage }: ContactsPanelProps) {
     const [items, setItems] = useState<Contact[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
@@ -74,6 +78,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
             extension: draft.extension.trim() || undefined,
             description: draft.description.trim() || undefined,
             isPrimary: draft.isPrimary,
+            relatedPersonId: partyId ? (draft.relatedPersonId ?? undefined) : undefined,
         });
         setSaving(false);
         if (!res.ok || !res.success) {
@@ -107,6 +112,12 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
             ),
         },
         { title: 'توضیحات', dataIndex: 'Description', key: 'Description', render: (v) => v || <Text type="secondary">—</Text> },
+        ...(partyId ? [{
+            title: 'مخاطب',
+            key: 'relatedPerson',
+            dataIndex: 'RelatedPersonName',
+            render: (v: string | null) => v || <Text type="secondary">—</Text>,
+        }] : []),
         {
             title: 'وضعیت',
             key: 'status',
@@ -136,7 +147,10 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                             size="small"
                             icon={<EditOutlined />}
                             onClick={() => {
-                                setDraft({ id: r.ContactID, contactTypeId: r.ContactTypeID, value: r.ContactValue, extension: r.Extension || '', description: r.Description || '', isPrimary: toBool(r.IsPrimary) });
+                                setDraft({
+                                    id: r.ContactID, contactTypeId: r.ContactTypeID, value: r.ContactValue, extension: r.Extension || '',
+                                    description: r.Description || '', isPrimary: toBool(r.IsPrimary), relatedPersonId: r.RelatedPersonID,
+                                });
                                 setError(null);
                                 setFormOpen(true);
                             }}
@@ -166,6 +180,20 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                 <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }} size={12}>
                     {error ? <Alert type="error" showIcon message={error} style={{ borderRadius: 8 }} /> : null}
                     <Space style={{ width: '100%' }} wrap>
+                        {partyId ? (
+                            <div>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخاطب</Text>
+                                <Select
+                                    allowClear
+                                    style={{ width: 200 }}
+                                    placeholder="این تماس مالِ کدام مخاطب است؟"
+                                    value={draft.relatedPersonId ?? undefined}
+                                    onChange={(v) => setDraft((d) => ({ ...d, relatedPersonId: v ?? null }))}
+                                    options={(relatedPersons || []).map((p) => ({ value: p.PersonID, label: p.DisplayName }))}
+                                    notFoundContent="ابتدا از تبِ «مخاطبین» یک نفر را به این طرف‌حساب مرتبط کنید"
+                                />
+                            </div>
+                        ) : null}
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نوعِ تماس</Text>
                             <Select
@@ -181,7 +209,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                         </div>
                         {isPhoneType(draft.contactTypeId) ? (
                             <div>
-                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>داخلی</Text>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>داخلی (اختیاری)</Text>
                                 <Input dir="ltr" style={{ width: 100 }} value={draft.extension} onChange={(e) => setDraft((d) => ({ ...d, extension: e.target.value }))} />
                             </div>
                         ) : null}

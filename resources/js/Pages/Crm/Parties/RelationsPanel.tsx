@@ -61,6 +61,9 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
     const [personSearching, setPersonSearching] = useState(false);
     const [creatingNewPerson, setCreatingNewPerson] = useState(false);
     const [newPerson, setNewPerson] = useState(emptyNewPerson);
+    const [positionOptions, setPositionOptions] = useState(positions || []);
+    const [creatingNewPosition, setCreatingNewPosition] = useState(false);
+    const [newPositionName, setNewPositionName] = useState('');
     const [saving, setSaving] = useState(false);
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -83,8 +86,11 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         setPersonOptions([]);
         setCreatingNewPerson(false);
         setNewPerson(emptyNewPerson);
+        setCreatingNewPosition(false);
+        setNewPositionName('');
         setError(null);
         setFormOpen(true);
+        searchPersons('');
     };
 
     const openEdit = async (row: Relation) => {
@@ -98,8 +104,30 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         });
         setPersonOptions([{ PersonID: row.PersonID, DisplayName: row.PersonName }]);
         setCreatingNewPerson(false);
+        setCreatingNewPosition(false);
+        setNewPositionName('');
         setError(null);
         setFormOpen(true);
+    };
+
+    const handleCreateNewPosition = async () => {
+        if (!newPositionName.trim()) {
+            setError('نامِ سمت الزامی است.');
+            return;
+        }
+        setSaving(true);
+        const res = await crmApi('/crm/directory/positions', 'POST', { displayName: newPositionName.trim() });
+        setSaving(false);
+        if (!res.ok || !res.success) {
+            setError(res.message);
+            return;
+        }
+        const created = { PositionID: res.positionId, DisplayName: newPositionName.trim() };
+        setPositionOptions((opts) => [created, ...opts]);
+        setDraft((d) => ({ ...d, positionId: created.PositionID }));
+        setCreatingNewPosition(false);
+        setNewPositionName('');
+        setError(null);
     };
 
     const handleCreateNewPerson = async () => {
@@ -278,28 +306,33 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
 
                     <Divider style={{ margin: '4px 0' }} />
 
-                    <Space style={{ width: '100%' }} wrap>
+                    <Space style={{ width: '100%' }} wrap align="start">
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>سمت</Text>
-                            <Select
-                                allowClear
-                                style={{ width: 200 }}
-                                placeholder="سمت"
-                                value={draft.positionId ?? undefined}
-                                onChange={(v) => setDraft((d) => ({ ...d, positionId: v ?? null }))}
-                                options={positions.map((p) => ({ value: p.PositionID, label: p.DisplayName }))}
-                            />
-                        </div>
-                        <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نقش‌ها (چندتایی)</Text>
-                            <Select
-                                mode="multiple"
-                                style={{ width: 320 }}
-                                placeholder="انتخابِ نقش‌ها"
-                                value={draft.roleIds}
-                                onChange={(v) => setDraft((d) => ({ ...d, roleIds: v }))}
-                                options={contactRoles.map((r) => ({ value: r.ContactRoleID, label: r.DisplayName }))}
-                            />
+                            <Space>
+                                <Select
+                                    allowClear
+                                    style={{ width: 200 }}
+                                    placeholder="سمت"
+                                    value={draft.positionId ?? undefined}
+                                    onChange={(v) => setDraft((d) => ({ ...d, positionId: v ?? null }))}
+                                    options={positionOptions.map((p) => ({ value: p.PositionID, label: p.DisplayName }))}
+                                />
+                                <Button icon={<UserAddOutlined />} onClick={() => setCreatingNewPosition((v) => !v)}>
+                                    سمتِ جدید
+                                </Button>
+                            </Space>
+                            {creatingNewPosition ? (
+                                <Space style={{ marginTop: 8 }}>
+                                    <Input
+                                        placeholder="نامِ سمت"
+                                        value={newPositionName}
+                                        onChange={(e) => setNewPositionName(e.target.value)}
+                                        style={{ width: 160 }}
+                                    />
+                                    <Button type="primary" size="small" loading={saving} onClick={handleCreateNewPosition}>ایجاد</Button>
+                                </Space>
+                            ) : null}
                         </div>
                         <div style={{ paddingTop: 22 }}>
                             <Checkbox checked={draft.isPrimaryContact} onChange={(e) => setDraft((d) => ({ ...d, isPrimaryContact: e.target.checked }))}>

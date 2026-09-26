@@ -26,6 +26,7 @@ class ConditionDataTypeCaster
             'INTEGER' => self::castInteger($raw),
             'DECIMAL' => self::castDecimal($raw),
             'DATE'    => self::castDate($raw),
+            'TIME'    => self::castTime($raw),
             'BOOLEAN' => self::castBoolean($raw),
             'STRING'  => self::castString($raw),
             'SELECT'  => self::castSelect($raw, $allowedValues ?? []),
@@ -107,6 +108,16 @@ class ConditionDataTypeCaster
         [$y, $m, $d] = array_map('intval', explode('-', $raw));
         if (! checkdate($m, $d, $y)) {
             return self::fail('تاریخِ واردشده معتبر نیست.');
+        }
+
+        return self::ok($raw);
+    }
+
+    /** فرمتِ ذخیره: «HH:mm» — بدونِ ثانیه، بدونِ Timezone، بدونِ تقویم (زمانِ صرف، نه لحظه). */
+    private static function castTime(mixed $raw): array
+    {
+        if (! is_string($raw) || preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $raw) !== 1) {
+            return self::fail('ساعت باید به‌فرمتِ «HH:mm» (۲۴ساعته) باشد.');
         }
 
         return self::ok($raw);

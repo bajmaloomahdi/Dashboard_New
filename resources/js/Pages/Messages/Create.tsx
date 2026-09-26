@@ -15,7 +15,9 @@ import {
     Alert,
     Upload,
     Spin,
+    TimePicker,
 } from 'antd';
+import dayjs from 'dayjs';
 import {
     SendOutlined,
     MessageOutlined,
@@ -176,7 +178,8 @@ interface TaskUnit {
 }
 
 export default function MessageCreate() {
-    const { messageTypes, priorities, targets, taskUnits, flash } = usePage().props as any;
+    const { messageTypes, priorities, targets, taskUnits, flash, auth } = usePage().props as any;
+    const authUserId: number | undefined = auth?.user?.id ?? auth?.user?.UserID;
 
     const [form] = Form.useForm();
     const [fileList, setFileList] = useState<any[]>([]);
@@ -400,7 +403,11 @@ export default function MessageCreate() {
             MessageTypeID: WORKFLOW_MESSAGE_REAL_TYPE_ID,
             msgPriorityID: data.msgPriorityID,
             RecipientType: 1,
-            RecipientUserIDs: wfRecipient.users.map((u) => u.userId),
+            // این Message فقط سابقهٔ خودِ درخواست/Entityِ Start-Workflow است، نه تحویلِ
+            // واقعی به Assignee — تحویلِ واقعی فقط از طریقِ تسکی است که خودِ Workflow
+            // (با AssignmentResolver) می‌سازد؛ در غیرِ این صورت همان شخص هم این Message
+            // اطلاع‌رسانی و هم تسکِ Workflow را دریافت می‌کند (دو تحویلِ تکراری).
+            RecipientUserIDs: authUserId ? [authUserId] : [],
             CopyUserIDs: data.CopyUserIDs,
             CopyDescription: data.CopyDescription || undefined,
             DueDate: data.DueDate || undefined,
@@ -636,6 +643,20 @@ export default function MessageCreate() {
                                 size="small"
                                 value={wfFormValues[param.SourceKey] || null}
                                 onChange={(v) => setWfFormValues((s) => ({ ...s, [param.SourceKey]: v || '' }))}
+                            />
+                        </span>
+                    );
+                }
+
+                if (param.DataType === 'TIME') {
+                    return (
+                        <span key={idx} style={{ display: 'inline-block', width: 110, verticalAlign: 'middle' }}>
+                            <TimePicker
+                                size="small"
+                                format="HH:mm"
+                                style={{ width: '100%' }}
+                                value={wfFormValues[param.SourceKey] ? dayjs(wfFormValues[param.SourceKey], 'HH:mm') : null}
+                                onChange={(v) => setWfFormValues((s) => ({ ...s, [param.SourceKey]: v ? v.format('HH:mm') : '' }))}
                             />
                         </span>
                     );

@@ -5,8 +5,12 @@ namespace App\Http\Controllers\Workflow;
 use App\Services\Message\MessageAccessChecker;
 use App\Services\Workflow\Dto\StartWorkflowRequest;
 use App\Services\Workflow\Exceptions\WorkflowValidationException;
+use App\Services\Workflow\LetterStartRules;
+use App\Services\Workflow\LetterTemplateService;
+use App\Services\Workflow\TemplateRenderer;
 use App\Services\Workflow\WorkflowEngine;
 use App\Services\Workflow\WorkflowQueryService;
+use App\Services\Workflow\WorkflowStartContextBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,6 +23,9 @@ class WorkflowRuntimeController extends WorkflowApiController
         private WorkflowEngine $engine,
         private WorkflowQueryService $query,
         private MessageAccessChecker $messageAccess,
+        private WorkflowStartContextBuilder $startContext,
+        private LetterTemplateService $letterTemplates,
+        private TemplateRenderer $renderer,
     ) {
     }
 
@@ -87,7 +94,84 @@ class WorkflowRuntimeController extends WorkflowApiController
     {
         $this->authorizeWorkflow('WORKFLOW_VIEW');
 
-        return $this->runWorkflow(fn () => $this->engine->previewAssignment($definitionId, $this->actorId()));
+        // Workflow Start Context (فقط نمایش): starter + Stepِ اول + گیرندگانِ واقعی + startable/message.
+        // کلیدهایِ قدیمیِ resolved/reason/users حفظ شده‌اند. Submit این مقدار را ملاک قرار نمی‌دهد.
+        return $this->runWorkflow(fn () => $this->startContext->build($definitionId, $this->actorId())->toArray());
+    }
+
+    /**
+     * POST workflow/letters — ثبتِ «نامهٔ فرایندی» و شروعِ Workflow در یک Transaction.
+     *
+     * Submit هیچ اطلاعاتی دربارهٔ آغازکننده/گیرنده از کلاینت نمی‌پذیرد: آغازکننده همیشه Auth::id()
+     * است و گیرندگان از Assignmentِ واقعیِ Stepِ اولِ Definition در سرور دوباره محاسبه می‌شوند
+     * (Preview فقط برایِ نمایش بود). ترتیب: Context → پیش‌شرط‌ها → Template/Form → (Message «وظیفه»
+     * + CC + Adopt + Start در یک Transaction). در هر خطا هیچ Message/Instance/Taskی باقی نمی‌ماند.
+     */
+    public function startLetter(Request $request)
+    {
+        $this->authorizeWorkflow('WORKFLOW_START');
+
+        // فیلدهایِ ناشناخته (مثلاً RecipientUserIDs) عمداً نادیده گرفته می‌شوند.
+        $validated = $request->validate([
+            'definitionId'     => 'required|integer|min:1',
+            'letterTemplateId' => 'required|integer|min:1',
+            'formValues'       => 'nullable|array',
+            'Subject'          => 'nullable|string|max:500',
+            'MessageText'      => 'nullable|string|max:5000',
+            'msgPriorityID'    => 'nullable|integer',
+            'CopyUserIDs'      => 'nullable|array',
+            'CopyUserIDs.*'    => 'integer',
+            'CopyDescription'  => 'nullable|string|max:1000',
+            'DueDate'          => 'nullable|date',
+        ]);
+
+        return $this->runWorkflow(function () use ($validated) {
+            $starterId = $this->actorId();
+            $definitionId = (int) $validated['definitionId'];
+            $templateId = (int) $validated['letterTemplateId'];
+
+            // ۱) Context در سرور، از نو — پیش از هر نوشتن
+            $context = $this->startContext->build($definitionId, $starterId);
+            if (! $context->startable) {
+                throw new WorkflowValidationException(
+                    $context->message ?? LetterStartRules::MESSAGES['NO_ASSIGNEE_FOUND']
+                );
+            }
+
+            // ۲) قالب باید متعلق به همین Definition باشد (اختصاصی یا عمومیِ همان EntityType)
+            $allowed = array_map(fn ($t) => (int) $t->LetterTemplateID, $this->letterTemplates->listForDefinition($definitionId));
+            if (! in_array($templateId, $allowed, true)) {
+                throw new WorkflowValidationException('قالبِ انتخاب‌شده برایِ این فرایند مجاز نیست.');
+            }
+
+            // ۳) رندرِ نهایی (All-or-Nothing) — خطا یعنی هیچ نوشتنی انجام نشده
+            $rendered = $this->renderer->render($templateId, $validated['formValues'] ?? [], $starterId);
+            $subject = ! empty($validated['Subject']) ? $validated['Subject'] : $rendered['subject'];
+            $text = ! empty($validated['MessageText']) ? $validated['MessageText'] : $rendered['body'];
+
+            // ۴) Message «وظیفه» + CC + Adopt + Start — یک Transaction (داخلِ Engine)
+            $result = $this->engine->startWithNewTaskMessage(
+                definitionId: $definitionId,
+                startedByUserId: $starterId,
+                subject: $subject,
+                messageText: $text,
+                priorityId: isset($validated['msgPriorityID']) ? (int) $validated['msgPriorityID'] : null,
+                dueDate: $validated['DueDate'] ?? null,
+                copyUserIds: $validated['CopyUserIDs'] ?? null,
+                copyDescription: $validated['CopyDescription'] ?? null,
+                // فقط برایِ مسیرِ Deferred (CONDITION) مصرف می‌شود — از میانِ این مقادیر، فقط
+                // فیلدهایِ واقعاً مرتبط با CONDITIONهایِ همین Version به Context تبدیل می‌شوند.
+                formValues: $validated['formValues'] ?? [],
+            );
+
+            return [
+                'message'    => 'نامه ثبت و فرایند آغاز شد.',
+                'messageId'  => $result->createdMessageIds[0] ?? null,
+                'instanceId' => $result->instanceId,
+                'instanceStatus' => $result->instanceStatus,
+                'recipients' => $context->recipients,
+            ];
+        });
     }
 
     /** GET workflow/instances/{instanceId} */

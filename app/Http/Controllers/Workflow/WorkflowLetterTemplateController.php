@@ -91,6 +91,18 @@ class WorkflowLetterTemplateController extends WorkflowApiController
     }
 
     /**
+     * POST workflow/templates/{letterTemplateId}/resolve-preview — Resolveِ جزئیِ Read-Only.
+     * Tokenهایِ USER/SYSTEM را بدونِ نیاز به مقدارِ FORM حل می‌کند؛ FORMها Pending می‌مانند.
+     * فقط برایِ نمایش است؛ رندرِ نهایی همیشه در سرور و هنگامِ ثبتِ نامه انجام می‌شود.
+     */
+    public function resolvePreview(int $letterTemplateId)
+    {
+        $this->authorizeWorkflow('WORKFLOW_VIEW');
+
+        return $this->runWorkflow(fn () => $this->renderer->resolveNonForm($letterTemplateId, (int) Auth::id()));
+    }
+
+    /**
      * POST workflow/templates/{letterTemplateId}/render — پیش‌نمایشِ Read-Only.
      * برایِ Editor (اعتبارسنجیِ زنده) و برایِ Composeِ پیام (پیش‌نمایشِ قبل از ارسال).
      * هیچ نوشتنی در DB انجام نمی‌دهد.

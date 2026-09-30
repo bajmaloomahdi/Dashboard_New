@@ -39,16 +39,13 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import PersianDateInput from '../../Components/PersianDateInput';
 import { getPriorityPalette } from '../../Components/PriorityTag';
 import { gregorianToJalaliDisplay } from '../../Utils/jalali';
-import { THEME, STYLES } from '../../theme';
+import { THEME, STYLES, columnHelpers } from '../../theme';
 import { wfApi } from '../../Components/Workflow/workflowApi';
 
 const { Text } = Typography;
 
 /** مقدارِ Sentinel برایِ گزینهٔ «پیامِ فرایندی» در کنترلِ «نوع پیام» — هرگز با یک MessageTypeIDِ واقعی برخورد نمی‌کند. */
 const WORKFLOW_MESSAGE_TYPE = -1;
-
-/** نوعِ پیامِ واقعی که هنگامِ ارسالِ پیامِ فرایندی به‌کار می‌رود (اطلاع‌رسانی) — مسیردهیِ واقعی توسطِ خودِ فرایند انجام می‌شود، نه این فیلد. */
-const WORKFLOW_MESSAGE_REAL_TYPE_ID = 1;
 
 interface WfDefinition {
     DefinitionID: number;
@@ -76,15 +73,43 @@ interface TemplateParam {
     SourceKey: string;
 }
 
+/**
+ * Workflow Start Context — فقط برایِ «نمایش». Submit هیچ‌یک از این مقادیر را به سرور نمی‌فرستد؛
+ * سرور آغازکننده و گیرندگان را دوباره از Assignmentِ واقعیِ Stepِ اول محاسبه می‌کند.
+ */
 interface RecipientPreview {
     resolved: boolean;
     reason: string | null;
     users: { userId: number; fullName: string | null }[];
+    startable: boolean;
+    message: string | null;
+    starter: { userId: number; fullName: string | null; positionName: string | null; unitName: string | null } | null;
+    step: { code: string; name: string; assignPolicy: string; requiredApprovals: number | null } | null;
+    /** گیرنده به شرطِ فرایند بستگی دارد و پیش از Submit قابلِ‌تعیین نیست — startable=true اما users=[]. */
+    deferred: boolean;
 }
+
+const ASSIGN_POLICY_HINT: Record<string, string> = {
+    ANY: 'هرکدام از گیرندگان می‌تواند اقدام کند.',
+    ALL: 'همهٔ گیرندگان باید اقدام کنند.',
+};
 
 type TemplateSegment = { type: 'text'; value: string } | { type: 'token'; code: string };
 
 const WF_TOKEN_PATTERN = /\{\{([A-Z][A-Z0-9_]{1,49})\}\}/g;
+
+/**
+ * جداکنندهٔ سه‌رقمی برایِ نمایش/ورودیِ مقادیرِ عددیِ INTEGER/DECIMALِ فرمِ نامهٔ فرایندی
+ * (مثلِ مبلغ) — نه شناسه‌ها (UserID/MessageID/...). هم‌راستا با `columnHelpers.formatNumber`
+ * (همان قراردادِ en-US/کاما) ولی بدونِ Roundingِ اعشار، چون این‌جا مقدارِ زنده‌یِ ورودیِ کاربر
+ * است (ممکن است DECIMAL باشد)؛ `columnHelpers.formatNumber` برایِ Roundِ نمایشیِ Read-Only
+ * (مثلِ DataGrid) دست‌نخورده می‌ماند.
+ */
+const formatNumberInput = (value: number | string | undefined): string => {
+    if (value === undefined || value === null || value === '') return '';
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+};
+const parseNumberInput = (value: string | undefined): string => (value ?? '').replace(/,/g, '');
 
 /** شکستنِ متنِ خامِ قالب به دنباله‌ای از تکه‌های متنِ‌ثابت/Token — برایِ رندرِ Inline دقیقاً در محلِ خودِ Token. */
 function splitTemplateIntoSegments(text: string): TemplateSegment[] {
@@ -101,45 +126,9 @@ function splitTemplateIntoSegments(text: string): TemplateSegment[] {
     return segments;
 }
 
-/**
- * استخراجِ مقدارِ واقعیِ Tokenهایِ غیرِFORM (USER/SYSTEM) از متنِ Renderشدهٔ سرور، با استفاده
- * از تکه‌هایِ متنِ‌ثابتِ اطرافِ هر Token به‌عنوانِ لنگر — بدونِ نیاز به تغییرِ TemplateRenderer.
- * Tokenهایِ FORM از این تابع صرفِ‌نظر می‌شوند (مقدارشان همیشه محلی و از رویِ کنترل‌هایِ خودِ فرم است).
- */
-function extractNonFormTokenValues(
-    segments: TemplateSegment[],
-    rendered: string,
-    paramByCode: (code: string) => TemplateParam | null
-): Record<string, string> {
-    const result: Record<string, string> = {};
-    let cursor = 0;
-    for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i];
-        if (seg.type === 'text') {
-            if (!seg.value) continue;
-            const idx = rendered.indexOf(seg.value, cursor);
-            if (idx === -1) return result;
-            cursor = idx + seg.value.length;
-        } else {
-            const next = segments[i + 1];
-            let end = rendered.length;
-            if (next && next.type === 'text' && next.value) {
-                const nextIdx = rendered.indexOf(next.value, cursor);
-                if (nextIdx !== -1) end = nextIdx;
-            }
-            const param = paramByCode(seg.code);
-            if (param && param.SourceType !== 'FORM') {
-                result[seg.code] = rendered.slice(cursor, end);
-            }
-            cursor = end;
-        }
-    }
-    return result;
-}
-
 const RECIPIENT_REASON_LABEL: Record<string, string> = {
-    CONDITION: 'گیرنده بر اساسِ اطلاعاتِ فرم و مسیرِ فرایند تعیین می‌شود.',
-    NO_TASK: 'این فرایند مرحلهٔ تسکی ندارد؛ پیام بدونِ ارجاع به کسی ثبت می‌شود.',
+    CONDITION: 'این فرایند از طریقِ نامهٔ فرایندی قابلِ شروع نیست: گیرندهٔ مرحلهٔ اول به شرط‌هایِ فرایند بستگی دارد.',
+    NO_TASK: 'این فرایند مرحلهٔ تسکی ندارد؛ نامهٔ فرایندی برایِ آن معنا ندارد.',
     NO_ASSIGNEE_FOUND: 'برایِ این فرایند در حالِ حاضر کاربرِ فعالی یافت نشد.',
     NO_ACTIVE_VERSION: 'این فرایند نسخهٔ فعالی ندارد.',
     NO_START_STEP: 'تعریفِ این فرایند ناقص است (بدونِ مرحلهٔ شروع).',
@@ -178,8 +167,7 @@ interface TaskUnit {
 }
 
 export default function MessageCreate() {
-    const { messageTypes, priorities, targets, taskUnits, flash, auth } = usePage().props as any;
-    const authUserId: number | undefined = auth?.user?.id ?? auth?.user?.UserID;
+    const { messageTypes, priorities, targets, taskUnits, flash } = usePage().props as any;
 
     const [form] = Form.useForm();
     const [fileList, setFileList] = useState<any[]>([]);
@@ -214,6 +202,8 @@ export default function MessageCreate() {
     const [wfRecipient, setWfRecipient] = useState<RecipientPreview | null>(null);
     const [wfRecipientLoading, setWfRecipientLoading] = useState(false);
     const [wfRenderLoading, setWfRenderLoading] = useState(false);
+    /** Tokenهایِ USER/SYSTEM که برایِ این کاربر مقدار ندارند (مثلاً کاربرِ بدونِ سمت) — از resolve-preview. */
+    const [wfUnresolvedCaptions, setWfUnresolvedCaptions] = useState<string[]>([]);
     const [wfSubmitting, setWfSubmitting] = useState(false);
     const [wfError, setWfError] = useState<string | null>(null);
     /** ویرایشِ دستیِ کاربر رویِ تکه‌هایِ متنِ‌ثابتِ موضوع/متن — کلید = اندیسِ Segment. */
@@ -257,9 +247,7 @@ export default function MessageCreate() {
         return wfAllParams.filter((p) => codes.has(p.Code) && p.SourceType === 'FORM');
     })();
 
-    const wfHasNonFormToken = [...wfSubjectSegments, ...wfBodySegments].some(
-        (s) => s.type === 'token' && paramByCode(s.code)?.SourceType !== 'FORM'
-    );
+    /** آیا Tokenِ غیرِFORMی (USER/SYSTEM) در متن هست که هنوز مقدارش از resolve-preview نیامده؟ */
     const wfHasUnresolvedNonForm = [...wfSubjectSegments, ...wfBodySegments].some((s) => {
         if (s.type !== 'token') return false;
         const param = paramByCode(s.code);
@@ -297,6 +285,7 @@ export default function MessageCreate() {
         setWfSubjectTextOverrides({});
         setWfBodyTextOverrides({});
         setWfResolvedNonForm({});
+        setWfUnresolvedCaptions([]);
     };
 
     const handlePickWfDefinition = (id: number) => {
@@ -318,9 +307,17 @@ export default function MessageCreate() {
         wfApi(`/workflow/definitions/${id}/preview-assignees`).then((res) => {
             setWfRecipientLoading(false);
             if (res.ok && res.success) {
-                const preview: RecipientPreview = { resolved: res.resolved, reason: res.reason, users: res.users || [] };
-                setWfRecipient(preview);
-                setData('RecipientUserIDs', preview.users.map((u) => u.userId));
+                // فقط برایِ نمایش — گیرندگان و آغازکننده هنگامِ ارسال دوباره در سرور محاسبه می‌شوند.
+                setWfRecipient({
+                    resolved: res.resolved,
+                    reason: res.reason,
+                    users: res.users || [],
+                    startable: !!res.startable,
+                    message: res.message ?? null,
+                    starter: res.starter ?? null,
+                    step: res.step ?? null,
+                    deferred: !!res.deferred,
+                });
             }
         });
     };
@@ -340,31 +337,29 @@ export default function MessageCreate() {
     };
 
     /**
-     * فقط برایِ Resolveِ Tokenهایِ غیرِFORM (مثلِ {{USER_FULL_NAME}}) در پس‌زمینه — وقتی قالب
-     * هیچ Tokenِ غیرِFORMی نداشته باشد (مثلِ نمونهٔ FROM_DATE/TO_DATE)، اصلاً فراخوانی نمی‌شود؛
-     * مقدارِ Tokenهایِ FORM همیشه محلی (Segmentِ خودشان) است و اینجا دست‌نخورده می‌ماند.
+     * Resolveِ اولیهٔ Tokenهایِ غیرِFORM (USER/SYSTEM؛ مثلِ نامِ درخواست‌دهنده) بلافاصله پس از انتخابِ قالب —
+     * مستقل از مقدارِ FORM (مثلِ تاریخ). Tokenهایِ FORM فقط منتظرِ ورودیِ کاربر می‌مانند.
+     * رندرِ نهایی (All-or-Nothing) همیشه در سرور و هنگامِ ثبتِ نامه انجام می‌شود.
      */
     useEffect(() => {
-        if (!isWorkflowMessage || !wfTemplateId || !wfHasNonFormToken) return;
-        if (wfFormFields.some((f) => !wfFormValues[f.SourceKey])) return;
+        if (!isWorkflowMessage || !wfTemplateId) return;
 
-        const timer = setTimeout(() => {
-            setWfRenderLoading(true);
-            wfApi(`/workflow/templates/${wfTemplateId}/render`, 'POST', { formValues: wfFormValues }).then((res) => {
-                setWfRenderLoading(false);
-                if (res.ok && res.success) {
-                    setWfResolvedNonForm((prev) => ({
-                        ...prev,
-                        ...extractNonFormTokenValues(wfSubjectSegments, res.subject, paramByCode),
-                        ...extractNonFormTokenValues(wfBodySegments, res.body, paramByCode),
-                    }));
-                }
-            });
-        }, 400);
+        let cancelled = false;
+        setWfRenderLoading(true);
+        wfApi(`/workflow/templates/${wfTemplateId}/resolve-preview`, 'POST', {}).then((res) => {
+            if (cancelled) return;
+            setWfRenderLoading(false);
+            if (res.ok && res.success) {
+                setWfResolvedNonForm(res.resolved || {});
+                setWfUnresolvedCaptions((res.unresolved || []).map((u: { caption: string }) => u.caption));
+            }
+        });
 
-        return () => clearTimeout(timer);
+        return () => {
+            cancelled = true;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isWorkflowMessage, wfTemplateId, wfHasNonFormToken, JSON.stringify(wfFormValues)]);
+    }, [isWorkflowMessage, wfTemplateId]);
 
     const handleWorkflowSubmit = async () => {
         if (!wfTemplateId || !wfDefinitionId || !wfSelectedDefinition) {
@@ -375,6 +370,10 @@ export default function MessageCreate() {
             setWfError('مقدارِ همهٔ پارامترهایِ قالب را داخلِ متن وارد کنید.');
             return;
         }
+        if (wfUnresolvedCaptions.length > 0) {
+            setWfError(`مقدارِ «${wfUnresolvedCaptions.join('، ')}» برایِ شما قابلِ‌تعیین نیست؛ با مدیرِ سیستم تماس بگیرید.`);
+            return;
+        }
         if (wfHasUnresolvedNonForm) {
             setWfError('در حالِ تکمیلِ خودکارِ بخشی از متنِ نامه؛ چند لحظه صبر کنید.');
             return;
@@ -383,62 +382,37 @@ export default function MessageCreate() {
             setWfError('انتخابِ اولویت الزامی است.');
             return;
         }
-        if (!wfRecipient || wfRecipient.users.length === 0) {
-            setWfError('گیرندهٔ این فرایند هنوز قابلِ‌تعیین نیست؛ امکانِ ارسال وجود ندارد.');
+        if (!wfRecipient?.startable) {
+            setWfError(wfRecipient?.message || 'گیرندهٔ این فرایند هنوز قابلِ‌تعیین نیست؛ امکانِ ارسال وجود ندارد.');
             return;
         }
 
         setWfSubmitting(true);
         setWfError(null);
 
-        const msgRes = await wfApi('/messages/from-template', 'POST', {
+        // ثبتِ نامه + شروعِ Workflow در یک درخواست/Transaction. آغازکننده و گیرندگان عمداً ارسال
+        // نمی‌شوند: سرور آن‌ها را از Auth و Assignmentِ واقعیِ Stepِ اول دوباره محاسبه می‌کند.
+        const res = await wfApi('/workflow/letters', 'POST', {
+            definitionId: wfDefinitionId,
             letterTemplateId: wfTemplateId,
             formValues: wfFormValues,
-            // موضوع/متنِ نهاییِ ساخته‌شده از Segmentها (شاملِ هر ویرایشِ دستیِ کاربر) — Backend
-            // وقتی این مقادیر خالی نباشند، به‌جایِ Renderِ خودش دقیقاً همین‌ها را ذخیره می‌کند.
+            // موضوع/متنِ نهاییِ ساخته‌شده از Segmentها (شاملِ هر ویرایشِ دستیِ کاربر) — اگر خالی نباشند
+            // به‌جایِ خروجیِ Renderِ سرور ذخیره می‌شوند (همان رفتارِ قبلی).
             Subject: data.Subject,
             MessageText: data.MessageText,
-            // نوعِ پیامِ واقعی برایِ پیامِ فرایندی همیشه اطلاع‌رسانی است — مسیردهی/تسک
-            // توسطِ خودِ Workflow (WorkflowTaskAssignees) انجام می‌شود، نه این فیلد.
-            MessageTypeID: WORKFLOW_MESSAGE_REAL_TYPE_ID,
             msgPriorityID: data.msgPriorityID,
-            RecipientType: 1,
-            // این Message فقط سابقهٔ خودِ درخواست/Entityِ Start-Workflow است، نه تحویلِ
-            // واقعی به Assignee — تحویلِ واقعی فقط از طریقِ تسکی است که خودِ Workflow
-            // (با AssignmentResolver) می‌سازد؛ در غیرِ این صورت همان شخص هم این Message
-            // اطلاع‌رسانی و هم تسکِ Workflow را دریافت می‌کند (دو تحویلِ تکراری).
-            RecipientUserIDs: authUserId ? [authUserId] : [],
             CopyUserIDs: data.CopyUserIDs,
             CopyDescription: data.CopyDescription || undefined,
             DueDate: data.DueDate || undefined,
         });
-
-        if (!msgRes.ok || !msgRes.success) {
-            setWfSubmitting(false);
-            setWfError(msgRes.message);
-            return;
-        }
-
-        const messageId = msgRes.messageId;
-
-        // Contextِ خالی — WorkflowConditionFields رجیستریِ کاملاً جداگانه‌ای از پارامترهایِ
-        // قالب است (ConditionContextBuilder هر کلیدِ ناشناخته را رد می‌کند)؛ چون این فرم
-        // فعلاً مسیرهایِ CONDITION را پشتیبانی نمی‌کند (طبقِ تصمیمِ صریح)، فرستادنِ
-        // formValues به‌عنوانِ Context بی‌معنی و برایِ اکثرِ Definitionها خطاساز است.
-        const wfRes = await wfApi('/workflow/instances', 'POST', {
-            definitionId: wfDefinitionId,
-            entityType: wfSelectedDefinition.EntityType,
-            entityId: messageId,
-            context: {},
-        });
         setWfSubmitting(false);
 
-        if (!wfRes.ok || !wfRes.success) {
-            router.visit(`/messages/${messageId}`);
+        if (!res.ok || !res.success) {
+            setWfError(res.message || 'ثبتِ نامه ناموفق بود.');
             return;
         }
 
-        router.visit(`/messages/${messageId}`);
+        router.visit(`/messages/${res.messageId}`);
     };
 
     useEffect(() => {
@@ -629,9 +603,11 @@ export default function MessageCreate() {
                             key={idx}
                             size="small"
                             placeholder={param.Caption}
-                            style={{ width: 110 }}
+                            style={{ width: 130 }}
                             value={wfFormValues[param.SourceKey] ? Number(wfFormValues[param.SourceKey]) : undefined}
                             onChange={(v) => setWfFormValues((s) => ({ ...s, [param.SourceKey]: v == null ? '' : String(v) }))}
+                            formatter={(v) => formatNumberInput(v)}
+                            parser={(v) => Number(parseNumberInput(v))}
                         />
                     );
                 }
@@ -1006,9 +982,31 @@ export default function MessageCreate() {
                             </>
                         )}
 
-                        {/* ---------- گیرنده (Read-Only) — بعد از متنِ نامه، پیش از ارسال ---------- */}
+                        {/* ---------- درخواست‌دهنده و گیرنده (Read-Only، از Workflow Start Context) ---------- */}
                         {isWorkflowMessage ? (
                             <Col span={24}>
+                                <Form.Item
+                                    label={
+                                        <Space size={6}>
+                                            <LockOutlined style={{ color: THEME.primary }} />
+                                            <span>درخواست‌دهنده</span>
+                                        </Space>
+                                    }
+                                >
+                                    {wfRecipientLoading ? (
+                                        <Spin size="small" />
+                                    ) : wfRecipient?.starter ? (
+                                        <Space wrap>
+                                            <Tag icon={<UserOutlined />} color="geekblue" style={{ borderRadius: 6 }}>
+                                                {wfRecipient.starter.fullName || `کاربرِ #${wfRecipient.starter.userId}`}
+                                            </Tag>
+                                            {wfRecipient.starter.positionName ? <Text type="secondary">{wfRecipient.starter.positionName}</Text> : null}
+                                            {wfRecipient.starter.unitName ? <Text type="secondary">— {wfRecipient.starter.unitName}</Text> : null}
+                                        </Space>
+                                    ) : (
+                                        <Text type="secondary">{wfDefinitionId ? 'در حالِ محاسبه...' : 'ابتدا فرایند را انتخاب کنید.'}</Text>
+                                    )}
+                                </Form.Item>
                                 <Form.Item
                                     label={
                                         <Space size={6}>
@@ -1019,23 +1017,36 @@ export default function MessageCreate() {
                                 >
                                     {wfRecipientLoading ? (
                                         <Spin size="small" />
-                                    ) : wfRecipient?.resolved && wfRecipient.users.length > 0 ? (
-                                        <Space wrap>
-                                            {wfRecipient.users.map((u) => (
-                                                <Tag key={u.userId} icon={<UserOutlined />} color="blue" style={{ borderRadius: 6 }}>
-                                                    {u.fullName || `کاربرِ #${u.userId}`}
-                                                </Tag>
-                                            ))}
+                                    ) : wfRecipient?.startable && wfRecipient.users.length > 0 ? (
+                                        <Space direction="vertical" size={4}>
+                                            <Space wrap>
+                                                {wfRecipient.users.map((u) => (
+                                                    <Tag key={u.userId} icon={<UserOutlined />} color="blue" style={{ borderRadius: 6 }}>
+                                                        {u.fullName || `کاربرِ #${u.userId}`}
+                                                    </Tag>
+                                                ))}
+                                            </Space>
+                                            {wfRecipient.users.length > 1 && wfRecipient.step ? (
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    {wfRecipient.step.assignPolicy === 'N_OF_M'
+                                                        ? `حداقل ${wfRecipient.step.requiredApprovals != null ? columnHelpers.formatNumber(wfRecipient.step.requiredApprovals) : ''} نفر از گیرندگان باید تأیید کنند.`
+                                                        : ASSIGN_POLICY_HINT[wfRecipient.step.assignPolicy] ?? ''}
+                                                </Text>
+                                            ) : null}
                                         </Space>
                                     ) : (
                                         <Alert
-                                            type="info"
+                                            // Deferred (وابسته به CONDITION) خطا نیست — فقط یعنی گیرنده بعدِ بررسیِ شرط
+                                            // در سرور مشخص می‌شود؛ Submit را مسدود نمی‌کند.
+                                            type={!wfRecipient ? 'info' : wfRecipient.deferred ? 'info' : wfRecipient.startable ? 'info' : 'error'}
                                             showIcon
                                             style={{ borderRadius: 8 }}
                                             message={
                                                 wfDefinitionId
-                                                    ? wfRecipient?.reason
-                                                        ? RECIPIENT_REASON_LABEL[wfRecipient.reason] || RECIPIENT_REASON_LABEL.CONDITION
+                                                    ? wfRecipient
+                                                        ? wfRecipient.message ||
+                                                          (wfRecipient.reason ? RECIPIENT_REASON_LABEL[wfRecipient.reason] : null) ||
+                                                          'گیرندهٔ این فرایند قابلِ‌تعیین نیست؛ امکانِ ارسال وجود ندارد.'
                                                         : 'در حالِ محاسبهٔ گیرنده...'
                                                     : 'ابتدا فرایند را انتخاب کنید.'
                                             }
@@ -1105,8 +1116,11 @@ export default function MessageCreate() {
                             disabled={
                                 isWorkflowMessage &&
                                 (!wfTemplateId ||
-                                    !wfRecipient ||
-                                    wfRecipient.users.length === 0 ||
+                                    !wfRecipient?.startable ||
+                                    // بدونِ CONDITION (deferred=false) باید Previewِ گیرنده حتماً پر باشد؛
+                                    // با CONDITION (deferred=true) گیرنده عمداً در Preview خالی است و همین
+                                    // درست است — سرور خودش در لحظهٔ Submit تعیینش می‌کند.
+                                    (!wfRecipient.deferred && wfRecipient.users.length === 0) ||
                                     !data.Subject ||
                                     wfFormFields.some((f) => !wfFormValues[f.SourceKey]) ||
                                     wfHasUnresolvedNonForm)

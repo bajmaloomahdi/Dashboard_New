@@ -285,6 +285,11 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('letterTemplateId')->name('templates.toggle');
         Route::post('templates/{letterTemplateId}/render', [WorkflowLetterTemplateController::class, 'render'])
             ->whereNumber('letterTemplateId')->name('templates.render');
+        Route::post('templates/{letterTemplateId}/resolve-preview', [WorkflowLetterTemplateController::class, 'resolvePreview'])
+            ->whereNumber('letterTemplateId')->name('templates.resolve-preview');
+
+        // --- ثبتِ نامهٔ فرایندی + شروعِ Workflow (Message «وظیفه» + CC + Adopt + Start، یک Transaction) ---
+        Route::post('letters', [WorkflowRuntimeController::class, 'startLetter'])->name('letters.start');
 
         // --- فیلدهایِ شرط (Condition Engine — Global Registry، مثلِ template-parameters) ---
         Route::get('condition-fields', [WorkflowConditionFieldController::class, 'index'])->name('condition-fields.index');
@@ -440,6 +445,12 @@ Route::middleware('auth')->group(function () {
         Route::post('interactions', [CrmInteractionController::class, 'store'])->name('interactions.store');
         Route::post('interactions/{interactionId}/status', [CrmInteractionController::class, 'setStatus'])
             ->whereNumber('interactionId')->name('interactions.status');
+        Route::post('interactions/{interactionId}/attachments', [CrmInteractionController::class, 'storeAttachments'])
+            ->whereNumber('interactionId')->name('interactions.attachments.store');
+        Route::get('interaction-attachments/{attachmentId}/download', [CrmInteractionController::class, 'downloadAttachment'])
+            ->whereNumber('attachmentId')->name('interaction-attachments.download');
+        Route::post('interaction-attachments/{attachmentId}/delete', [CrmInteractionController::class, 'destroyAttachment'])
+            ->whereNumber('attachmentId')->name('interaction-attachments.delete');
         Route::post('interactions/{interactionId}/toggle', [CrmInteractionController::class, 'toggleActive'])
             ->whereNumber('interactionId')->name('interactions.toggle');
 

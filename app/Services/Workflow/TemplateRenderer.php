@@ -100,6 +100,55 @@ class TemplateRenderer
         ];
     }
 
+    /**
+     * Resolveِ جزئی (Read-Only) برایِ پیش‌نمایشِ اولیهٔ Composer — بدونِ وابستگی به مقدارِ FORM.
+     *
+     * Tokenهایِ USER/SYSTEM مقدار می‌گیرند؛ Tokenهایِ FORM فقط در `pending` می‌مانند تا کاربر پر کند؛
+     * Tokenهایِ USER/SYSTEM که برایِ این کاربر مقدار ندارند (مثلاً کاربرِ بدونِ سمت) در `unresolved`
+     * گزارش می‌شوند. `render()` بدونِ تغییر و همچنان All-or-Nothing است (رندرِ نهایی).
+     *
+     * @return array{resolved:array<string,string>, pending:string[], unresolved:array<int,array{code:string,caption:string}>}
+     *
+     * @throws WorkflowValidationException اگر Template یافت نشود/غیرفعال باشد یا Tokenِ نامعتبر داشته باشد
+     */
+    public function resolveNonForm(int $templateId, int $actorUserId): array
+    {
+        $template = $this->store->getLetterTemplateById($templateId);
+        if ($template === null || ! (bool) $template->IsActive) {
+            throw new WorkflowValidationException('قالبِ نامه یافت نشد یا غیرفعال است.');
+        }
+
+        $this->validateTokens($template->SubjectTemplate, $template->BodyTemplate, $template->EntityType);
+
+        $resolved = [];
+        $pending = [];
+        $unresolved = [];
+
+        foreach ($this->extractTokenCodes($template->SubjectTemplate . ' ' . $template->BodyTemplate) as $code) {
+            $param = $this->store->getTemplateParameterByCode($code);
+
+            if ($param->SourceType === 'FORM') {
+                $pending[] = $code;
+                continue;
+            }
+
+            $raw = match ($param->SourceType) {
+                'USER' => $this->resolveUserField($actorUserId, $param->SourceKey),
+                'SYSTEM' => $this->resolveSystemField($param->SourceKey),
+                default => null,
+            };
+
+            if ($raw === null || $raw === '') {
+                $unresolved[] = ['code' => $code, 'caption' => $param->Caption];
+                continue;
+            }
+
+            $resolved[$code] = $this->castValue($param->DataType, $raw, $param->Caption);
+        }
+
+        return ['resolved' => $resolved, 'pending' => $pending, 'unresolved' => $unresolved];
+    }
+
     /* ---------- Resolveِ منابع ---------- */
 
     private function resolveUserField(int $userId, string $sourceKey): ?string

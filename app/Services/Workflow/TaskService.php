@@ -128,6 +128,20 @@ class TaskService
             throw new WorkflowValidationException("مرحلهٔ «{$step->Name}» با سیاستِ N_OF_M نیازمندِ RequiredApprovals معتبر است.");
         }
 
+        // مسیرِ مستقیم (بدونِ CONDITION): Messageِ Pre-create از قبل با همین Assigneeها
+        // MessageDetails دارد (sp_Wf_CreateTaskMessage با @RequireAssignees=1) — این تماس
+        // بی‌اثر/Idempotent می‌ماند (sp_Wf_AddTaskMessageRecipients ردیفِ بازِ موجود را دوباره
+        // نمی‌سازد). مسیرِ Deferred (بعدِ CONDITION): Messageِ Pre-create عمداً بدونِ
+        // MessageDetails ساخته شده بود (@RequireAssignees=0) — همین‌جا برایِ اولین‌بار
+        // گیرندگانِ واقعی درج می‌شوند. Senderِ این ردیف‌ها همیشه آغازگرِ کلِ Instance است
+        // (نه actorUserId) چون این اولین حلقهٔ گردشِ نامه است، نه یک ارجاعِ بینِ‌Stepی.
+        $this->store->addTaskMessageRecipients(
+            $messageId,
+            (int) $senderUserId,
+            array_map(fn ($a) => $a->userId, $assignees),
+            $actorUserId ?? (int) $senderUserId
+        );
+
         $this->store->attachStepMessage($stepInstanceId, $messageId, $policy, $required, $actorUserId);
 
         foreach ($assignees as $a) {
@@ -145,6 +159,75 @@ class TaskService
             'actorType'   => $actorUserId ? 'USER' : 'SYSTEM',
             'summary'     => "تسکِ «{$step->Name}» به Messageِ از‌پیش‌ساخته‌شده متصل شد",
             'detail'      => ['assignees' => array_map(fn ($a) => $a->userId, $assignees), 'policy' => $policy, 'adopted' => true],
+        ]);
+
+        return $messageId;
+    }
+
+    /**
+     * ادامهٔ «همان نامهٔ اصلیِ Workflow» رویِ یک Stepِ بعدی — قانونِ «یک Instance = یک Message».
+     * برخلافِ createStepTask() (که Messageِ جدید می‌سازد) و adoptStepTask() (که فقط برایِ اولین
+     * Task بلافاصله‌بعدِ START به‌کار می‌رود)، این متد برایِ *هر* Stepِ بعدیِ همان Instance صدا زده
+     * می‌شود: هیچ Messageِ تازه‌ای نمی‌سازد؛ همان MessageID را نگه می‌دارد و فقط ردیف‌هایِ
+     * MessageDetails/UserNotificationsِ تازه‌ای برایِ Assigneeهایِ همین Step اضافه می‌کند —
+     * ردیف‌هایِ Assigneeهایِ Stepِ قبلی پیش‌تر توسطِ WorkflowEngine::performAction()
+     * (از طریقِ sp_Wf_CompleteStepTask) به «انجام شده/انجام نخواهد شد» بسته شده‌اند.
+     * کاملاً Generic: هیچ Workflow/Codeِ خاصی اینجا نیست؛ WorkflowEngine::advance() این متد را
+     * صدا می‌زند هر بار که Instance از قبل یک Messageِ اصلی داشته باشد (getInstanceMainMessageId).
+     *
+     * @param  ResolvedAssignee[]  $assignees
+     * @return int  MessageID (همان ورودی — بدونِ تغییر)
+     */
+    public function continueStepTask(object $ctx, object $step, int $stepInstanceId, array $assignees, ?int $actorUserId, int $messageId): int
+    {
+        if ($assignees === []) {
+            throw new WorkflowValidationException(
+                "مرحلهٔ «{$step->Name}» هیچ انجام‌دهنده‌ای ندارد؛ فرایند نمی‌تواند ادامه یابد."
+            );
+        }
+
+        $policy = $step->AssignPolicy ?? 'ANY';
+        $required = $step->RequiredApprovals !== null ? (int) $step->RequiredApprovals : null;
+
+        if ($policy === 'N_OF_M' && ($required === null || $required < 1)) {
+            throw new WorkflowValidationException("مرحلهٔ «{$step->Name}» با سیاستِ N_OF_M نیازمندِ RequiredApprovals معتبر است.");
+        }
+
+        $senderUserId = $ctx->initiatorUserId
+            ?? throw new WorkflowValidationException('فرایندِ بدونِ آغازگر نمی‌تواند آیتمِ کارتابلی بسازد.');
+
+        // گردشِ واقعیِ نامه (FromUserID در ردیف‌هایِ تازهٔ MessageDetails) باید کسی باشد که همین
+        // Transition را طی کرد — یعنی actorUserIdِ همین advance() (اقدام‌کننده‌یِ Stepِ قبلی) —
+        // نه همیشه آغازگرِ کلِ Instance. دقیقاً هم‌الگو با sp_Wf_ReassignStepTask (Forward/Delegate)
+        // که FromUserID را از Actor می‌گیرد. فقط وقتی هیچ Actorِ انسانی در کار نباشد (سیستمی)،
+        // به آغازگر Fallback می‌شود. Messages.SenderUserID (ایجادکنندهٔ اصلیِ نامه) اینجا دست‌نخورده
+        // می‌ماند — این فقط ستونِ per-row یِ MessageDetails را عوض می‌کند.
+        $fromUserId = $actorUserId ?? (int) $senderUserId;
+
+        $this->store->addTaskMessageRecipients(
+            $messageId,
+            $fromUserId,
+            array_map(fn ($a) => $a->userId, $assignees),
+            $actorUserId ?? (int) $senderUserId
+        );
+
+        $this->store->attachStepMessage($stepInstanceId, $messageId, $policy, $required, $actorUserId);
+
+        foreach ($assignees as $a) {
+            $this->store->insertTaskAssignee($stepInstanceId, $a->userId, $a->sourceType, $a->sourceRefId, $actorUserId);
+        }
+
+        $this->history->record([
+            'entityType'  => $ctx->entityType,
+            'entityId'    => $ctx->entityId,
+            'eventCode'   => WorkflowHistoryRecorder::TASK_CREATED,
+            'instanceId'  => $ctx->instanceId,
+            'stepInstanceId' => $stepInstanceId,
+            'messageId'   => $messageId,
+            'actorUserId' => $actorUserId,
+            'actorType'   => $actorUserId ? 'USER' : 'SYSTEM',
+            'summary'     => "تسکِ «{$step->Name}» روی همان نامهٔ فرایند ادامه یافت",
+            'detail'      => ['assignees' => array_map(fn ($a) => $a->userId, $assignees), 'policy' => $policy, 'continued' => true],
         ]);
 
         return $messageId;

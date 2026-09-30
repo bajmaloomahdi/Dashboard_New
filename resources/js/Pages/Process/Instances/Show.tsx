@@ -18,7 +18,8 @@ import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
-import { THEME, STYLES } from '../../../theme';
+import { filterWorkflowHistoryForTimeline } from '../../../Components/Workflow/workflowHistory';
+import { THEME, STYLES, columnHelpers } from '../../../theme';
 import { gregorianToJalaliDateTimeDisplay } from '../../../Utils/jalali';
 
 const { Text, Title } = Typography;
@@ -71,6 +72,8 @@ interface WfTaskRow {
     CreatedAt: string;
     StepName: string;
     AssigneeNames: string | null;
+    /** فقط کسانی که واقعاً روی این مرحله Decision ثبت کرده‌اند (انجام‌دهندهٔ واقعی)؛ قبل از هر اقدام، NULL. */
+    ActedAssigneeNames: string | null;
     OpenRecipientCount: number;
 }
 
@@ -222,6 +225,9 @@ export default function ProcessInstanceShow() {
     const displayStep = activeStep ?? (data.steps.length ? data.steps[data.steps.length - 1] : null);
     const displayTask = displayStep ? data.tasks.find((t) => t.StepInstanceID === displayStep.StepInstanceID) : undefined;
     const stepById = new Map(data.steps.map((s) => [s.StepInstanceID, s]));
+    // Timelineِ اصلی فقط رویدادهایِ اصلی/مهم را نشان می‌دهد؛ Historyِ کاملِ خام همچنان در data.history
+    // (از همان پاسخِ API) دست‌نخورده باقی می‌ماند — این فقط یک فیلترِ نمایشی است.
+    const visibleHistory = filterWorkflowHistoryForTimeline(data.history);
 
     const stepColumns: ColumnsType<WfStep> = [
         {
@@ -336,14 +342,19 @@ export default function ProcessInstanceShow() {
                                 <>
                                     <Descriptions.Item label="تأییدهایِ دریافتی">
                                         {displayStep.RequiredApprovals != null
-                                            ? `${displayStep.ReceivedApprovals} از ${displayStep.RequiredApprovals}`
-                                            : displayStep.ReceivedApprovals}
+                                            ? `${columnHelpers.formatNumber(displayStep.ReceivedApprovals)} از ${columnHelpers.formatNumber(displayStep.RequiredApprovals)}`
+                                            : columnHelpers.formatNumber(displayStep.ReceivedApprovals)}
                                     </Descriptions.Item>
-                                    <Descriptions.Item label="ردهایِ دریافتی">{displayStep.ReceivedRejections}</Descriptions.Item>
+                                    <Descriptions.Item label="ردهایِ دریافتی">{columnHelpers.formatNumber(displayStep.ReceivedRejections)}</Descriptions.Item>
                                 </>
                             ) : null}
+                            <Descriptions.Item label="انجام‌دهندگان" span={2}>
+                                {displayTask?.ActedAssigneeNames || <Text type="secondary">— هنوز کسی اقدام نکرده —</Text>}
+                            </Descriptions.Item>
                             {displayTask?.AssigneeNames ? (
-                                <Descriptions.Item label="انجام‌دهندگان" span={2}>{displayTask.AssigneeNames}</Descriptions.Item>
+                                <Descriptions.Item label="دریافت‌کنندگانِ واجدِ شرایط" span={2}>
+                                    <Text type="secondary">{displayTask.AssigneeNames}</Text>
+                                </Descriptions.Item>
                             ) : null}
                             {displayStep.MessageID ? (
                                 <Descriptions.Item label="تسکِ کارتابلی" span={2}>
@@ -385,12 +396,12 @@ export default function ProcessInstanceShow() {
                     style={{ ...STYLES.card, marginBottom: 16 }}
                     extra={<span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>{refreshing ? 'در حالِ به‌روزرسانی…' : ''}</span>}
                 >
-                    {data.history.length === 0 ? (
+                    {visibleHistory.length === 0 ? (
                         <Empty description="رویدادی ثبت نشده است" />
                     ) : (
                         <Timeline
                             mode="left"
-                            items={data.history.map((h) => {
+                            items={visibleHistory.map((h) => {
                                 const step = h.StepInstanceID != null ? stepById.get(h.StepInstanceID) : null;
                                 return {
                                     key: h.HistoryID,

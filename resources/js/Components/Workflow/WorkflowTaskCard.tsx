@@ -17,7 +17,8 @@ import { router } from '@inertiajs/react';
 import NotificationModal, { NotificationType } from '../NotificationModal';
 import WorkflowReassignModal from './WorkflowReassignModal';
 import { wfApi } from './workflowApi';
-import { THEME } from '../../theme';
+import { filterWorkflowHistoryForTimeline } from './workflowHistory';
+import { THEME, columnHelpers } from '../../theme';
 import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
 import { toBool } from '../../Utils/bool';
 
@@ -241,6 +242,9 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
     }
 
     const { task, assignees, actions, history, canAct } = detail;
+    // Timelineِ اصلی فقط رویدادهایِ اصلی/مهم را نشان می‌دهد؛ history (کاملِ خام، از همان پاسخِ API)
+    // دست‌نخورده می‌ماند — این فقط یک فیلترِ نمایشی است، هم‌الگو با Process/Instances/Show.tsx.
+    const visibleHistory = filterWorkflowHistoryForTimeline(history);
 
     // ردیفِ انجام‌دهندگیِ خودِ کاربرِ جاری (ترجیحاً ردیفِ فعال، وگرنه آخرین ردیفِ او)
     const myRows = assignees.filter((a) => Number(a.UserID) === Number(currentUserId));
@@ -350,16 +354,16 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                         {task.AssignPolicy ? (assignPolicyLabel[task.AssignPolicy] ?? task.AssignPolicy) : '—'}
                     </Descriptions.Item>
                     {task.AssignPolicy === 'N_OF_M' && task.RequiredApprovals != null ? (
-                        <Descriptions.Item label="تعدادِ تأییدِ لازم">{task.RequiredApprovals}</Descriptions.Item>
+                        <Descriptions.Item label="تعدادِ تأییدِ لازم">{columnHelpers.formatNumber(task.RequiredApprovals)}</Descriptions.Item>
                     ) : null}
                     {task.ReceivedApprovals != null ? (
-                        <Descriptions.Item label="تأییدهایِ دریافتی">{task.ReceivedApprovals}</Descriptions.Item>
+                        <Descriptions.Item label="تأییدهایِ دریافتی">{columnHelpers.formatNumber(task.ReceivedApprovals)}</Descriptions.Item>
                     ) : null}
                     {task.ReceivedRejections != null ? (
-                        <Descriptions.Item label="ردهایِ دریافتی">{task.ReceivedRejections}</Descriptions.Item>
+                        <Descriptions.Item label="ردهایِ دریافتی">{columnHelpers.formatNumber(task.ReceivedRejections)}</Descriptions.Item>
                     ) : null}
                     {task.ForwardMax != null ? (
-                        <Descriptions.Item label="سقفِ ارجاع">{forwardCount} از {task.ForwardMax}</Descriptions.Item>
+                        <Descriptions.Item label="سقفِ ارجاع">{columnHelpers.formatNumber(forwardCount)} از {columnHelpers.formatNumber(task.ForwardMax)}</Descriptions.Item>
                     ) : null}
                     <Descriptions.Item label="وضعیتِ شخصیِ من" span={2}>
                         {myAssignee?.PersonalStatusName ? (
@@ -398,7 +402,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                 ) : null}
 
                 {(showDecisionActions || showForward || showDelegate || showRevoke) && (
-                    <Space wrap style={{ marginBottom: history.length ? 16 : 0 }}>
+                    <Space wrap style={{ marginBottom: visibleHistory.length ? 16 : 0 }}>
                         {showDecisionActions && actions.map((a) => {
                             const style = actionKindStyle[a.Kind] ?? { icon: <SendOutlined />, color: 'default' };
                             const warningStyle =
@@ -460,14 +464,14 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                     </Space>
                 )}
 
-                {history.length > 0 && (
+                {visibleHistory.length > 0 && (
                     <>
                         <Title level={5} style={{ marginTop: 8, marginBottom: 10, color: THEME.textPrimary }}>
                             <HistoryOutlined /> تاریخچهٔ فرایند
                         </Title>
                         <Timeline
                             style={{ marginTop: 8 }}
-                            items={history.map((h) => ({
+                            items={visibleHistory.map((h) => ({
                                 key: h.HistoryID,
                                 children: (
                                     <div style={{ paddingBottom: 8 }}>
@@ -489,7 +493,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                     </>
                 )}
 
-                {history.length === 0 && !showDecisionActions && !showForward && !showDelegate && !showRevoke ? (
+                {visibleHistory.length === 0 && !showDecisionActions && !showForward && !showDelegate && !showRevoke ? (
                     <Empty description="رویدادی ثبت نشده است" />
                 ) : null}
             </Card>

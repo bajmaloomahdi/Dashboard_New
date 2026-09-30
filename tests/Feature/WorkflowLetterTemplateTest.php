@@ -372,6 +372,35 @@ class WorkflowLetterTemplateTest extends TestCase
         $this->assertStringNotContainsString('}}', $result['body']);
     }
 
+    public function test_render_formats_integer_and_decimal_form_values_with_thousands_separator(): void
+    {
+        $intCode = $this->uniqueCode('AMOUNT_INT');
+        $decCode = $this->uniqueCode('AMOUNT_DEC');
+
+        $paramService = $this->app->make(\App\Services\Workflow\TemplateParameterService::class);
+        $paramService->save([
+            'latinName' => $intCode, 'caption' => 'مبلغِ صحیح', 'sourceType' => 'FORM',
+            'sourceKey' => 'intAmount', 'dataType' => 'INTEGER', 'entityType' => 'MESSAGE',
+        ], self::USER_FULL);
+        $paramService->save([
+            'latinName' => $decCode, 'caption' => 'مبلغِ اعشاری', 'sourceType' => 'FORM',
+            'sourceKey' => 'decAmount', 'dataType' => 'DECIMAL', 'entityType' => 'MESSAGE',
+        ], self::USER_FULL);
+
+        $created = $this->as(self::USER_FULL)->postJson('/workflow/templates', $this->validPayload([
+            'bodyTemplate' => "صحیح: {{{$intCode}}} — اعشاری: {{{$decCode}}}",
+        ]))->json();
+
+        $result = $this->renderer->render(
+            (int) $created['letterTemplateId'],
+            ['intAmount' => '1254254', 'decAmount' => '-1500000.256789'],
+            self::USER_FULL
+        );
+
+        $this->assertStringContainsString('1,254,254', $result['body'], 'مقدارِ INTEGER باید با جداکنندهٔ سه‌رقمی در متنِ نهاییِ نامه ظاهر شود.');
+        $this->assertStringContainsString('-1,500,000.256789', $result['body'], 'مقدارِ DECIMAL باید فقط در قسمتِ صحیح جداکننده بگیرد و رقم‌هایِ اعشاری/علامتِ منفی‌اش دقیقاً حفظ شود.');
+    }
+
     public function test_missing_required_form_value_returns_422(): void
     {
         $paramCode = $this->uniqueCode('REQUIRED_TP');

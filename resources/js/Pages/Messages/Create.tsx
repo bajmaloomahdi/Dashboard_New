@@ -98,19 +98,6 @@ type TemplateSegment = { type: 'text'; value: string } | { type: 'token'; code: 
 
 const WF_TOKEN_PATTERN = /\{\{([A-Z][A-Z0-9_]{1,49})\}\}/g;
 
-/**
- * جداکنندهٔ سه‌رقمی برایِ نمایش/ورودیِ مقادیرِ عددیِ INTEGER/DECIMALِ فرمِ نامهٔ فرایندی
- * (مثلِ مبلغ) — نه شناسه‌ها (UserID/MessageID/...). هم‌راستا با `columnHelpers.formatNumber`
- * (همان قراردادِ en-US/کاما) ولی بدونِ Roundingِ اعشار، چون این‌جا مقدارِ زنده‌یِ ورودیِ کاربر
- * است (ممکن است DECIMAL باشد)؛ `columnHelpers.formatNumber` برایِ Roundِ نمایشیِ Read-Only
- * (مثلِ DataGrid) دست‌نخورده می‌ماند.
- */
-const formatNumberInput = (value: number | string | undefined): string => {
-    if (value === undefined || value === null || value === '') return '';
-    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-};
-const parseNumberInput = (value: string | undefined): string => (value ?? '').replace(/,/g, '');
-
 /** شکستنِ متنِ خامِ قالب به دنباله‌ای از تکه‌های متنِ‌ثابت/Token — برایِ رندرِ Inline دقیقاً در محلِ خودِ Token. */
 function splitTemplateIntoSegments(text: string): TemplateSegment[] {
     const segments: TemplateSegment[] = [];
@@ -606,8 +593,8 @@ export default function MessageCreate() {
                             style={{ width: 130 }}
                             value={wfFormValues[param.SourceKey] ? Number(wfFormValues[param.SourceKey]) : undefined}
                             onChange={(v) => setWfFormValues((s) => ({ ...s, [param.SourceKey]: v == null ? '' : String(v) }))}
-                            formatter={(v) => formatNumberInput(v)}
-                            parser={(v) => Number(parseNumberInput(v))}
+                            formatter={(v) => columnHelpers.formatNumberInput(v)}
+                            parser={(v) => Number(columnHelpers.parseNumberInput(v))}
                         />
                     );
                 }

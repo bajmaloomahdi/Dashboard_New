@@ -204,17 +204,32 @@ class TemplateRenderer
                     throw new WorkflowValidationException("مقدارِ پارامترِ «{$caption}» باید یک عددِ صحیح باشد.");
                 }
 
-                return (string) $v;
+                return $this->formatThousands((string) $v);
             })(),
             'DECIMAL' => (function () use ($str, $caption) {
                 if (! preg_match('/^-?\d+(\.\d+)?$/', $str)) {
                     throw new WorkflowValidationException("مقدارِ پارامترِ «{$caption}» باید یک عددِ اعشاریِ معتبر باشد.");
                 }
 
-                return $str; // همیشه رشته — بدونِ تبدیل به float، برایِ جلوگیری از خطایِ دقت
+                return $this->formatThousands($str); // رشته‌ای، بدونِ تبدیل به float — برایِ جلوگیری از خطایِ دقت
             })(),
             default => $str,
         };
+    }
+
+    /**
+     * جداکنندهٔ سه‌رقمیِ قسمتِ صحیح — کاملاً رشته‌ای، بدونِ عبور از int/float، تا مقدارِ
+     * DECIMAL هرگز دچارِ خطایِ دقت نشود (علامتِ منفی و رقم‌هایِ اعشاری دست‌نخورده می‌مانند).
+     */
+    private function formatThousands(string $value): string
+    {
+        $negative = str_starts_with($value, '-');
+        $unsigned = $negative ? substr($value, 1) : $value;
+        [$intPart, $fracPart] = array_pad(explode('.', $unsigned, 2), 2, null);
+
+        $grouped = strrev(implode(',', str_split(strrev($intPart), 3)));
+
+        return ($negative ? '-' : '') . $grouped . ($fracPart !== null ? ".{$fracPart}" : '');
     }
 
     /** اعتبارسنجیِ فرمتِ HH:mm (خروجیِ AntD TimePicker) — بدونِ هیچ تبدیلِ تقویمی. */

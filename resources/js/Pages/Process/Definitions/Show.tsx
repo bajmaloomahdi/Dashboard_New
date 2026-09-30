@@ -19,7 +19,7 @@ import NotificationModal, { NotificationType } from '../../../Components/Notific
 import DefinitionFormModal from './DefinitionFormModal';
 import type { WorkflowCategory } from './CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
-import { THEME, STYLES } from '../../../theme';
+import { THEME, STYLES, columnHelpers } from '../../../theme';
 import { gregorianToJalaliDateTimeDisplay } from '../../../Utils/jalali';
 import { toBool } from '../../../Utils/bool';
 
@@ -151,14 +151,21 @@ export default function ProcessDefinitionShow() {
                 return <Tag color={s.color} style={{ borderRadius: 6 }}>{s.label}</Tag>;
             },
         },
-        { title: 'تعدادِ Step', dataIndex: 'StepCount', key: 'StepCount', width: 100, align: 'center' },
+        {
+            title: 'تعدادِ Step',
+            dataIndex: 'StepCount',
+            key: 'StepCount',
+            width: 100,
+            align: 'center',
+            render: (v: number) => columnHelpers.formatNumber(v),
+        },
         {
             title: 'تعدادِ نمونه',
             dataIndex: 'InstanceCount',
             key: 'InstanceCount',
             width: 100,
             align: 'center',
-            render: (v: number) => <Tag color={v > 0 ? 'green' : 'default'} style={{ borderRadius: 6 }}>{v}</Tag>,
+            render: (v: number) => <Tag color={v > 0 ? 'green' : 'default'} style={{ borderRadius: 6 }}>{columnHelpers.formatNumber(v)}</Tag>,
         },
         {
             title: 'تاریخِ ایجاد',

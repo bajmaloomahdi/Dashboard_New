@@ -283,5 +283,16 @@ export const columnHelpers = {
         return String(value);
     },
 
+    /**
+     * جداکنندهٔ سه‌رقمی برایِ نمایش/ورودیِ زندهٔ مقادیرِ INTEGER/DECIMAL (formatter/parser یِ
+     * AntD InputNumber) — بدونِ Roundingِ اعشار (برخلافِ formatNumber که برایِ نمایشِ
+     * Read-Only/صحیح است). برایِ شناسه‌ها (UserID/MessageID/...) استفاده نشود.
+     */
+    formatNumberInput: (value: number | string | undefined): string => {
+        if (value === undefined || value === null || value === '') return '';
+        return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    },
+    parseNumberInput: (value: string | undefined): string => (value ?? '').replace(/,/g, ''),
+
     toBool: (value: any): boolean => Number(value) === 1,
 };

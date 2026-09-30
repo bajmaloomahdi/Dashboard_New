@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider, Checkbox, Tag } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { THEME, STYLES } from '../../../../theme';
+import { THEME, STYLES, columnHelpers } from '../../../../theme';
 import { designerNodeTypes, NODE_TYPE_META, type DesignerNodeData } from './nodeTypes';
 import RuleBuilder from './RuleBuilder';
 import type { ConditionField } from './ruleTypes';
@@ -455,6 +455,8 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                                         disabled={readOnly}
                                         value={(selectedNode.data as DesignerNodeData).dueDurationHours ?? undefined}
                                         onChange={(v) => updateNodeData(selectedNode.id, { dueDurationHours: v ?? null })}
+                                        formatter={(v) => columnHelpers.formatNumberInput(v)}
+                                        parser={(v) => Number(columnHelpers.parseNumberInput(v))}
                                     />
                                 </div>
                                 <div>

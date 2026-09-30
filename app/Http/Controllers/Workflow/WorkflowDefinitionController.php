@@ -62,10 +62,9 @@ class WorkflowDefinitionController extends WorkflowApiController
 
         $validated = $request->validate([
             'definitionId' => 'nullable|integer|exists:WorkflowDefinitions,DefinitionID',
-            // Code هرگز از کلاینت گرفته نمی‌شود — Service آن را از name/latinName می‌سازد؛
-            // latinName فقط وقتی لازم است که name حرفِ لاتینِ کافی نداشته باشد.
+            // Code هرگز از کلاینت گرفته نمی‌شود — کاملاً در dbo.sp_Wf_SaveDefinition
+            // به‌فرمِ WF101/WF102/... ساخته می‌شود (فقط در ایجاد؛ ویرایش آن را تغییر نمی‌دهد).
             'name'         => 'required|string|max:200',
-            'latinName'    => 'nullable|string|max:50',
             'description'  => 'nullable|string|max:1000',
             'entityType'   => 'required|string|max:64',
             'isActive'     => 'nullable|boolean',
@@ -76,7 +75,6 @@ class WorkflowDefinitionController extends WorkflowApiController
             $res = $this->defs->save([
                 'definitionId' => $validated['definitionId'] ?? null,
                 'name'         => $validated['name'],
-                'latinName'    => $validated['latinName'] ?? null,
                 'description'  => $validated['description'] ?? null,
                 'entityType'   => $validated['entityType'],
                 'isActive'     => (int) ($validated['isActive'] ?? 1),

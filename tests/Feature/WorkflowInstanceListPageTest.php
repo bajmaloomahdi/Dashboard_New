@@ -43,8 +43,7 @@ class WorkflowInstanceListPageTest extends TestCase
     /** @return array{0:int DefinitionID, 1:string Code} */
     private function publishSimpleFlow(): array
     {
-        $code = 'LIST_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'صفحهٔ تستِ لیست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['name' => 'صفحهٔ تستِ لیست', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -61,7 +60,7 @@ class WorkflowInstanceListPageTest extends TestCase
         ], self::USER_FULL);
         $this->defs->publish((int) $ver->VersionID, self::USER_FULL);
 
-        return [(int) $def->DefinitionID, $code];
+        return [(int) $def->DefinitionID, $def->Code];
     }
 
     private function startInstance(string $code, int $entityId): int

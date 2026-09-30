@@ -71,13 +71,10 @@ class WorkflowApiTest extends TestCase
     /** انتشارِ یک فرایندِ ساده START → REVIEW(APPROVAL) → END و بازگرداندنِ [definitionId, versionId, code] */
     private function publishSimpleFlow(
         int $reviewAssignee = self::USER_FULL,
-        ?string $code = null,
         bool $allowForward = false,
         bool $allowDelegation = true
     ): array {
-        $code ??= 'API_' . strtoupper(bin2hex(random_bytes(4)));
-
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_FULL);
         $versionId = (int) $ver->VersionID;
@@ -103,7 +100,7 @@ class WorkflowApiTest extends TestCase
 
         $this->defs->publish($versionId, self::USER_FULL);
 
-        return [$definitionId, $versionId, $code];
+        return [$definitionId, $versionId, $def->Code];
     }
 
     private function startInstance(string $code, int $entityId, int $startedBy = self::USER_FULL): int
@@ -187,11 +184,10 @@ class WorkflowApiTest extends TestCase
 
     public function test_create_definition_and_draft_version(): void
     {
-        $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-
         $defRes = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'latinName' => $code, 'name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY',
+            'name' => 'فرایندِ تستِ ای‌پی‌آی', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
+        $this->assertMatchesRegularExpression('/^WF\d+$/', $defRes['code']);
 
         $definitionId = $defRes['definitionId'];
 
@@ -213,31 +209,29 @@ class WorkflowApiTest extends TestCase
     public function test_create_definition_still_works_without_definition_id(): void
     {
         // رگرسیون: مسیرِ ایجاد (بدونِ definitionId در بدنه) باید دقیقاً مثلِ قبل کار کند.
-        $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'latinName' => $code, 'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'TEST_ENTITY',
+            'name' => 'فرایندِ ایجادی', 'description' => 'توضیح', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->assertJson(['success' => true])->json();
 
         $definitionId = $res['definitionId'];
 
         $shown = $this->as(self::USER_FULL)->getJson("/workflow/definitions/{$definitionId}")->assertOk()->json();
-        $this->assertSame($code, $shown['definition']['Code']);
+        $this->assertSame($res['code'], $shown['definition']['Code']);
+        $this->assertMatchesRegularExpression('/^WF\d+$/', $shown['definition']['Code']);
         $this->assertSame('فرایندِ ایجادی', $shown['definition']['Name']);
         $this->assertTrue((bool) $shown['definition']['IsActive']);
     }
 
     public function test_update_definition_via_store_changes_fields(): void
     {
-        $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
         $created = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'latinName' => $code, 'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'TEST_ENTITY', 'isActive' => true,
+            'name' => 'نامِ اولیه', 'description' => 'توضیحِ اولیه', 'entityType' => 'TEST_ENTITY', 'isActive' => true,
         ])->assertOk()->json();
         $definitionId = $created['definitionId'];
+        $code = $created['code'];
 
         $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
             'definitionId' => $definitionId,
-            'latinName'         => $code, // کد ثابت می‌ماند
             'name'         => 'نامِ ویرایش‌شده',
             'description'  => 'توضیحِ ویرایش‌شده',
             'entityType'   => 'PROJECT',
@@ -254,31 +248,59 @@ class WorkflowApiTest extends TestCase
     }
 
     /**
-     * ساده‌سازیِ UX (دورِ Code): Code پس از ایجاد کاملاً Immutable است — Service حتی
-     * تلاش نمی‌کند مقدارِ ارسالی از کلاینت را برایِ Code در ویرایش بخواند، پس هیچ
-     * تغییری رخ نمی‌دهد و خطایی هم صادر نمی‌شود (نه ردِ صریح، فقط بی‌اثر ماندنِ Code).
+     * Code پس از ایجاد کاملاً Immutable است و همیشه در Backend (نه از کلاینت) به‌فرمِ
+     * WF101/WF102/... ساخته می‌شود — کلاینت اصلاً هیچ فیلدی برایِ Code ندارد که
+     * بخواهد «تغییرش دهد»؛ این تست فقط تضمین می‌کند که ویرایش، Code را دست‌نخورده نگه می‌دارد.
      */
-    public function test_update_definition_never_changes_code_even_if_client_sends_a_different_one(): void
+    public function test_update_definition_never_changes_code(): void
     {
-        $codeA = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-        $codeB = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-
-        $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'latinName' => $codeA, 'name' => 'اول', 'entityType' => 'TEST_ENTITY',
-        ])->assertOk();
+        $defA = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
+            'name' => 'اول', 'entityType' => 'TEST_ENTITY',
+        ])->assertOk()->json();
         $defB = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'latinName' => $codeB, 'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
+            'name' => 'دوم', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
-        // تلاش برایِ تغییرِ کدِ B به همان کدِ A — بدونِ خطا، ولی Code واقعاً دست‌نخورده می‌ماند.
+        $this->assertNotSame($defA['code'], $defB['code']);
+
         $res = $this->as(self::USER_FULL)->postJson('/workflow/definitions', [
-            'definitionId' => $defB['definitionId'], 'latinName' => $codeA, 'name' => 'دومِ ویرایش‌شده', 'entityType' => 'TEST_ENTITY',
+            'definitionId' => $defB['definitionId'], 'name' => 'دومِ ویرایش‌شده', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
-        $this->assertSame($codeB, $res['code']);
+        $this->assertSame($defB['code'], $res['code']);
 
         $shown = $this->as(self::USER_FULL)->getJson("/workflow/definitions/{$defB['definitionId']}")->assertOk()->json();
-        $this->assertSame($codeB, $shown['definition']['Code']);
+        $this->assertSame($defB['code'], $shown['definition']['Code']);
         $this->assertSame('دومِ ویرایش‌شده', $shown['definition']['Name']);
+    }
+
+    /**
+     * تولیدِ Code باید همیشه اولین شمارهٔ خالی از ۱۰۱ به بعد را پیدا کند، نه صرفاً
+     * MAX+1 — اگر رکوردی حذف شده و شکافی در میانهٔ دنباله باقی مانده باشد (مثلاً
+     * WF101..WF103 و WF105 هست ولی WF104 نیست)، فرایندِ بعدی باید WF104 بگیرد؛
+     * و اگر خودِ WF101 خالی شود، حتی با وجودِ شماره‌هایِ بالاتر، دوباره WF101 برگردد.
+     */
+    public function test_definition_code_generation_fills_gaps_instead_of_only_incrementing(): void
+    {
+        $d1 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'شکاف ۱', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $d2 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'شکاف ۲', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $d3 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'شکاف ۳', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $d4 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'شکاف ۴', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $d5 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'شکاف ۵', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+
+        // شبیه‌سازیِ حذفِ یک رکورد در میانهٔ دنباله (d4) → شکاف در d4، ولی d5 با شمارهٔ بالاتر باقی می‌ماند.
+        DB::delete('DELETE FROM dbo.WorkflowDefinitions WHERE DefinitionID = ?', [$d4['definitionId']]);
+
+        $d6 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'باید جایِ شکاف را پر کند', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $this->assertSame($d4['code'], $d6['code']);
+
+        // حذفِ اولین Code (d1) → با وجودِ شماره‌هایِ بالاترِ موجود (d2, d3, d5, d6)، باید دوباره همان شمارهٔ اول برگردد.
+        DB::delete('DELETE FROM dbo.WorkflowDefinitions WHERE DefinitionID = ?', [$d1['definitionId']]);
+
+        $d7 = $this->as(self::USER_FULL)->postJson('/workflow/definitions', ['name' => 'باید اولین شمارهٔ خالی را بگیرد', 'entityType' => 'TEST_ENTITY'])->assertOk()->json();
+        $this->assertSame($d1['code'], $d7['code']);
+
+        // Codeهای غیراستانداردِ موجود (مثلِ TEST_SIMPLE) نباید در این محاسبه دخالت کنند.
+        $this->assertMatchesRegularExpression('/^WF\d+$/', $d7['code']);
     }
 
     public function test_update_definition_with_invalid_definition_id_is_422(): void
@@ -1054,8 +1076,7 @@ class WorkflowApiTest extends TestCase
 
     private function buildDraft(bool $withEnd = false): array
     {
-        $code = 'API_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'فرایندِ پیش‌نویس', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['name' => 'فرایندِ پیش‌نویس', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
         $definitionId = (int) $def->DefinitionID;
         $versionId = (int) $this->defs->createDraft($definitionId, self::USER_FULL)->VersionID;
 
@@ -1067,6 +1088,6 @@ class WorkflowApiTest extends TestCase
         }
         $this->defs->saveGraph($versionId, ['steps' => $steps, 'transitions' => $transitions], self::USER_FULL);
 
-        return [$definitionId, $versionId, $code];
+        return [$definitionId, $versionId, $def->Code];
     }
 }

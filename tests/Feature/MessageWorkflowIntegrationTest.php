@@ -94,7 +94,8 @@ class MessageWorkflowIntegrationTest extends TestCase
         // entityType=TEST_ENTITY: این Instance صرفاً برایِ ساختِ یک تسکِ Workflowِ واقعی
         // است (برایِ سنجشِ IsWfTask/workflowPermissions رویِ همان تسک)؛ entityId یک
         // شناسهٔ دلخواه است و به هیچ ردیفِ واقعیِ Messages متصل نیست.
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'ت', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $def = $this->defs->save(['name' => 'ت', 'entityType' => 'TEST_ENTITY'], self::USER_FULL);
+        $code = $def->Code; // Codeِ واقعی، ساخته‌شده در Backend (WF101/...) — نه فقط پیشنهادِ محلی
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [

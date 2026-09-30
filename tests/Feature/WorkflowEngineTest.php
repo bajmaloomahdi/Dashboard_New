@@ -62,12 +62,19 @@ class WorkflowEngineTest extends TestCase
 
     /* ============================ سازنده‌ها ============================ */
 
-    /** انتشارِ یک نسخهٔ فرایند از روی گرافِ داده‌شده. @return array{0:int,1:int,2:string} */
+    /**
+     * انتشارِ یک نسخهٔ فرایند از روی گرافِ داده‌شده. Codeِ برگشتی همیشه همان Codeِ
+     * واقعیِ ساخته‌شده در Backend است (فرمِ WF101/WF102/...، نه پارامترِ ورودیِ
+     * $code که فقط برایِ نام‌گذاریِ خوانا/یکتایِ Definition استفاده می‌شود) — این
+     * Code واقعی است که برایِ definitionCode در WorkflowEngine::start() لازم است.
+     *
+     * @return array{0:int,1:int,2:string}
+     */
     private function publishGraph(array $graph, ?string $code = null): array
     {
         $code ??= 'T_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'تست ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $def = $this->defs->save(['name' => 'تست ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $definitionId = (int) $def->DefinitionID;
 
         $ver = $this->defs->createDraft($definitionId, self::USER_A);
@@ -76,7 +83,7 @@ class WorkflowEngineTest extends TestCase
         $this->defs->saveGraph($versionId, $graph, self::USER_A);
         $this->defs->publish($versionId, self::USER_A);
 
-        return [$definitionId, $versionId, $code];
+        return [$definitionId, $versionId, $def->Code];
     }
 
     /** گرافِ ساده: START → REVIEW(APPROVAL) → END_OK / END_NO */
@@ -87,7 +94,7 @@ class WorkflowEngineTest extends TestCase
         string $stepType = 'APPROVAL',
         ?bool $allowForward = null,
         ?int $forwardMax = null,
-        ?bool $allowDelegation = null
+        bool $allowDelegation = true
     ): array {
         $review = [
             'code' => 'REVIEW', 'name' => 'بررسی', 'stepType' => $stepType,
@@ -99,9 +106,8 @@ class WorkflowEngineTest extends TestCase
         if ($forwardMax !== null) {
             $review['forwardMax'] = $forwardMax;
         }
-        if ($allowDelegation !== null) {
-            $review['allowDelegation'] = $allowDelegation;
-        }
+        // صریح: پیش‌فرضِ Backendِ Stepِ جدید «بدونِ تفویض» است؛ تست‌هایِ تفویض آن را صراحتاً روشن می‌کنند.
+        $review['allowDelegation'] = $allowDelegation;
 
         return [
             'steps' => [
@@ -1310,7 +1316,7 @@ class WorkflowEngineTest extends TestCase
 
     public function test_delegate_moves_active_slot_and_sets_source_type(): void
     {
-        [, , $code] = $this->publishGraph($this->approvalGraph([$this->user(self::USER_A)])); // allowDelegation پیش‌فرض = 1
+        [, , $code] = $this->publishGraph($this->approvalGraph([$this->user(self::USER_A)])); // allowDelegation صریحاً true (پیش‌فرضِ helper)
         $instanceId = $this->startWf($code, 6101)->instanceId;
         $task = $this->openTask($instanceId);
         $messageId = (int) $task->MessageID;
@@ -2270,8 +2276,9 @@ class WorkflowEngineTest extends TestCase
      */
     public function test_condition_gateway_evaluated_after_real_task_action(): void
     {
-        $code = 'CGT_' . strtoupper(bin2hex(random_bytes(4)));
-        $definitionId = (int) $this->defs->save(['latinName' => $code, 'name' => 'گیت‌وی بعدِ تسک', 'entityType' => 'TEST_ENTITY'], self::USER_A)->DefinitionID;
+        $def = $this->defs->save(['name' => 'گیت‌وی بعدِ تسک', 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $definitionId = (int) $def->DefinitionID;
+        $code = $def->Code;
         $this->defineAmountField($definitionId);
 
         $version = $this->defs->createDraft($definitionId, self::USER_A);

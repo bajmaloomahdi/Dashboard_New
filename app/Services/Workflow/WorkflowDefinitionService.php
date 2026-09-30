@@ -14,11 +14,6 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowDefinitionService
 {
-    private const CODE_PATTERN = '/^[A-Z][A-Z0-9_]{1,49}$/';
-
-    /** سقفِ تلاش برایِ یافتنِ یک Codeِ یکتا با پسوندِ عددی، قبل از خطایِ صریح. */
-    private const MAX_UNIQUE_SUFFIX_ATTEMPTS = 50;
-
     public function __construct(
         private WorkflowStore $store,
         private EntityResolverRegistry $entities,
@@ -38,13 +33,12 @@ class WorkflowDefinitionService
     }
 
     /**
-     * تولیدِ خودکارِ Code — کاربر هرگز Code را مستقیماً وارد نمی‌کند (UI فیلدِ Code را
-     * Read-only نگه می‌دارد). این متد تنها منبعِ حقیقتِ Code است؛ هر مقداری که کلاینت
-     * برایِ «code» بفرستد نادیده گرفته می‌شود — دقیقاً هم‌الگو با TemplateParameterService/
-     * ConditionFieldService::save().
+     * Codeِ فرایند کاملاً در Backend (dbo.sp_Wf_SaveDefinition) و فقط در شاخهٔ ایجاد
+     * تولید می‌شود (فرمِ `WF101`, `WF102`, ...، با قفلِ UPDLOCK/HOLDLOCK برایِ ایمنی
+     * زیرِ همزمانی) — کاربر هرگز آن را وارد نمی‌کند و ویرایش هرگز آن را تغییر نمی‌دهد؛
+     * این متد فقط ورودی را اعتبارسنجی و پاس می‌کند، هیچ Codeای اینجا ساخته نمی‌شود.
      *
-     * @throws WorkflowValidationException اگر نام/نامِ لاتین برایِ ساختِ یک Codeِ معتبر کافی نباشد،
-     *         یا EntityType نامعتبر باشد، یا فرایند در ویرایش یافت نشود
+     * @throws WorkflowValidationException اگر EntityType نامعتبر باشد
      */
     public function save(array $input, int $userId): object
     {
@@ -53,84 +47,15 @@ class WorkflowDefinitionService
             throw new WorkflowValidationException("نوعِ موجودیتِ «{$entityType}» در Registry فعال/شناخته‌شده نیست.");
         }
 
-        $name = trim($input['name'] ?? '');
-        $definitionId = isset($input['definitionId']) && $input['definitionId'] !== null ? (int) $input['definitionId'] : null;
-
-        if ($definitionId !== null) {
-            // ویرایش: Code هرگز تغییر نمی‌کند — حتی اگر نام عوض شود یا کلاینت مقدارِ
-            // دیگری برایِ code بفرستد؛ تنها منبعِ حقیقت همان ردیفِ موجود در DB است.
-            $existing = $this->store->getDefinition($definitionId)['definition'];
-            if ($existing === null) {
-                throw new WorkflowValidationException('فرایند یافت نشد.');
-            }
-            $code = $existing->Code;
-        } else {
-            $code = $this->generateUniqueCode($name, isset($input['latinName']) ? trim((string) $input['latinName']) : '');
-        }
-
-        $result = $this->store->saveDefinition([
-            'definitionId' => $definitionId,
-            'code'         => $code,
-            'name'         => $name,
+        return $this->store->saveDefinition([
+            'definitionId' => isset($input['definitionId']) && $input['definitionId'] !== null ? (int) $input['definitionId'] : null,
+            'name'         => trim($input['name'] ?? ''),
             'description'  => $input['description'] ?? null,
             'entityType'   => $entityType,
             'isActive'     => (int) ($input['isActive'] ?? 1),
             'categoryId'   => $input['categoryId'] ?? null,
             'userId'       => $userId,
         ]);
-        $result->Code = $code;
-
-        return $result;
-    }
-
-    /**
-     * Codeِ پایه را ابتدا از نام می‌سازد؛ اگر نام حرفِ لاتینِ کافی نداشت، از
-     * latinName استفاده می‌کند. سپس با retry عددی (LEAVE_REQUEST_2, ...) یکتا می‌شود.
-     *
-     * @throws WorkflowValidationException
-     */
-    private function generateUniqueCode(string $name, string $latinName): string
-    {
-        if ($name === '') {
-            throw new WorkflowValidationException('نام الزامی است.');
-        }
-
-        $base = $this->baseCodeFromText($name);
-        if (! preg_match(self::CODE_PATTERN, $base)) {
-            if ($latinName === '') {
-                throw new WorkflowValidationException('نام شامل حروفِ لاتینِ کافی نیست — یک «نامِ لاتین» کوتاه وارد کنید.');
-            }
-            $base = $this->baseCodeFromText($latinName);
-            if (! preg_match(self::CODE_PATTERN, $base)) {
-                throw new WorkflowValidationException('نامِ لاتین نامعتبر است — باید با یک حرفِ لاتین شروع شود و فقط شاملِ حروفِ لاتین/عدد/آندرلاین باشد.');
-            }
-        }
-
-        $code = $base;
-        $suffix = 2;
-        while ($this->store->getDefinitionByCode($code) !== null) {
-            if ($suffix > self::MAX_UNIQUE_SUFFIX_ATTEMPTS) {
-                throw new WorkflowValidationException('امکانِ ساختِ یک Codeِ یکتا از این نام/نامِ لاتین وجود ندارد — لطفاً مقدارِ دیگری انتخاب کنید.');
-            }
-            $stem = mb_substr($base, 0, 50 - mb_strlen('_' . $suffix));
-            $code = $stem . '_' . $suffix;
-            $suffix++;
-        }
-
-        return $code;
-    }
-
-    /** حروفِ بزرگِ لاتین/عدد/آندرلاین را نگه می‌دارد؛ بقیه (فارسی/علائم) حذف می‌شود — هم‌ارزِ suggestCode() در Frontend. */
-    private function baseCodeFromText(string $text): string
-    {
-        $upper = mb_strtoupper($text, 'UTF-8');
-        $stripped = preg_replace('/[^A-Z0-9_\s]/u', '', $upper) ?? '';
-        $trimmed = trim($stripped);
-        $underscored = preg_replace('/\s+/', '_', $trimmed) ?? '';
-        $collapsed = preg_replace('/_+/', '_', $underscored) ?? '';
-        $noLeadingDigits = preg_replace('/^[^A-Z]+/', '', $collapsed) ?? '';
-
-        return mb_substr($noLeadingDigits, 0, 50);
     }
 
     /* ---------- دسته‌بندیِ فرایندها ---------- */

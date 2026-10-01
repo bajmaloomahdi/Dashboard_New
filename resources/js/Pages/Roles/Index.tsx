@@ -182,12 +182,13 @@ export default function RolesIndex() {
             key: 'UsersCount',
             width: 110,
             align: 'center',
-            render: (count: number) => (
-                <Tooltip title="تعداد کاربران با این نقش">
+            render: (count: number, record: Role) => (
+                <Tooltip title="مدیریتِ کاربرانِ این نقش">
                     <Tag
                         icon={<TeamOutlined />}
                         color={count > 0 ? 'blue' : 'default'}
-                        style={{ borderRadius: 6 }}
+                        style={{ borderRadius: 6, cursor: 'pointer' }}
+                        onClick={() => router.visit(`/roles/${record.RoleID}/users`)}
                     >
                         {count} کاربر
                     </Tag>
@@ -263,6 +264,14 @@ export default function RolesIndex() {
                                 icon={<KeyOutlined />}
                                 style={{ color: THEME.warning }}
                                 onClick={() => router.visit(`/roles/${record.RoleID}/permissions`)}
+                            />
+                        </Tooltip>
+                        <Tooltip title="مدیریتِ کاربران">
+                            <Button
+                                type="text"
+                                icon={<TeamOutlined />}
+                                style={{ color: THEME.info }}
+                                onClick={() => router.visit(`/roles/${record.RoleID}/users`)}
                             />
                         </Tooltip>
                         <Tooltip title="ویرایش">

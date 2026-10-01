@@ -121,6 +121,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/{id}/menus', [RoleController::class, 'saveMenus'])->name('save-menus');
         Route::post('/{id}/reports', [RoleController::class, 'saveReports'])->name('save-reports');
         Route::post('/{id}/permissions', [RoleController::class, 'savePermissions'])->name('save-permissions');
+        Route::get('/{id}/users', [RoleController::class, 'users'])->name('users');
+        Route::post('/{id}/users', [RoleController::class, 'saveUsers'])->name('save-users');
     });
 
     // منوها

@@ -39,7 +39,7 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import PersianDateInput from '../../Components/PersianDateInput';
 import { getPriorityPalette } from '../../Components/PriorityTag';
 import { gregorianToJalaliDisplay } from '../../Utils/jalali';
-import { THEME, STYLES } from '../../theme';
+import { THEME, STYLES, columnHelpers } from '../../theme';
 import { wfApi } from '../../Components/Workflow/workflowApi';
 
 const { Text } = Typography;
@@ -266,14 +266,23 @@ export default function MessageCreate() {
         return !!param && param.SourceType !== 'FORM' && !wfResolvedNonForm[s.code];
     });
 
-    /** مقدارِ نهاییِ یک Token برایِ ارسال — Tokenهایِ FORM محلی/شمسی، غیرِFORM از رویِ Resolveِ سرور (خالی تا وقتِ Resolve). */
+    /**
+     * مقدارِ نهاییِ یک Token برایِ ارسال — Tokenهایِ FORM محلی/شمسی، غیرِFORM از رویِ Resolveِ
+     * سرور (خالی تا وقتِ Resolve). برایِ INTEGER/DECIMAL همان جداکنندهٔ سه‌رقمیِ نمایشی
+     * (`columnHelpers.formatNumberInput` — همان Helperِ InputNumberِ بالا) روی مقدار اعمال
+     * می‌شود؛ چون این متنِ نهاییِ Flatten‌شده (نه `wfFormValues`ِ خام) همان چیزی است که در
+     * `MessageText`/`Subject` ذخیره و بعداً در کارتابل نمایش داده می‌شود — `wfFormValues`ِ خودِ
+     * خام دست‌نخورده می‌ماند و جداگانه در فیلدِ `formValues` برایِ Context/Condition ارسال می‌شود.
+     */
     const tokenSubmitValue = (code: string): string => {
         const param = paramByCode(code);
         if (!param) return '';
         if (param.SourceType === 'FORM') {
             const raw = wfFormValues[param.SourceKey];
             if (!raw) return '';
-            return param.DataType === 'DATE' ? gregorianToJalaliDisplay(raw) : raw;
+            if (param.DataType === 'DATE') return gregorianToJalaliDisplay(raw);
+            if (param.DataType === 'INTEGER' || param.DataType === 'DECIMAL') return columnHelpers.formatNumberInput(raw);
+            return raw;
         }
         return wfResolvedNonForm[code] ?? '';
     };

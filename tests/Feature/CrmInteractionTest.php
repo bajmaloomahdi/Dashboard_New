@@ -48,6 +48,12 @@ class CrmInteractionTest extends TestCase
         $this->as(self::USER_FULL)->postJson('/crm/relations', ['partyId' => $partyId, 'personId' => $personId])->assertOk();
     }
 
+    /** InteractionTypeID از رویِ Codeِ Master Data (تعاملات اکنون Master Data هستند، نه Enumِ ثابت). */
+    private function typeId(string $code): int
+    {
+        return (int) \DB::selectOne('SELECT InteractionTypeID FROM dbo.CrmInteractionTypes WHERE Code = ?', [$code])->InteractionTypeID;
+    }
+
     private function save(array $body)
     {
         return $this->as(self::USER_FULL)->postJson('/crm/interactions', array_merge([
@@ -71,24 +77,24 @@ class CrmInteractionTest extends TestCase
     {
         $party = $this->createParty();
 
-        $call = $this->save(['partyId' => $party, 'interactionType' => 'CALL'])->assertOk()->json();
-        $meeting = $this->save(['partyId' => $party, 'interactionType' => 'MEETING', 'status' => 'PLANNED'])->assertOk()->json();
+        $call = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL')])->assertOk()->json();
+        $meeting = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('MEETING'), 'status' => 'PLANNED'])->assertOk()->json();
 
         $items = collect($this->list($party));
         $this->assertSame('DONE', $items->firstWhere('InteractionID', $call['interactionId'])['Status']);
         $this->assertSame('PLANNED', $items->firstWhere('InteractionID', $meeting['interactionId'])['Status']);
 
-        $this->save(['partyId' => $party, 'interactionType' => 'CALL', 'status' => 'CANCELED'])->assertStatus(422)->assertJson(['success' => false]);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'status' => 'CANCELED'])->assertStatus(422)->assertJson(['success' => false]);
     }
 
     public function test_note_is_always_done(): void
     {
         $party = $this->createParty();
 
-        $note = $this->save(['partyId' => $party, 'interactionType' => 'NOTE'])->assertOk()->json();
+        $note = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertOk()->json();
         $this->assertSame('DONE', $this->list($party)[0]['Status']);
 
-        $this->save(['partyId' => $party, 'interactionType' => 'NOTE', 'status' => 'PLANNED'])->assertStatus(422);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE'), 'status' => 'PLANNED'])->assertStatus(422);
 
         $this->as(self::USER_FULL)->postJson("/crm/interactions/{$note['interactionId']}/status", ['status' => 'CANCELED'])
             ->assertStatus(422)->assertJson(['success' => false]);
@@ -98,20 +104,20 @@ class CrmInteractionTest extends TestCase
     {
         $party = $this->createParty();
 
-        $this->save(['partyId' => $party, 'interactionType' => 'FOLLOWUP'])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('FOLLOWUP')])->assertOk();
         $this->assertSame('PLANNED', $this->list($party)[0]['Status']);
 
-        $this->save(['partyId' => $party, 'interactionType' => 'FOLLOWUP', 'status' => 'DONE'])->assertStatus(422);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('FOLLOWUP'), 'status' => 'DONE'])->assertStatus(422);
     }
 
     public function test_status_transitions_only_from_planned_and_edit_cannot_bypass_them(): void
     {
         $party = $this->createParty();
-        $fu = $this->save(['partyId' => $party, 'interactionType' => 'FOLLOWUP'])->assertOk()->json();
+        $fu = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('FOLLOWUP')])->assertOk()->json();
         $id = $fu['interactionId'];
 
         // ویرایش نمی‌تواند وضعیت را عوض کند
-        $this->save(['interactionId' => $id, 'partyId' => $party, 'interactionType' => 'FOLLOWUP', 'status' => 'DONE', 'subject' => 'ویرایش'])->assertOk();
+        $this->save(['interactionId' => $id, 'partyId' => $party, 'interactionTypeId' => $this->typeId('FOLLOWUP'), 'status' => 'DONE', 'subject' => 'ویرایش'])->assertOk();
         $this->assertSame('PLANNED', $this->list($party)[0]['Status']);
 
         $this->as(self::USER_FULL)->postJson("/crm/interactions/{$id}/status", ['status' => 'PLANNED'])->assertStatus(422);
@@ -122,10 +128,10 @@ class CrmInteractionTest extends TestCase
     public function test_type_and_party_are_immutable_after_creation(): void
     {
         $party = $this->createParty();
-        $call = $this->save(['partyId' => $party, 'interactionType' => 'CALL'])->assertOk()->json();
+        $call = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL')])->assertOk()->json();
 
-        $this->save(['interactionId' => $call['interactionId'], 'partyId' => $party, 'interactionType' => 'NOTE'])->assertStatus(422);
-        $this->save(['interactionId' => $call['interactionId'], 'partyId' => $this->createParty(), 'interactionType' => 'CALL'])->assertStatus(422);
+        $this->save(['interactionId' => $call['interactionId'], 'partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertStatus(422);
+        $this->save(['interactionId' => $call['interactionId'], 'partyId' => $this->createParty(), 'interactionTypeId' => $this->typeId('CALL')])->assertStatus(422);
     }
 
     public function test_person_must_be_related_to_the_same_party(): void
@@ -133,10 +139,10 @@ class CrmInteractionTest extends TestCase
         $party = $this->createParty();
         $person = $this->createPerson();
 
-        $this->save(['partyId' => $party, 'interactionType' => 'CALL', 'personId' => $person])->assertStatus(422)->assertJson(['success' => false]);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'personId' => $person])->assertStatus(422)->assertJson(['success' => false]);
 
         $this->relate($party, $person);
-        $this->save(['partyId' => $party, 'interactionType' => 'CALL', 'personId' => $person])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'personId' => $person])->assertOk();
 
         $found = $this->list($party)[0];
         $this->assertSame($person, (int) $found['PersonID']);
@@ -150,13 +156,13 @@ class CrmInteractionTest extends TestCase
         $person = $this->createPerson();
         $this->relate($partyA, $person);
 
-        $this->save(['partyId' => $partyB, 'interactionType' => 'MEETING', 'personId' => $person])->assertStatus(422);
+        $this->save(['partyId' => $partyB, 'interactionTypeId' => $this->typeId('MEETING'), 'personId' => $person])->assertStatus(422);
     }
 
     public function test_owner_defaults_to_the_creator(): void
     {
         $party = $this->createParty();
-        $this->save(['partyId' => $party, 'interactionType' => 'NOTE'])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertOk();
 
         $this->assertSame(self::USER_FULL, (int) $this->list($party)[0]['OwnerUserID']);
     }
@@ -166,35 +172,35 @@ class CrmInteractionTest extends TestCase
         $party = $this->createParty();
         $other = $this->createParty();
 
-        $call = $this->save(['partyId' => $party, 'interactionType' => 'CALL'])->assertOk()->json();
-        $this->save(['partyId' => $party, 'interactionType' => 'FOLLOWUP', 'followUpOfId' => $call['interactionId']])->assertOk();
+        $call = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL')])->assertOk()->json();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('FOLLOWUP'), 'followUpOfId' => $call['interactionId']])->assertOk();
 
-        $this->save(['partyId' => $other, 'interactionType' => 'FOLLOWUP', 'followUpOfId' => $call['interactionId']])->assertStatus(422);
-        $this->save(['partyId' => $party, 'interactionType' => 'CALL', 'followUpOfId' => $call['interactionId']])->assertStatus(422);
+        $this->save(['partyId' => $other, 'interactionTypeId' => $this->typeId('FOLLOWUP'), 'followUpOfId' => $call['interactionId']])->assertStatus(422);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'followUpOfId' => $call['interactionId']])->assertStatus(422);
     }
 
     public function test_list_is_newest_first_and_filterable_by_type(): void
     {
         $party = $this->createParty();
-        $this->save(['partyId' => $party, 'interactionType' => 'NOTE', 'subject' => 'قدیمی', 'interactionDate' => '2026-01-01 09:00:00'])->assertOk();
-        $this->save(['partyId' => $party, 'interactionType' => 'CALL', 'subject' => 'جدید', 'interactionDate' => '2026-06-01 09:00:00'])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE'), 'subject' => 'قدیمی', 'interactionDate' => '2026-01-01 09:00:00'])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'subject' => 'جدید', 'interactionDate' => '2026-06-01 09:00:00'])->assertOk();
 
         $items = $this->list($party);
         $this->assertSame('جدید', $items[0]['Subject']);
 
-        $notes = $this->as(self::USER_FULL)->getJson("/crm/interactions?partyId={$party}&type=NOTE")->assertOk()->json('items');
+        $notes = $this->as(self::USER_FULL)->getJson("/crm/interactions?partyId={$party}&interactionTypeId=" . $this->typeId('NOTE'))->assertOk()->json('items');
         $this->assertCount(1, $notes);
     }
 
     public function test_subject_and_date_are_required_and_toggle_works(): void
     {
         $party = $this->createParty();
-        $this->as(self::USER_FULL)->postJson('/crm/interactions', ['partyId' => $party, 'interactionType' => 'NOTE', 'interactionDate' => '2026-09-25 10:00:00'])
+        $this->as(self::USER_FULL)->postJson('/crm/interactions', ['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE'), 'interactionDate' => '2026-09-25 10:00:00'])
             ->assertStatus(422)->assertJson(['success' => false]);
-        $this->as(self::USER_FULL)->postJson('/crm/interactions', ['partyId' => $party, 'interactionType' => 'NOTE', 'subject' => 'x'])
+        $this->as(self::USER_FULL)->postJson('/crm/interactions', ['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE'), 'subject' => 'x'])
             ->assertStatus(422)->assertJson(['success' => false]);
 
-        $note = $this->save(['partyId' => $party, 'interactionType' => 'NOTE'])->assertOk()->json();
+        $note = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertOk()->json();
         $this->as(self::USER_FULL)->postJson("/crm/interactions/{$note['interactionId']}/toggle")->assertOk();
         $this->assertFalse((bool) $this->list($party)[0]['IsActive']);
     }
@@ -202,10 +208,122 @@ class CrmInteractionTest extends TestCase
     public function test_party_show_page_receives_interactions(): void
     {
         $party = $this->createParty();
-        $this->save(['partyId' => $party, 'interactionType' => 'NOTE'])->assertOk();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertOk();
 
         $props = $this->as(self::USER_FULL)->get("/crm/parties/{$party}")->assertOk()->viewData('page')['props'];
         $this->assertCount(1, $props['interactions']);
         $this->assertNotEmpty($props['users']);
+    }
+
+    /* ==================== Stage B — اتصالِ Interaction به Project ==================== */
+
+    /** پروژهٔ واقعی با sp_InsertProject (مسئول = USER_FULL)؛ از Endpointِ واقعیِ Projectsِ ثبت می‌شود. */
+    private function createProject(): int
+    {
+        $title = 'پروژهٔ تستِ Interaction ' . strtoupper(bin2hex(random_bytes(4)));
+        $this->as(self::USER_FULL)->post('/projects', [
+            'ProjectTitle' => $title,
+            'ProjectStatusID' => 1,
+            'ResponsibleUserID' => self::USER_FULL,
+        ])->assertRedirect();
+
+        return (int) \DB::selectOne('SELECT TOP 1 ProjectID FROM dbo.Projects WHERE ProjectTitle = ? ORDER BY ProjectID DESC', [$title])->ProjectID;
+    }
+
+    private function addContractor(int $projectId, int $partyId): void
+    {
+        $this->as(self::USER_FULL)->postJson("/projects/{$projectId}/contractors", ['PartyID' => $partyId])->assertOk();
+    }
+
+    public function test_interaction_without_project_succeeds(): void
+    {
+        $party = $this->createParty();
+
+        $res = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL')])->assertOk()->json();
+        $this->assertTrue($res['success']);
+        $this->assertNull($this->list($party)[0]['ProjectID']);
+    }
+
+    public function test_interaction_with_related_project_succeeds(): void
+    {
+        $party = $this->createParty();
+        $projectId = $this->createProject();
+        $this->addContractor($projectId, $party);
+
+        $res = $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'projectId' => $projectId])->assertOk()->json();
+        $this->assertTrue($res['success']);
+
+        $items = $this->list($party);
+        $this->assertEquals($projectId, (int) $items[0]['ProjectID']);
+        $this->assertNotEmpty($items[0]['ProjectTitle']);
+    }
+
+    public function test_interaction_with_unrelated_project_is_rejected(): void
+    {
+        $party = $this->createParty();
+        $unrelatedProject = $this->createProject(); // این Party پیمانکارِ آن نیست
+
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'projectId' => $unrelatedProject])
+            ->assertStatus(422)->assertJson(['success' => false]);
+        $this->assertCount(0, $this->list($party));
+    }
+
+    public function test_interaction_with_inactive_contractor_relation_is_rejected(): void
+    {
+        $party = $this->createParty();
+        $projectId = $this->createProject();
+        $this->addContractor($projectId, $party);
+        // غیرفعال‌سازیِ نرمِ رابطهٔ پیمانکار (دقیقاً هم‌الگو با removeContractor واقعی)
+        $this->as(self::USER_FULL)->delete("/projects/{$projectId}/contractors?PartyID={$party}")->assertOk();
+
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'projectId' => $projectId])
+            ->assertStatus(422)->assertJson(['success' => false]);
+    }
+
+    public function test_party_with_no_projects_can_still_save_interaction_without_project(): void
+    {
+        $party = $this->createParty();
+
+        $this->as(self::USER_FULL)->getJson("/crm/parties/{$party}/projects")->assertOk()->assertJson(['items' => []]);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('MEETING')])->assertOk()->assertJson(['success' => true]);
+    }
+
+    public function test_projects_for_party_endpoint_returns_only_active_contractor_projects(): void
+    {
+        $party = $this->createParty();
+        $activeProject = $this->createProject();
+        $removedProject = $this->createProject();
+        $this->addContractor($activeProject, $party);
+        $this->addContractor($removedProject, $party);
+        $this->as(self::USER_FULL)->delete("/projects/{$removedProject}/contractors?PartyID={$party}")->assertOk();
+
+        $items = $this->as(self::USER_FULL)->getJson("/crm/parties/{$party}/projects")->assertOk()->json('items');
+        $this->assertCount(1, $items);
+        $this->assertEquals($activeProject, (int) $items[0]['ProjectID']);
+    }
+
+    public function test_old_interactions_without_project_still_display_correctly(): void
+    {
+        $party = $this->createParty();
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('NOTE')])->assertOk();
+
+        $items = $this->list($party);
+        $this->assertCount(1, $items);
+        $this->assertArrayHasKey('ProjectID', $items[0]);
+        $this->assertNull($items[0]['ProjectID']);
+    }
+
+    /** CreatedByName باید نامِ کاربرِ ثبت‌کنندهٔ رکورد (UserID_InsertFirst) باشد، نه Owner/مسئول. */
+    public function test_created_by_name_reflects_the_recording_user_not_the_owner(): void
+    {
+        $party = $this->createParty();
+        $owner = User::find(3);
+        $this->save(['partyId' => $party, 'interactionTypeId' => $this->typeId('CALL'), 'ownerUserId' => $owner->UserID])->assertOk();
+
+        $items = $this->list($party);
+        $this->assertCount(1, $items);
+        $creator = User::find(self::USER_FULL);
+        $this->assertSame(trim($creator->FirstName . ' ' . $creator->LastName), $items[0]['CreatedByName']);
+        $this->assertNotSame($items[0]['CreatedByName'], $items[0]['OwnerName']);
     }
 }

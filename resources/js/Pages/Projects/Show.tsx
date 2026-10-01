@@ -18,6 +18,7 @@ import {
     ThunderboltOutlined,
     InfoCircleOutlined,
     CommentOutlined,
+    SolutionOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -25,6 +26,8 @@ import DataGrid from '../../Components/DataGrid';
 import PageHeader from '../../Components/PageHeader';
 import ChipTabs from '../../Components/ChipTabs';
 import ProjectMembersModal from './ProjectMembersModal';
+import ProjectContractorsModal from './ProjectContractorsModal';
+import ProjectContractorInteractionModal from './ProjectContractorInteractionModal';
 import ProjectTaskCreateModal from '../../Components/ProjectTaskCreateModal';
 import ProjectComments from '../../Components/ProjectComments';
 import { THEME, STYLES } from '../../theme';
@@ -70,6 +73,18 @@ interface Member {
     Date_InsertFirst: string;
 }
 
+interface Contractor {
+    ProjectContractorID: number;
+    PartyID: number;
+    OfficialName: string | null;
+    TradeName: string | null;
+    IdentifierNumber: string | null;
+    PartyNature: string | null;
+    PartyIsActive: boolean | number | null;
+    IsActive: boolean | number;
+    Date_InsertFirst: string;
+}
+
 interface UserOption {
     UserID: number;
     FullName: string;
@@ -98,23 +113,34 @@ interface MsgPriorityOption {
     Name: string;
 }
 
+interface InteractionTypeOption {
+    InteractionTypeID: number;
+    Code: string;
+    DisplayName: string;
+}
+
 export default function ProjectShow() {
-    const { project, members, users, msgPriorities, auth } = usePage().props as unknown as {
+    const { project, members, users, msgPriorities, contractors, interactionTypes, auth } = usePage().props as unknown as {
         project: Project;
         members: Member[];
         users: UserOption[];
         msgPriorities: MsgPriorityOption[];
+        contractors: Contractor[];
+        interactionTypes: InteractionTypeOption[];
         auth: { user: any };
     };
 
     const [membersModalOpen, setMembersModalOpen] = useState(false);
+    const [contractorsModalOpen, setContractorsModalOpen] = useState(false);
+    const [interactionModalFor, setInteractionModalFor] = useState<Contractor | null>(null);
     const [taskModalOpen, setTaskModalOpen] = useState(false);
     const [taskTargetMember, setTaskTargetMember] = useState<Member | null>(null);
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'members' | 'tasks' | 'comments'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'members' | 'contractors' | 'tasks' | 'comments'>('info');
 
     const activeMembers = (members || []).filter((m) => toBool(m.IsActive));
+    const activeContractors = (contractors || []).filter((c) => toBool(c.IsActive));
 
     const currentUserId = Number(auth?.user?.UserID ?? auth?.user?.id ?? 0);
     const isResponsible = activeMembers.some(
@@ -146,6 +172,11 @@ export default function ProjectShow() {
         setMembersModalOpen(false);
         // بازخوانی اطلاعات پروژه و اعضا از سرور پس از تغییرات احتمالی
         router.reload({ only: ['project', 'members'] });
+    };
+
+    const handleContractorsModalClose = () => {
+        setContractorsModalOpen(false);
+        router.reload({ only: ['contractors'] });
     };
 
     const handleTaskModalClose = (created: boolean) => {
@@ -281,8 +312,62 @@ export default function ProjectShow() {
     const tabDefs = [
         { key: 'info' as const, label: 'اطلاعات پروژه', icon: <InfoCircleOutlined />, count: null },
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
+        { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
         { key: 'comments' as const, label: 'نظرات و ضمیمه‌ها', icon: <CommentOutlined />, count: null },
+    ];
+
+    const contractorColumns: ColumnsType<Contractor> = [
+        {
+            title: 'طرف‌حساب',
+            key: 'name',
+            render: (_: any, rec: Contractor) => (
+                <Space>
+                    <SolutionOutlined style={{ color: '#667eea' }} />
+                    <div>
+                        <div>
+                            {rec.OfficialName || `طرف‌حسابِ #${rec.PartyID}`}
+                            {!toBool(rec.PartyIsActive) ? (
+                                <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در CRM</Tag>
+                            ) : null}
+                        </div>
+                        {rec.IdentifierNumber ? (
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                {rec.IdentifierNumber}
+                            </Text>
+                        ) : null}
+                    </div>
+                </Space>
+            ),
+        },
+        {
+            title: 'تاریخ افزودن',
+            dataIndex: 'Date_InsertFirst',
+            key: 'Date_InsertFirst',
+            width: 170,
+            align: 'center',
+            render: (d: string | null) => (d ? gregorianToJalaliDateTimeDisplay(d) : <Text type="secondary">—</Text>),
+        },
+        ...(isResponsible
+            ? [
+                  {
+                      title: 'عملیات',
+                      key: 'actions',
+                      width: 150,
+                      align: 'center' as const,
+                      render: (_: any, rec: Contractor) => (
+                          <Button
+                              size="small"
+                              icon={<CommentOutlined />}
+                              onClick={() => setInteractionModalFor(rec)}
+                              style={{ borderColor: THEME.primary, color: THEME.primary }}
+                          >
+                              ثبتِ تعامل
+                          </Button>
+                      ),
+                  },
+              ]
+            : []),
     ];
 
     return (
@@ -386,6 +471,33 @@ export default function ProjectShow() {
                 </Card>
             )}
 
+            {activeTab === 'contractors' && (
+                <Card
+                    style={STYLES.card}
+                    extra={
+                        isResponsible ? (
+                            <Button
+                                type="primary"
+                                size="small"
+                                icon={<SolutionOutlined />}
+                                style={STYLES.primaryButton}
+                                onClick={() => setContractorsModalOpen(true)}
+                            >
+                                مدیریتِ پیمانکار
+                            </Button>
+                        ) : null
+                    }
+                >
+                    <DataGrid
+                        columns={[]}
+                        dataSource={activeContractors}
+                        customColumns={contractorColumns}
+                        rowKey="ProjectContractorID"
+                        showColumnSearch={false}
+                    />
+                </Card>
+            )}
+
             {activeTab === 'tasks' && (
                 <Card style={STYLES.card}>
                     <DataGrid
@@ -408,6 +520,26 @@ export default function ProjectShow() {
                 projectTitle={project.ProjectTitle}
                 users={users || []}
             />
+
+            <ProjectContractorsModal
+                open={contractorsModalOpen}
+                onClose={handleContractorsModalClose}
+                projectId={project.ProjectID}
+                projectTitle={project.ProjectTitle}
+            />
+
+            {interactionModalFor ? (
+                <ProjectContractorInteractionModal
+                    open={!!interactionModalFor}
+                    onClose={() => setInteractionModalFor(null)}
+                    projectId={project.ProjectID}
+                    projectTitle={project.ProjectTitle}
+                    partyId={interactionModalFor.PartyID}
+                    partyName={interactionModalFor.OfficialName || `طرف‌حسابِ #${interactionModalFor.PartyID}`}
+                    users={users || []}
+                    interactionTypes={interactionTypes || []}
+                />
+            ) : null}
 
             <ProjectTaskCreateModal
                 open={taskModalOpen}

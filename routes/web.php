@@ -218,6 +218,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{id}/members', [ProjectsController::class, 'members'])->name('projects.members');
     Route::post('/projects/{id}/members', [ProjectsController::class, 'addMember'])->name('projects.members.add');
     Route::delete('/projects/{id}/members', [ProjectsController::class, 'removeMember'])->name('projects.members.remove');
+
+    Route::get('/projects/{id}/contractors', [ProjectsController::class, 'contractors'])->name('projects.contractors');
+    Route::get('/projects/{id}/contractors/search', [ProjectsController::class, 'searchContractorCandidates'])->name('projects.contractors.search');
+    Route::post('/projects/{id}/contractors', [ProjectsController::class, 'addContractor'])->name('projects.contractors.add');
+    Route::delete('/projects/{id}/contractors', [ProjectsController::class, 'removeContractor'])->name('projects.contractors.remove');
+    Route::post('/projects/{id}/contractors/{partyId}/interactions', [ProjectsController::class, 'storeContractorInteraction'])
+        ->whereNumber('id')->whereNumber('partyId')->name('projects.contractors.interactions.store');
     Route::post('/projects/{id}/tasks', [ProjectsController::class, 'createTask'])->name('projects.tasks.store');
     Route::get('/projects/{id}/tasks', [ProjectsController::class, 'tasks'])->name('projects.tasks.index');
     Route::get('/projects/{id}/comments', [ProjectsController::class, 'comments'])->name('projects.comments.index');
@@ -287,6 +294,11 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('letterTemplateId')->name('templates.toggle');
         Route::post('templates/{letterTemplateId}/render', [WorkflowLetterTemplateController::class, 'render'])
             ->whereNumber('letterTemplateId')->name('templates.render');
+        Route::post('templates/{letterTemplateId}/resolve-preview', [WorkflowLetterTemplateController::class, 'resolvePreview'])
+            ->whereNumber('letterTemplateId')->name('templates.resolve-preview');
+
+        // --- ثبتِ نامهٔ فرایندی + شروعِ Workflow (Message «وظیفه» + CC + Adopt + Start، یک Transaction) ---
+        Route::post('letters', [WorkflowRuntimeController::class, 'startLetter'])->name('letters.start');
 
         // --- فیلدهایِ شرط (Condition Engine — Global Registry، مثلِ template-parameters) ---
         Route::get('condition-fields', [WorkflowConditionFieldController::class, 'index'])->name('condition-fields.index');
@@ -424,6 +436,10 @@ Route::middleware('auth')->group(function () {
         Route::post('directory/address-titles', [CrmDirectoryController::class, 'addressTitlesStore'])->name('directory.address-titles.store');
         Route::post('directory/address-titles/{addressTitleId}/toggle', [CrmDirectoryController::class, 'addressTitlesToggle'])
             ->whereNumber('addressTitleId')->name('directory.address-titles.toggle');
+        Route::get('directory/interaction-types', [CrmDirectoryController::class, 'interactionTypesIndex'])->name('directory.interaction-types.index');
+        Route::post('directory/interaction-types', [CrmDirectoryController::class, 'interactionTypesStore'])->name('directory.interaction-types.store');
+        Route::post('directory/interaction-types/{interactionTypeId}/toggle', [CrmDirectoryController::class, 'interactionTypesToggle'])
+            ->whereNumber('interactionTypeId')->name('directory.interaction-types.toggle');
 
         // ───────────────── فازِ ۲: طرف‌حساب و موجودیت‌هایِ وابسته ─────────────────
         Route::get('parties', [CrmPartyController::class, 'page'])->name('parties.page');
@@ -438,10 +454,18 @@ Route::middleware('auth')->group(function () {
         Route::post('classifications/{classificationId}/toggle', [CrmPartyClassificationController::class, 'toggleActive'])
             ->whereNumber('classificationId')->name('classifications.toggle');
 
-        Route::get('interactions', [CrmInteractionController::class, 'index'])->name('interactions.index'); // ?partyId=&type=&status=
+        Route::get('interactions', [CrmInteractionController::class, 'index'])->name('interactions.index'); // ?partyId=&type=&status=&projectId=
         Route::post('interactions', [CrmInteractionController::class, 'store'])->name('interactions.store');
+        Route::get('parties/{partyId}/projects', [CrmInteractionController::class, 'projectsForParty'])
+            ->whereNumber('partyId')->name('parties.projects');
         Route::post('interactions/{interactionId}/status', [CrmInteractionController::class, 'setStatus'])
             ->whereNumber('interactionId')->name('interactions.status');
+        Route::post('interactions/{interactionId}/attachments', [CrmInteractionController::class, 'storeAttachments'])
+            ->whereNumber('interactionId')->name('interactions.attachments.store');
+        Route::get('interaction-attachments/{attachmentId}/download', [CrmInteractionController::class, 'downloadAttachment'])
+            ->whereNumber('attachmentId')->name('interaction-attachments.download');
+        Route::post('interaction-attachments/{attachmentId}/delete', [CrmInteractionController::class, 'destroyAttachment'])
+            ->whereNumber('attachmentId')->name('interaction-attachments.delete');
         Route::post('interactions/{interactionId}/toggle', [CrmInteractionController::class, 'toggleActive'])
             ->whereNumber('interactionId')->name('interactions.toggle');
 
@@ -457,6 +481,18 @@ Route::middleware('auth')->group(function () {
         Route::post('party-brand-categories', [CrmPartyController::class, 'brandCategoriesStore'])->name('party-brand-categories.store');
         Route::post('party-brand-categories/{partyBrandCategoryId}/toggle', [CrmPartyController::class, 'brandCategoriesToggle'])
             ->whereNumber('partyBrandCategoryId')->name('party-brand-categories.toggle');
+
+        // تصاویرِ طرف‌حساب (تبِ «ضمائم و سایر ویژگی‌ها») — مشاهده با CRM_VIEW، افزودن/حذف/ویرایشِ توضیح با CRM_MANAGE_PARTIES
+        Route::get('parties/{partyId}/images', [CrmPartyController::class, 'imagesIndex'])
+            ->whereNumber('partyId')->name('parties.images.index');
+        Route::post('parties/{partyId}/images', [CrmPartyController::class, 'imagesStore'])
+            ->whereNumber('partyId')->name('parties.images.store');
+        Route::post('party-images/{imageId}/delete', [CrmPartyController::class, 'imagesDestroy'])
+            ->whereNumber('imageId')->name('party-images.delete');
+        Route::post('party-images/{imageId}/description', [CrmPartyController::class, 'imagesUpdateDescription'])
+            ->whereNumber('imageId')->name('party-images.update-description');
+        Route::get('party-images/{imageId}', [CrmPartyController::class, 'imageShow'])
+            ->whereNumber('imageId')->name('party-images.show');
 
         Route::get('product-categories', [CrmProductCategoryController::class, 'page'])->name('product-categories.page');
         Route::get('product-categories-list', [CrmProductCategoryController::class, 'index'])->name('product-categories.index'); // ?search=&isActive=

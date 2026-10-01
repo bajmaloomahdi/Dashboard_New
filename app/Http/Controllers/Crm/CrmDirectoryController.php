@@ -29,6 +29,7 @@ class CrmDirectoryController extends CrmApiController
             'contactRoles'   => $this->masterData->listContactRoles(),
             'contactTypes'   => $this->masterData->listContactTypes(),
             'addressTitles'  => $this->masterData->listAddressTitles(),
+            'interactionTypes' => $this->masterData->listInteractionTypes(),
             'canManage'      => true,
         ]);
     }
@@ -190,6 +191,46 @@ class CrmDirectoryController extends CrmApiController
             $res = $this->masterData->toggleContactTypeActive($contactTypeId, $this->actorId());
 
             return ['message' => $res->Message ?? 'وضعیتِ نوعِ تماس تغییر کرد.'];
+        });
+    }
+
+    /* ---------- نوعِ تعامل ---------- */
+
+    public function interactionTypesIndex(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate(['search' => 'nullable|string|max:200', 'isActive' => 'nullable|boolean']);
+
+        return $this->runCrm(fn () => ['items' => $this->masterData->listInteractionTypes(
+            $validated['search'] ?? null,
+            array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+        )]);
+    }
+
+    public function interactionTypesStore(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate([
+            'interactionTypeId' => 'nullable|integer|exists:CrmInteractionTypes,InteractionTypeID',
+            'displayName'       => 'required|string|max:200',
+            'sortOrder'         => 'nullable|integer',
+        ]);
+
+        return $this->runCrm(function () use ($validated) {
+            $res = $this->masterData->saveInteractionType($validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'نوعِ تعامل ذخیره شد.', 'interactionTypeId' => (int) $res->InteractionTypeID];
+        });
+    }
+
+    public function interactionTypesToggle(int $interactionTypeId)
+    {
+        $this->authorizeCrm(self::PERM);
+
+        return $this->runCrm(function () use ($interactionTypeId) {
+            $res = $this->masterData->toggleInteractionTypeActive($interactionTypeId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'وضعیتِ نوعِ تعامل تغییر کرد.'];
         });
     }
 

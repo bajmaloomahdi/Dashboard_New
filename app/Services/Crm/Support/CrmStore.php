@@ -347,25 +347,31 @@ class CrmStore
 
     /* ---------- تعاملات (CrmInteractions) ---------- */
 
-    public function getInteractions(?int $partyId = null, ?int $personId = null, ?string $type = null, ?string $status = null): array
+    public function getInteractions(?int $partyId = null, ?int $personId = null, ?int $interactionTypeId = null, ?string $status = null, ?int $projectId = null): array
     {
         return DB::select(
-            'EXEC dbo.sp_Crm_GetInteractions @PartyID = ?, @PersonID = ?, @Type = ?, @Status = ?',
-            [$partyId, $personId, $type, $status]
+            'EXEC dbo.sp_Crm_GetInteractions @PartyID = ?, @PersonID = ?, @InteractionTypeID = ?, @Status = ?, @ProjectID = ?',
+            [$partyId, $personId, $interactionTypeId, $status, $projectId]
         );
     }
 
     public function saveInteraction(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveInteraction @InteractionID = ?, @InteractionType = ?, @PartyID = ?, @PersonID = ?, @Subject = ?, '
+            'EXEC dbo.sp_Crm_SaveInteraction @InteractionID = ?, @InteractionTypeID = ?, @PartyID = ?, @PersonID = ?, @ProjectID = ?, @Subject = ?, '
             . '@Description = ?, @Outcome = ?, @InteractionDate = ?, @Status = ?, @FollowUpOfID = ?, @OwnerUserID = ?, @UserID = ?',
             [
-                $p['interactionId'] ?? null, $p['interactionType'], $p['partyId'], $p['personId'] ?? null, $p['subject'],
+                $p['interactionId'] ?? null, $p['interactionTypeId'], $p['partyId'], $p['personId'] ?? null, $p['projectId'] ?? null, $p['subject'],
                 $p['description'] ?? null, $p['outcome'] ?? null, $p['interactionDate'], $p['status'] ?? null,
                 $p['followUpOfId'] ?? null, $p['ownerUserId'] ?? null, $p['userId'],
             ]
         );
+    }
+
+    /** پروژه‌هایی که این Party در آن‌ها پیمانکارِ فعال است (برایِ Selectorِ Project در فرمِ Interaction) */
+    public function getProjectsForParty(int $partyId): array
+    {
+        return DB::select('EXEC dbo.sp_GetProjectsForParty @PartyID = ?', [$partyId]);
     }
 
     public function setInteractionStatus(int $interactionId, string $status, int $userId): object
@@ -376,6 +382,80 @@ class CrmStore
     public function toggleInteractionActive(int $interactionId, int $userId): object
     {
         return $this->write('EXEC dbo.sp_Crm_ToggleInteractionActive @InteractionID = ?, @UserID = ?', [$interactionId, $userId]);
+    }
+
+    /* ---------- نوعِ تعامل (CrmInteractionTypes) ---------- */
+
+    public function getInteractionTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetInteractionTypes @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    public function saveInteractionType(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveInteractionType @InteractionTypeID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['interactionTypeId'] ?? null, $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleInteractionTypeActive(int $interactionTypeId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_ToggleInteractionTypeActive @InteractionTypeID = ?, @UserID = ?', [$interactionTypeId, $userId]);
+    }
+
+    /* ---------- تصاویرِ طرف‌حساب (CrmPartyImages) ---------- */
+
+    /** شاملِ ImagePath (فقط برایِ لایهٔ PHP — به Frontend نمی‌رود) */
+    public function getPartyImages(?int $partyId = null, ?int $partyImageId = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyImages @PartyID = ?, @PartyImageID = ?', [$partyId, $partyImageId]);
+    }
+
+    public function addPartyImage(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_AddPartyImage @PartyID = ?, @ImagePath = ?, @ImageMimeType = ?, @Description = ?, @SortOrder = ?, @UserID = ?',
+            [$p['partyId'], $p['imagePath'], $p['imageMimeType'], $p['description'] ?? null, $p['sortOrder'] ?? null, $p['userId']]
+        );
+    }
+
+    public function deletePartyImage(int $partyImageId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_DeletePartyImage @PartyImageID = ?, @UserID = ?', [$partyImageId, $userId]);
+    }
+
+    public function updatePartyImageDescription(int $partyImageId, ?string $description, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_UpdatePartyImageDescription @PartyImageID = ?, @Description = ?, @UserID = ?',
+            [$partyImageId, $description, $userId]
+        );
+    }
+
+    /* ---------- پیوستِ تعاملات (CrmInteractionAttachments) ---------- */
+
+    /** شاملِ FilePath (فقط برایِ لایهٔ PHP — به Frontend نمی‌رود) */
+    public function getInteractionAttachments(?int $interactionId = null, ?int $partyId = null, ?int $personId = null, ?int $attachmentId = null): array
+    {
+        return DB::select(
+            'EXEC dbo.sp_Crm_GetInteractionAttachments @InteractionID = ?, @PartyID = ?, @PersonID = ?, @InteractionAttachmentID = ?',
+            [$interactionId, $partyId, $personId, $attachmentId]
+        );
+    }
+
+    public function addInteractionAttachment(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_AddInteractionAttachment @InteractionID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @Description = ?, @UserID = ?',
+            [$p['interactionId'], $p['fileName'], $p['fileExtension'] ?? null, $p['fileSize'], $p['filePath'], $p['description'] ?? null, $p['userId']]
+        );
+    }
+
+    /** FilePath در پاسخ برمی‌گردد تا فایل فقط بعد از حذفِ موفقِ ردیف پاک شود. */
+    public function deleteInteractionAttachment(int $attachmentId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_DeleteInteractionAttachment @InteractionAttachmentID = ?, @UserID = ?', [$attachmentId, $userId]);
     }
 
     /* ---------- برند (CrmBrands) — موجودیتِ مستقل ---------- */

@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Crm;
 
 use App\Services\Crm\CrmMasterDataService;
 use App\Services\Crm\CrmPartyService;
+use App\Services\Crm\Exceptions\CrmValidationException;
+use App\Services\Crm\Support\CrmPartyImageFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 /**
@@ -59,6 +62,8 @@ class CrmPartyController extends CrmApiController
             'relations' => $this->parties->listRelations($partyId),
             'classifications' => $this->parties->listClassifications($partyId),
             'interactions' => $this->parties->listInteractions($partyId),
+            'interactionTypes' => $this->masterData->listInteractionTypes(null, true),
+            'partyImages' => $this->parties->listPartyImages($partyId),
             'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))
                 ->map(fn ($u) => ['UserID' => (int) $u->UserID, 'FullName' => $u->FullName])->values()->all(),
             'addressTitles' => $this->masterData->listAddressTitles(null, true),
@@ -176,5 +181,88 @@ class CrmPartyController extends CrmApiController
 
             return ['message' => $res->Message ?? 'وضعیتِ ردیف تغییر کرد.'];
         });
+    }
+
+    /* ---------- تصاویرِ طرف‌حساب (CrmPartyImages — تبِ «ضمائم و سایر ویژگی‌ها») ---------- */
+
+    /** GET crm/parties/{partyId}/images — فهرستِ تصاویرِ فعال (برایِ Reload بعدِ Upload/Delete). */
+    public function imagesIndex(int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        return $this->runCrm(fn () => ['items' => $this->parties->listPartyImages($partyId)]);
+    }
+
+    /** POST crm/parties/{partyId}/images — multipart: images[] + descriptions[] (هم‌اندیس، هردو اختیاری‌بودنِ توضیح). */
+    public function imagesStore(Request $request, int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return $this->runCrm(function () use ($request, $partyId) {
+            $files = $request->file('images');
+            $descriptions = $request->input('descriptions', []);
+            if (! is_array($files)) {
+                throw new CrmValidationException('هیچ تصویری برایِ افزودن انتخاب نشده است.');
+            }
+            if (! is_array($descriptions)) {
+                throw new CrmValidationException('توضیحاتِ تصویر نامعتبر است.');
+            }
+
+            $count = $this->parties->addPartyImages($partyId, $files, $descriptions, $this->actorId());
+
+            return ['message' => $count > 1 ? "{$count} تصویر ثبت شد." : 'تصویر ثبت شد.'];
+        });
+    }
+
+    /** POST crm/party-images/{imageId}/delete — حذفِ منطقی (IsActive=0)؛ فایلِ فیزیکی باقی می‌ماند. */
+    public function imagesDestroy(int $imageId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return $this->runCrm(function () use ($imageId) {
+            $res = $this->parties->deletePartyImage($imageId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'تصویر حذف شد.'];
+        });
+    }
+
+    /**
+     * POST crm/party-images/{imageId}/description — ویرایشِ فقط توضیحِ یک تصویر. هیچ شناسهٔ Party/تصویرِ
+     * دیگری از بدنهٔ درخواست پذیرفته نمی‌شود — تصویرِ هدف همیشه دقیقاً همان imageIdِ Route است.
+     */
+    public function imagesUpdateDescription(Request $request, int $imageId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        $validated = $request->validate([
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        return $this->runCrm(function () use ($validated, $imageId) {
+            $res = $this->parties->updatePartyImageDescription($imageId, $validated['description'] ?? null, $this->actorId());
+
+            return ['message' => $res->Message ?? 'توضیحاتِ تصویر به‌روزرسانی شد.'];
+        });
+    }
+
+    /**
+     * GET crm/party-images/{imageId} — استریمِ تصویر از Private Disk (بدونِ Public Storage، بدونِ
+     * افشایِ مسیر). دستکاریِ imageId فقط ردیفِ همان شناسهٔ فعال را برمی‌گرداند؛ ردیفِ حذف‌شده
+     * (IsActive=0) یا ناموجود → 404 (نه خطایِ عمومی‌تر که وجودِ آن را لو بدهد).
+     */
+    public function imageShow(int $imageId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        $file = $this->parties->getPartyImageFile($imageId);
+        abort_if(! $file, 404);
+
+        return Storage::disk(CrmPartyImageFiles::DISK)->response($file['path'], null, [
+            'Content-Type' => $file['mime'],
+            'Content-Disposition' => 'inline',
+            'Cache-Control' => 'private, max-age=31536000, immutable',
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'",
+        ]);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Crm\CrmPartyService;
+use App\Services\Crm\Exceptions\CrmException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,10 @@ use Inertia\Inertia;
 
 class ProjectsController extends Controller
 {
+    public function __construct(private CrmPartyService $crmParties)
+    {
+    }
+
     /**
      * لیست پروژه‌ها + داده‌های کمکی (کاربران و وضعیت‌ها) برای فرم‌ها
      * فقط پروژه‌هایی که کاربر جاری عضو یا مسئول آن است نمایش داده می‌شود.
@@ -73,11 +79,19 @@ class ProjectsController extends Controller
 
         $msgPriorities = DB::select('EXEC sp_GetMsgPriorities @SearchText = NULL, @IsActive = 1');
 
+        $contractors = DB::select('EXEC sp_GetProjectContractors @ProjectID = ?', [$id]);
+
+        // فقط فهرستِ خواندنیِ نوعِ تعامل (Master Data CRM) — برایِ فرمِ «ثبتِ تعامل» در تبِ پیمانکاران؛
+        // بدونِ نیاز به Permissionِ CRM (دسترسی از همینجا، هم‌سطحِ بقیهٔ دادهٔ این صفحه، مجوزش canManage است).
+        $interactionTypes = DB::select('EXEC sp_Crm_GetInteractionTypes @SearchText = NULL, @IsActive = 1');
+
         return Inertia::render('Projects/Show', [
-            'project'       => $project,
-            'members'       => $members,
-            'users'         => $users,
-            'msgPriorities' => $msgPriorities,
+            'project'          => $project,
+            'members'          => $members,
+            'users'            => $users,
+            'msgPriorities'    => $msgPriorities,
+            'contractors'      => $contractors,
+            'interactionTypes' => $interactionTypes,
         ]);
     }
 
@@ -522,6 +536,149 @@ class ProjectsController extends Controller
             'success' => !empty($response['Success']),
             'message' => $response['Message'] ?? '',
         ]);
+    }
+
+    /**
+     * لیست پیمانکارانِ یک پروژه (برایِ تبِ «پیمانکار») — خروجیِ JSON.
+     * مشخصاتِ پیمانکار از CrmParties خوانده می‌شود؛ هیچ موجودیتِ مستقلی برایِ
+     * پیمانکار وجود ندارد — فقط رابطهٔ ProjectContractors.
+     */
+    public function contractors(int $id)
+    {
+        $contractors = DB::select('EXEC sp_GetProjectContractors @ProjectID = ?', [$id]);
+
+        return response()->json(['contractors' => $contractors]);
+    }
+
+    /**
+     * جست‌وجویِ طرف‌حساب‌هایِ CRM برایِ انتخابِ پیمانکار — مسیرِ محدود و مخصوصِ همین
+     * قابلیت (نه endpointِ عمومیِ CRM)، تا کاربری که فقط اجازهٔ مدیریتِ همین پروژه را
+     * دارد (نه CRM_VIEW) هم بتواند طرف‌حساب جست‌وجو کند؛ خروجی فقط همان چند ستونِ
+     * لازم برایِ Autocomplete است (sp_SearchCrmPartiesForContractor)، نه دسترسیِ کاملِ CRM.
+     */
+    public function searchContractorCandidates(Request $request, int $id)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط مسئول پروژه می‌تواند پیمانکار جست‌وجو کند.',
+            ], 403);
+        }
+
+        $search = $request->input('search');
+
+        $parties = DB::select('EXEC sp_SearchCrmPartiesForContractor @SearchText = ?', [$search ?: null]);
+
+        // Searchِ خالی (بازشدنِ اولیهٔ Modal، قبل از تایپ) فقط ۵ طرف‌حسابِ اول را برای راهنماییِ
+        // کاربر نشان می‌دهد؛ TOP 50 فقط برایِ جست‌وجویِ واقعی (با متن) اعمال می‌شود.
+        if (!$search) {
+            $parties = array_slice($parties, 0, 5);
+        }
+
+        return response()->json(['parties' => $parties]);
+    }
+
+    /**
+     * افزودن/فعال‌سازیِ پیمانکار — فقط توسط مسئولِ پروژه (هم‌الگو با addMember)
+     */
+    public function addContractor(Request $request, int $id)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط مسئول پروژه می‌تواند پیمانکاران را مدیریت کند.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'PartyID' => 'required|integer',
+        ]);
+
+        $result = DB::select(
+            'EXEC sp_AddProjectContractor @ProjectID = ?, @PartyID = ?, @CreateUser = ?',
+            [$id, $validated['PartyID'], Auth::id()]
+        );
+
+        $response = (array) ($result[0] ?? []);
+        return response()->json([
+            'success' => !empty($response['Success']),
+            'message' => $response['Message'] ?? '',
+        ]);
+    }
+
+    /**
+     * حذف (غیرفعال‌سازیِ نرم‌افزاری) پیمانکار — فقط توسط مسئولِ پروژه (هم‌الگو با removeMember)
+     */
+    public function removeContractor(Request $request, int $id)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط مسئول پروژه می‌تواند پیمانکاران را مدیریت کند.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'PartyID' => 'required|integer',
+        ]);
+
+        $result = DB::select(
+            'EXEC sp_RemoveProjectContractor @ProjectID = ?, @PartyID = ?, @ModifyUser = ?',
+            [$id, $validated['PartyID'], Auth::id()]
+        );
+
+        $response = (array) ($result[0] ?? []);
+        return response()->json([
+            'success' => !empty($response['Success']),
+            'message' => $response['Message'] ?? '',
+        ]);
+    }
+
+    /**
+     * POST projects/{id}/contractors/{partyId}/interactions — ثبتِ تعاملِ CRM برایِ یک پیمانکارِ
+     * همین Project، از مسیرِ Project→Contractor (نه مسیرِ عمومیِ CRM). Authorization بر اساسِ
+     * canManage($id) است — نه CRM_MANAGE_PARTIES — تا مسئولِ پروژه بدونِ دسترسیِ عمومیِ CRM هم
+     * بتواند تعاملِ همین پیمانکار را ثبت کند؛ کاملاً محدود به همین Project/Party.
+     * PartyID و ProjectID همیشه از خودِ Route گرفته می‌شوند (هرگز از Body) تا کاربر نتواند با
+     * دستکاریِ Request تعاملِ پیمانکارِ دیگری را به این Project وصل کند. اعتبارسنجیِ رابطهٔ
+     * Party↔Project (ProjectContractors.IsActive=1) همان اعتبارسنجیِ Stage B است —
+     * در sp_Crm_SaveInteraction، بدونِ تکرارِ منطق.
+     */
+    public function storeContractorInteraction(Request $request, int $id, int $partyId)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط مسئول پروژه می‌تواند تعاملِ این پیمانکار را ثبت کند.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'interactionTypeId' => 'required|integer|exists:CrmInteractionTypes,InteractionTypeID',
+            'subject'           => 'nullable|string|max:200',
+            'description'       => 'nullable|string',
+            'outcome'           => 'nullable|string',
+            'interactionDate'   => 'nullable|date',
+            'status'            => 'nullable|string|max:20',
+            'ownerUserId'       => 'nullable|integer|exists:Users,UserID',
+        ]);
+
+        $validated['partyId'] = $partyId;
+        $validated['projectId'] = $id;
+
+        try {
+            $res = $this->crmParties->saveInteraction($validated, Auth::id());
+
+            // متنِ موفقیتِ این مسیر عمداً ثابت است (نه پیامِ مشترکِ SP) — طبقِ درخواستِ کاربر، فقط برایِ
+            // ثبتِ تعامل از Project→Contractor، مستقل از پیامِ عمومیِ sp_Crm_SaveInteraction.
+            return response()->json([
+                'success' => true,
+                'message' => 'تعامل با موفقیت ثبت شد.',
+                'interactionId' => (int) $res->InteractionID,
+            ]);
+        } catch (CrmException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
     }
 
     /**

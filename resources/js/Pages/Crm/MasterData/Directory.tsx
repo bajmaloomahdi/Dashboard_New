@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Card } from 'antd';
-import { IdcardOutlined, UserOutlined, SolutionOutlined, TeamOutlined, PhoneOutlined, EnvironmentOutlined } from '@ant-design/icons';
+import { IdcardOutlined, UserOutlined, SolutionOutlined, TeamOutlined, PhoneOutlined, EnvironmentOutlined, CommentOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -14,17 +14,18 @@ interface PageProps {
     contactRoles: MasterDataRow[];
     contactTypes: MasterDataRow[];
     addressTitles: MasterDataRow[];
+    interactionTypes: MasterDataRow[];
     canManage: boolean;
 }
 
-type TabKey = 'titles' | 'positions' | 'contactRoles' | 'contactTypes' | 'addressTitles';
+type TabKey = 'titles' | 'positions' | 'contactRoles' | 'contactTypes' | 'addressTitles' | 'interactionTypes';
 
 /**
  * فهرست‌هایِ کمکیِ CRM: عنوانِ فرد، سمت، نقش، نوعِ تماس، عنوانِ آدرس —
  * همگی مستقل، بدونِ سلسله‌مراتب.
  */
 export default function CrmDirectoryPage() {
-    const { titles, positions, contactRoles, contactTypes, addressTitles, canManage } = usePage().props as unknown as PageProps;
+    const { titles, positions, contactRoles, contactTypes, addressTitles, interactionTypes, canManage } = usePage().props as unknown as PageProps;
     const [activeTab, setActiveTab] = useState<TabKey>('titles');
 
     const tabDefs = [
@@ -33,6 +34,7 @@ export default function CrmDirectoryPage() {
         { key: 'contactRoles' as const, label: 'نقش', icon: <TeamOutlined />, count: (contactRoles || []).length },
         { key: 'contactTypes' as const, label: 'نوعِ تماس', icon: <PhoneOutlined />, count: (contactTypes || []).length },
         { key: 'addressTitles' as const, label: 'عنوانِ آدرس', icon: <EnvironmentOutlined />, count: (addressTitles || []).length },
+        { key: 'interactionTypes' as const, label: 'نوعِ تعامل', icon: <CommentOutlined />, count: (interactionTypes || []).length },
     ];
 
     return (
@@ -108,6 +110,19 @@ export default function CrmDirectoryPage() {
                         canManage={canManage}
                         entityLabel="عنوانِ آدرس"
                         namePlaceholder="دفتر مرکزی"
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'interactionTypes' && (
+                <Card style={STYLES.card}>
+                    <MasterDataManager
+                        idField="InteractionTypeID"
+                        items={interactionTypes || []}
+                        apiBase="/crm/directory/interaction-types"
+                        canManage={canManage}
+                        entityLabel="نوعِ تعامل"
+                        namePlaceholder="تماسِ تلفنی"
                     />
                 </Card>
             )}

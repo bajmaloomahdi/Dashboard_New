@@ -173,6 +173,28 @@ class CrmMasterDataService
         return $this->store->toggleContactTypeActive($contactTypeId, $userId);
     }
 
+    /* ---------- نوعِ تعامل ---------- */
+
+    public function listInteractionTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getInteractionTypes($search, $isActive);
+    }
+
+    public function saveInteractionType(array $input, int $userId): object
+    {
+        return $this->store->saveInteractionType([
+            'interactionTypeId' => $input['interactionTypeId'] ?? null,
+            'displayName'       => trim($input['displayName'] ?? ''),
+            'sortOrder'         => $input['sortOrder'] ?? 0,
+            'userId'            => $userId,
+        ]);
+    }
+
+    public function toggleInteractionTypeActive(int $interactionTypeId, int $userId): object
+    {
+        return $this->store->toggleInteractionTypeActive($interactionTypeId, $userId);
+    }
+
     /* ---------- عنوانِ آدرس ---------- */
 
     public function listAddressTitles(?string $search = null, ?bool $isActive = null): array

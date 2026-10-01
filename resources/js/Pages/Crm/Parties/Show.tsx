@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined } from '@ant-design/icons';
+import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -16,6 +16,7 @@ import ContactsPanel from './ContactsPanel';
 import RelationsPanel from './RelationsPanel';
 import ClassificationsPanel from './ClassificationsPanel';
 import InteractionsPanel from './InteractionsPanel';
+import PartyImagesPanel from './PartyImagesPanel';
 
 const { Text } = Typography;
 
@@ -40,6 +41,8 @@ export default function CrmPartyShow() {
         relations: any[];
         classifications: any[];
         interactions: any[];
+        interactionTypes: { InteractionTypeID: number; Code: string; DisplayName: string }[];
+        partyImages: { PartyImageID: number; PartyID: number; ImageMimeType: string; Description: string | null; SortOrder: number; IsActive: boolean | number | string; Date_InsertFirst: string; CreatedByName: string | null; ImageUrl: string }[];
         users: { UserID: number; FullName: string }[];
         addressTitles: any[];
         provinces: any[];
@@ -56,13 +59,13 @@ export default function CrmPartyShow() {
     };
 
     const {
-        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, users, addressTitles, provinces, contactTypes,
+        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, users, addressTitles, provinces, contactTypes,
         positions, contactRoles, titles, departments, partyTypes, activities, canManage, neshanMapKey, neshanSearchEnabled,
     } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations'>('classifications');
+    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments'>('classifications');
 
     const isActive = toBool(currentParty.IsActive);
 
@@ -77,6 +80,7 @@ export default function CrmPartyShow() {
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'brands' as const, label: 'برندها', icon: <TagOutlined />, count: (brandCategories || []).filter((r) => toBool(r.IsActive)).length },
+        { key: 'attachments' as const, label: 'ضمائم و سایر ویژگی‌ها', icon: <PaperClipOutlined />, count: (partyImages || []).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -166,6 +170,7 @@ export default function CrmPartyShow() {
                         items={interactions || []}
                         relatedPersons={relatedPersons}
                         users={users || []}
+                        interactionTypes={interactionTypes || []}
                         canManage={canManage}
                     />
                 </Card>
@@ -205,6 +210,16 @@ export default function CrmPartyShow() {
                         items={brandCategories || []}
                         canManage={canManage}
                         onChanged={() => router.reload({ only: ['brandCategories'] })}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'attachments' && (
+                <Card style={STYLES.card}>
+                    <PartyImagesPanel
+                        partyId={currentParty.PartyID}
+                        items={partyImages || []}
+                        canManage={canManage}
                     />
                 </Card>
             )}

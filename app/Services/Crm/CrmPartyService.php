@@ -4,6 +4,8 @@ namespace App\Services\Crm;
 
 use App\Services\Crm\Exceptions\CrmValidationException;
 use App\Services\Crm\Support\CrmBrandLogo;
+use App\Services\Crm\Support\CrmInteractionAttachmentFiles;
+use App\Services\Crm\Support\CrmPartyImageFiles;
 use App\Services\Crm\Support\CrmStore;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +24,12 @@ class CrmPartyService
 {
     private const NATURES = ['INDIVIDUAL', 'LEGAL'];
 
-    public function __construct(private CrmStore $store, private CrmBrandLogo $logos)
-    {
+    public function __construct(
+        private CrmStore $store,
+        private CrmBrandLogo $logos,
+        private CrmInteractionAttachmentFiles $attachmentFiles,
+        private CrmPartyImageFiles $partyImageFiles,
+    ) {
     }
 
     /**
@@ -124,45 +130,211 @@ class CrmPartyService
 
     /* ---------- تعاملات (تماس/جلسه/یادداشت/پیگیری) ---------- */
 
-    private const INTERACTION_TYPES = ['CALL', 'MEETING', 'NOTE', 'FOLLOWUP'];
-
-    public function listInteractions(?int $partyId = null, ?int $personId = null, ?string $type = null, ?string $status = null): array
+    public function listInteractions(?int $partyId = null, ?int $personId = null, ?int $interactionTypeId = null, ?string $status = null, ?int $projectId = null): array
     {
-        return $this->store->getInteractions($partyId, $personId, $type, $status);
+        $items = $this->store->getInteractions($partyId, $personId, $interactionTypeId, $status, $projectId);
+
+        // پیوست‌ها با یک فراخوانیِ اضافه (همان فیلترِ طرف‌حساب/مخاطب) و گروه‌بندی در PHP — بدونِ N+1
+        $byInteraction = [];
+        if ($items) {
+            foreach ($this->store->getInteractionAttachments(null, $partyId, $personId) as $att) {
+                $byInteraction[(int) $att->InteractionID][] = $this->attachmentFiles->present($att);
+            }
+        }
+        foreach ($items as $item) {
+            $item->Attachments = $byInteraction[(int) $item->InteractionID] ?? [];
+        }
+
+        return $items;
     }
 
     /**
-     * قواعدِ وضعیت هنگامِ ایجاد (در SP هم تکرار شده — دفاعِ دوسویه):
-     * NOTE همیشه DONE، FOLLOWUP همیشه PLANNED، CALL/MEETING فقط PLANNED یا DONE.
+     * افزودنِ یک یا چند پیوست به تعامل: اول همهٔ فایل‌ها بررسی می‌شوند، بعد رویِ دیسک ذخیره و
+     * ردیف‌ها در یک تراکنش ثبت می‌شوند؛ هر خطا → Rollbackِ همهٔ ردیف‌ها و حذفِ همهٔ فایل‌هایِ همین درخواست.
+     *
+     * @param  array<int, mixed>  $files
+     * @param  array<int, mixed>  $descriptions  هم‌اندیس با $files
+     */
+    public function addInteractionAttachments(int $interactionId, array $files, array $descriptions, int $userId): int
+    {
+        $files = array_values($files);
+        if (! $files) {
+            throw new CrmValidationException('هیچ فایلی برایِ پیوست انتخاب نشده است.');
+        }
+        if (count($files) > CrmInteractionAttachmentFiles::MAX_FILES) {
+            throw new CrmValidationException('در هر بار حداکثر ۱۰ فایل قابلِ پیوست است.');
+        }
+        foreach ($files as $i => $file) {
+            $this->attachmentFiles->validate($file);
+            $desc = $descriptions[$i] ?? null;
+            if ($desc !== null && ! is_string($desc)) {
+                throw new CrmValidationException('توضیحاتِ پیوست نامعتبر است.');
+            }
+            if ($desc !== null && mb_strlen(trim($desc)) > CrmInteractionAttachmentFiles::MAX_DESCRIPTION) {
+                throw new CrmValidationException('توضیحاتِ هر پیوست حداکثر ۱۰۰۰ کاراکتر است.');
+            }
+        }
+
+        $stored = [];
+        try {
+            DB::transaction(function () use ($files, $descriptions, $interactionId, $userId, &$stored) {
+                foreach ($files as $i => $file) {
+                    $s = $this->attachmentFiles->store($file, $interactionId);
+                    $stored[] = $s['path'];
+                    $this->store->addInteractionAttachment([
+                        'interactionId' => $interactionId,
+                        'fileName' => $s['name'],
+                        'fileExtension' => $s['extension'],
+                        'fileSize' => $s['size'],
+                        'filePath' => $s['path'],
+                        'description' => trim((string) ($descriptions[$i] ?? '')) ?: null,
+                        'userId' => $userId,
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            foreach ($stored as $path) {
+                $this->attachmentFiles->delete($path);
+            }
+            throw $e;
+        }
+
+        return count($files);
+    }
+
+    /** حذفِ قطعی: اول ردیف (SP)، بعد فایلِ فیزیکی. */
+    public function deleteInteractionAttachment(int $attachmentId, int $userId): object
+    {
+        $res = $this->store->deleteInteractionAttachment($attachmentId, $userId);
+        $this->attachmentFiles->delete($res->FilePath ?? null);
+        unset($res->FilePath);
+
+        return $res;
+    }
+
+    /** مسیرِ داخلی فقط برایِ Routeِ دانلود. @return array{path: string, name: string}|null */
+    public function getInteractionAttachmentFile(int $attachmentId): ?array
+    {
+        $row = $this->store->getInteractionAttachments(null, null, null, $attachmentId)[0] ?? null;
+        if (! $row || ! $this->attachmentFiles->exists($row->FilePath)) {
+            return null;
+        }
+
+        return ['path' => $row->FilePath, 'name' => $row->FileName];
+    }
+
+    /* ---------- تصاویرِ طرف‌حساب (CrmPartyImages — Gallery؛ بدونِ ارتباط با پیوستِ تعاملات/لوگویِ برند) ---------- */
+
+    public function listPartyImages(int $partyId): array
+    {
+        return array_map(fn (object $row) => $this->partyImageFiles->present($row), $this->store->getPartyImages($partyId));
+    }
+
+    /**
+     * افزودنِ یک یا چند تصویر: اول همهٔ فایل‌ها بررسی می‌شوند (فرمت/حجم/MIMEِ واقعی/ابعاد)،
+     * بعد رویِ دیسک ذخیره و ردیف‌ها در یک تراکنش ثبت می‌شوند؛ هر خطا → Rollbackِ همهٔ ردیف‌ها
+     * و حذفِ همهٔ فایل‌هایِ همین درخواست (هم‌الگو با addInteractionAttachments).
+     *
+     * @param  array<int, mixed>  $files
+     * @param  array<int, mixed>  $descriptions  هم‌اندیس با $files — هر توضیح دقیقاً به همان تصویر متصل می‌شود
+     */
+    public function addPartyImages(int $partyId, array $files, array $descriptions, int $userId): int
+    {
+        $files = array_values($files);
+        if (! $files) {
+            throw new CrmValidationException('هیچ تصویری برایِ افزودن انتخاب نشده است.');
+        }
+        if (count($files) > CrmPartyImageFiles::MAX_FILES) {
+            throw new CrmValidationException('در هر بار حداکثر ۱۰ تصویر قابلِ افزودن است.');
+        }
+        foreach ($files as $i => $file) {
+            $this->partyImageFiles->validate($file);
+            $desc = $descriptions[$i] ?? null;
+            if ($desc !== null && ! is_string($desc)) {
+                throw new CrmValidationException('توضیحاتِ تصویر نامعتبر است.');
+            }
+            if ($desc !== null && mb_strlen(trim($desc)) > CrmPartyImageFiles::MAX_DESCRIPTION) {
+                throw new CrmValidationException('توضیحاتِ هر تصویر حداکثر ۵۰۰ کاراکتر است.');
+            }
+        }
+
+        $stored = [];
+        try {
+            DB::transaction(function () use ($files, $descriptions, $partyId, $userId, &$stored) {
+                foreach ($files as $i => $file) {
+                    $s = $this->partyImageFiles->store($file, $partyId);
+                    $stored[] = $s['path'];
+                    $this->store->addPartyImage([
+                        'partyId' => $partyId,
+                        'imagePath' => $s['path'],
+                        'imageMimeType' => $s['mime'],
+                        'description' => trim((string) ($descriptions[$i] ?? '')) ?: null,
+                        'userId' => $userId,
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            foreach ($stored as $path) {
+                $this->partyImageFiles->delete($path);
+            }
+            throw $e;
+        }
+
+        return count($files);
+    }
+
+    /** حذفِ منطقی (IsActive=0 در SP) — فایلِ فیزیکی رویِ دیسک دست‌نخورده می‌ماند. */
+    public function deletePartyImage(int $partyImageId, int $userId): object
+    {
+        return $this->store->deletePartyImage($partyImageId, $userId);
+    }
+
+    /**
+     * ویرایشِ توضیحِ یک تصویر — فقط همین فیلد؛ هیچ ورودیِ دیگری (از جمله PartyID) از
+     * درخواست پذیرفته نمی‌شود، پس تصویرِ هدف همیشه دقیقاً همان PartyImageIDِ داده‌شده است
+     * (بدونِ امکانِ دستکاری برایِ رسیدن به تصویرِ طرف‌حسابِ دیگر).
+     */
+    public function updatePartyImageDescription(int $partyImageId, ?string $description, int $userId): object
+    {
+        if ($description !== null && mb_strlen(trim($description)) > CrmPartyImageFiles::MAX_DESCRIPTION) {
+            throw new CrmValidationException('توضیحاتِ تصویر حداکثر ۵۰۰ کاراکتر است.');
+        }
+
+        return $this->store->updatePartyImageDescription($partyImageId, $description !== null ? (trim($description) ?: null) : null, $userId);
+    }
+
+    /** مسیرِ داخلی فقط برایِ Routeِ نمایشِ تصویر؛ فقط تصویرِ فعال. @return array{path: string, mime: string}|null */
+    public function getPartyImageFile(int $partyImageId): ?array
+    {
+        $rows = $this->store->getPartyImages(null, $partyImageId);
+        $row = $rows[0] ?? null;
+        if (! $row || ! $this->partyImageFiles->exists($row->ImagePath)) {
+            return null;
+        }
+
+        return ['path' => $row->ImagePath, 'mime' => $row->ImageMimeType];
+    }
+
+    /**
+     * قواعدِ وضعیت هنگامِ ایجاد (NOTE همیشه DONE، FOLLOWUP همیشه PLANNED، CALL/MEETING فقط
+     * PLANNED یا DONE) و اعتبارسنجیِ خودِ نوعِ تعامل، هر دو در sp_Crm_SaveInteraction انجام
+     * می‌شود — نوعِ تعامل اکنون Master Data است (CrmInteractionTypes)، نه یک Enumِ ثابتِ PHP،
+     * پس SP تنها مرجعِ معتبرِ بررسیِ Code/IsActive است (بدونِ تکرارِ لیست در این لایه).
      * وضعیتِ یک تعاملِ موجود از این مسیر تغییر نمی‌کند (فقط setInteractionStatus).
      */
     public function saveInteraction(array $input, int $userId): object
     {
-        $type = strtoupper(trim($input['interactionType'] ?? ''));
-        if (! in_array($type, self::INTERACTION_TYPES, true)) {
-            throw new CrmValidationException('نوعِ تعامل نامعتبر است.');
-        }
-
         $status = isset($input['status']) ? strtoupper(trim($input['status'])) : null;
-        if (empty($input['interactionId'])) {
-            if ($type === 'NOTE' && $status !== null && $status !== 'DONE') {
-                throw new CrmValidationException('یادداشت همیشه «انجام‌شده» ثبت می‌شود.');
-            }
-            if ($type === 'FOLLOWUP' && $status !== null && $status !== 'PLANNED') {
-                throw new CrmValidationException('پیگیری هنگامِ ثبت باید «برنامه‌ریزی‌شده» باشد.');
-            }
-            if (in_array($type, ['CALL', 'MEETING'], true) && $status !== null && ! in_array($status, ['PLANNED', 'DONE'], true)) {
-                throw new CrmValidationException('تماس/جلسه هنگامِ ثبت فقط می‌تواند «برنامه‌ریزی‌شده» یا «انجام‌شده» باشد.');
-            }
-        } else {
+        if (! empty($input['interactionId'])) {
             $status = null;
         }
 
         return $this->store->saveInteraction([
             'interactionId' => $input['interactionId'] ?? null,
-            'interactionType' => $type,
+            'interactionTypeId' => $input['interactionTypeId'],
             'partyId' => $input['partyId'],
             'personId' => $input['personId'] ?? null,
+            'projectId' => $input['projectId'] ?? null,
             'subject' => trim($input['subject'] ?? ''),
             'description' => $input['description'] ?? null,
             'outcome' => $input['outcome'] ?? null,
@@ -172,6 +344,12 @@ class CrmPartyService
             'ownerUserId' => $input['ownerUserId'] ?? null,
             'userId' => $userId,
         ]);
+    }
+
+    /** پروژه‌هایی که این Party پیمانکارِ فعالِ آن‌هاست — برایِ Selectorِ «مرتبط با پروژه» در فرمِ Interaction */
+    public function listProjectsForParty(int $partyId): array
+    {
+        return $this->store->getProjectsForParty($partyId);
     }
 
     public function setInteractionStatus(int $interactionId, string $status, int $userId): object

@@ -92,7 +92,69 @@ class ProjectsController extends Controller
             'msgPriorities'    => $msgPriorities,
             'contractors'      => $contractors,
             'interactionTypes' => $interactionTypes,
+            'owner'            => DB::selectOne('EXEC sp_GetProjectOwner @ProjectID = ?', [$id]),
+            // همهٔ برندهایِ فعال — گزینه‌هایِ برند وقتی طرف‌حساب انتخاب نشده (پروژهٔ داخلی)
+            'allBrands'        => $this->brandOptions(DB::select('EXEC sp_Crm_GetBrands @SearchText = NULL, @IsActive = 1')),
         ]);
+    }
+
+    /**
+     * GET projects/{id}/owner/party-brands?partyId= — برندهایِ همان طرف‌حساب، از همان ساختارِ موجودِ CRM
+     * (ردیف‌هایِ فعالِ CrmPartyBrandCategories؛ همان تعریفی که تبِ «برندها»ی طرف‌حساب نشان می‌دهد).
+     */
+    public function ownerPartyBrands(Request $request, int $id)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json(['brands' => []], 403);
+        }
+
+        $partyId = (int) $request->input('partyId');
+        $rows = array_filter(
+            DB::select('EXEC sp_Crm_GetPartyBrandCategories @PartyID = ?, @BrandID = NULL', [$partyId]),
+            fn ($r) => (bool) $r->IsActive && (bool) $r->BrandIsActive
+        );
+
+        return response()->json(['brands' => $this->brandOptions($rows, 'BrandName')]);
+    }
+
+    /** POST projects/{id}/owner — ذخیرهٔ مالکِ پروژه (طرف‌حسابِ اختیاری + برند)؛ فقط مسئولِ پروژه. */
+    public function saveOwner(Request $request, int $id)
+    {
+        if (!$this->canManage($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط مسئول پروژه می‌تواند مالکِ پروژه را تعیین کند.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'OwnerPartyID' => 'nullable|integer|exists:CrmParties,PartyID',
+            'OwnerBrandID' => 'nullable|integer|exists:CrmBrands,BrandID',
+        ]);
+
+        $result = DB::select(
+            'EXEC sp_SaveProjectOwner @ProjectID = ?, @OwnerPartyID = ?, @OwnerBrandID = ?, @UserID = ?',
+            [$id, $validated['OwnerPartyID'] ?? null, $validated['OwnerBrandID'] ?? null, Auth::id()]
+        );
+
+        $response = (array) ($result[0] ?? []);
+
+        return response()->json([
+            'success' => !empty($response['Success']),
+            'message' => $response['Message'] ?? '',
+            'owner'   => DB::selectOne('EXEC sp_GetProjectOwner @ProjectID = ?', [$id]),
+        ]);
+    }
+
+    /** فقط شناسه و نامِ برند (بدونِ مسیرِ فایلِ لوگو)؛ بدونِ تکرار. */
+    private function brandOptions(array $rows, string $nameField = 'Name'): array
+    {
+        return collect($rows)
+            ->map(fn ($r) => ['BrandID' => (int) $r->BrandID, 'Name' => $r->{$nameField}])
+            ->unique('BrandID')
+            ->sortBy('Name')
+            ->values()
+            ->all();
     }
 
     /**

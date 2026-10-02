@@ -19,6 +19,7 @@ import {
     InfoCircleOutlined,
     CommentOutlined,
     SolutionOutlined,
+    BankOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -28,6 +29,7 @@ import ChipTabs from '../../Components/ChipTabs';
 import ProjectMembersModal from './ProjectMembersModal';
 import ProjectContractorsModal from './ProjectContractorsModal';
 import ProjectContractorInteractionModal from './ProjectContractorInteractionModal';
+import ProjectOwnerTab, { ProjectOwner, BrandOption } from './ProjectOwnerTab';
 import ProjectTaskCreateModal from '../../Components/ProjectTaskCreateModal';
 import ProjectComments from '../../Components/ProjectComments';
 import { THEME, STYLES } from '../../theme';
@@ -120,13 +122,15 @@ interface InteractionTypeOption {
 }
 
 export default function ProjectShow() {
-    const { project, members, users, msgPriorities, contractors, interactionTypes, auth } = usePage().props as unknown as {
+    const { project, members, users, msgPriorities, contractors, interactionTypes, owner, allBrands, auth } = usePage().props as unknown as {
         project: Project;
         members: Member[];
         users: UserOption[];
         msgPriorities: MsgPriorityOption[];
         contractors: Contractor[];
         interactionTypes: InteractionTypeOption[];
+        owner: ProjectOwner | null;
+        allBrands: BrandOption[];
         auth: { user: any };
     };
 
@@ -137,7 +141,7 @@ export default function ProjectShow() {
     const [taskTargetMember, setTaskTargetMember] = useState<Member | null>(null);
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'members' | 'contractors' | 'tasks' | 'comments'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'owner' | 'members' | 'contractors' | 'tasks' | 'comments'>('info');
 
     const activeMembers = (members || []).filter((m) => toBool(m.IsActive));
     const activeContractors = (contractors || []).filter((c) => toBool(c.IsActive));
@@ -311,6 +315,7 @@ export default function ProjectShow() {
 
     const tabDefs = [
         { key: 'info' as const, label: 'اطلاعات پروژه', icon: <InfoCircleOutlined />, count: null },
+        { key: 'owner' as const, label: 'مالک پروژه', icon: <BankOutlined />, count: null },
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
         { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
@@ -441,6 +446,12 @@ export default function ProjectShow() {
                             </Descriptions.Item>
                         ) : null}
                     </Descriptions>
+                </Card>
+            )}
+
+            {activeTab === 'owner' && (
+                <Card style={STYLES.card}>
+                    <ProjectOwnerTab projectId={project.ProjectID} owner={owner ?? null} allBrands={allBrands || []} canManage={isResponsible} />
                 </Card>
             )}
 

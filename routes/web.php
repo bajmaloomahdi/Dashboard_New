@@ -225,6 +225,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/projects/{id}/contractors', [ProjectsController::class, 'removeContractor'])->name('projects.contractors.remove');
     Route::post('/projects/{id}/contractors/{partyId}/interactions', [ProjectsController::class, 'storeContractorInteraction'])
         ->whereNumber('id')->whereNumber('partyId')->name('projects.contractors.interactions.store');
+    Route::get('/projects/{id}/owner/party-brands', [ProjectsController::class, 'ownerPartyBrands'])
+        ->whereNumber('id')->name('projects.owner.party-brands');
+    Route::post('/projects/{id}/owner', [ProjectsController::class, 'saveOwner'])
+        ->whereNumber('id')->name('projects.owner.save');
     Route::post('/projects/{id}/tasks', [ProjectsController::class, 'createTask'])->name('projects.tasks.store');
     Route::get('/projects/{id}/tasks', [ProjectsController::class, 'tasks'])->name('projects.tasks.index');
     Route::get('/projects/{id}/comments', [ProjectsController::class, 'comments'])->name('projects.comments.index');

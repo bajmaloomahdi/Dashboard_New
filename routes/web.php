@@ -298,11 +298,6 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('letterTemplateId')->name('templates.toggle');
         Route::post('templates/{letterTemplateId}/render', [WorkflowLetterTemplateController::class, 'render'])
             ->whereNumber('letterTemplateId')->name('templates.render');
-        Route::post('templates/{letterTemplateId}/resolve-preview', [WorkflowLetterTemplateController::class, 'resolvePreview'])
-            ->whereNumber('letterTemplateId')->name('templates.resolve-preview');
-
-        // --- ثبتِ نامهٔ فرایندی + شروعِ Workflow (Message «وظیفه» + CC + Adopt + Start، یک Transaction) ---
-        Route::post('letters', [WorkflowRuntimeController::class, 'startLetter'])->name('letters.start');
 
         // --- فیلدهایِ شرط (Condition Engine — Global Registry، مثلِ template-parameters) ---
         Route::get('condition-fields', [WorkflowConditionFieldController::class, 'index'])->name('condition-fields.index');

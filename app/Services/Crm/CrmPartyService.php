@@ -303,6 +303,28 @@ class CrmPartyService
         return $this->store->updatePartyImageDescription($partyImageId, $description !== null ? (trim($description) ?: null) : null, $userId);
     }
 
+    /* ---------- اطلاعاتِ تکمیلیِ طرف‌حساب (CrmPartySupplementaryInfo — ۱:۱؛ محلِ فیلدهایِ تکمیلیِ فعلی و آینده) ---------- */
+
+    /** null یعنی هنوز هیچ اطلاعاتِ تکمیلی‌ای برایِ این طرف‌حساب ثبت نشده است. */
+    public function getSupplementaryInfo(int $partyId): ?object
+    {
+        return $this->store->getPartySupplementaryInfo($partyId);
+    }
+
+    /**
+     * Upsert (یک ردیف برایِ هر طرف‌حساب). قواعدِ «متراژ ≥ ۰» و «نوعِ مالکیتِ غیرفعال فقط اگر
+     * همین حالا رویِ همین طرف‌حساب ثبت باشد» در SP بررسی می‌شوند؛ PartyID همیشه از Route می‌آید.
+     */
+    public function saveSupplementaryInfo(int $partyId, array $input, int $userId): object
+    {
+        return $this->store->savePartySupplementaryInfo([
+            'partyId'         => $partyId,
+            'ownershipTypeId' => $input['ownershipTypeId'] ?? null,
+            'areaSqm'         => $input['areaSqm'] ?? null,
+            'userId'          => $userId,
+        ]);
+    }
+
     /** مسیرِ داخلی فقط برایِ Routeِ نمایشِ تصویر؛ فقط تصویرِ فعال. @return array{path: string, mime: string}|null */
     public function getPartyImageFile(int $partyImageId): ?array
     {

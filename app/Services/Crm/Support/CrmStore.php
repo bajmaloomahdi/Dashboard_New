@@ -404,6 +404,41 @@ class CrmStore
         return $this->write('EXEC dbo.sp_Crm_ToggleInteractionTypeActive @InteractionTypeID = ?, @UserID = ?', [$interactionTypeId, $userId]);
     }
 
+    /* ---------- نوعِ مالکیت (CrmOwnershipTypes) ---------- */
+
+    public function getOwnershipTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetOwnershipTypes @SearchText = ?, @IsActive = ?', [$search, $isActive]);
+    }
+
+    public function saveOwnershipType(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveOwnershipType @OwnershipTypeID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
+            [$p['ownershipTypeId'] ?? null, $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+        );
+    }
+
+    public function toggleOwnershipTypeActive(int $ownershipTypeId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_ToggleOwnershipTypeActive @OwnershipTypeID = ?, @UserID = ?', [$ownershipTypeId, $userId]);
+    }
+
+    /* ---------- اطلاعاتِ تکمیلیِ طرف‌حساب (CrmPartySupplementaryInfo — ۱:۱ با CrmParties) ---------- */
+
+    public function getPartySupplementaryInfo(int $partyId): ?object
+    {
+        return DB::selectOne('EXEC dbo.sp_Crm_GetPartySupplementaryInfo @PartyID = ?', [$partyId]);
+    }
+
+    public function savePartySupplementaryInfo(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SavePartySupplementaryInfo @PartyID = ?, @OwnershipTypeID = ?, @AreaSqm = ?, @UserID = ?',
+            [$p['partyId'], $p['ownershipTypeId'] ?? null, $p['areaSqm'] ?? null, $p['userId']]
+        );
+    }
+
     /* ---------- تصاویرِ طرف‌حساب (CrmPartyImages) ---------- */
 
     /** شاملِ ImagePath (فقط برایِ لایهٔ PHP — به Frontend نمی‌رود) */

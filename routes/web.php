@@ -440,6 +440,10 @@ Route::middleware('auth')->group(function () {
         Route::post('directory/interaction-types', [CrmDirectoryController::class, 'interactionTypesStore'])->name('directory.interaction-types.store');
         Route::post('directory/interaction-types/{interactionTypeId}/toggle', [CrmDirectoryController::class, 'interactionTypesToggle'])
             ->whereNumber('interactionTypeId')->name('directory.interaction-types.toggle');
+        Route::get('directory/ownership-types', [CrmDirectoryController::class, 'ownershipTypesIndex'])->name('directory.ownership-types.index');
+        Route::post('directory/ownership-types', [CrmDirectoryController::class, 'ownershipTypesStore'])->name('directory.ownership-types.store');
+        Route::post('directory/ownership-types/{ownershipTypeId}/toggle', [CrmDirectoryController::class, 'ownershipTypesToggle'])
+            ->whereNumber('ownershipTypeId')->name('directory.ownership-types.toggle');
 
         // ───────────────── فازِ ۲: طرف‌حساب و موجودیت‌هایِ وابسته ─────────────────
         Route::get('parties', [CrmPartyController::class, 'page'])->name('parties.page');
@@ -493,6 +497,11 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('imageId')->name('party-images.update-description');
         Route::get('party-images/{imageId}', [CrmPartyController::class, 'imageShow'])
             ->whereNumber('imageId')->name('party-images.show');
+        // اطلاعاتِ تکمیلیِ طرف‌حساب — مشاهده با CRM_VIEW، ثبت/ویرایش با CRM_MANAGE_PARTIES
+        Route::get('parties/{partyId}/supplementary-info', [CrmPartyController::class, 'supplementaryInfoShow'])
+            ->whereNumber('partyId')->name('parties.supplementary-info.show');
+        Route::post('parties/{partyId}/supplementary-info', [CrmPartyController::class, 'supplementaryInfoStore'])
+            ->whereNumber('partyId')->name('parties.supplementary-info.store');
 
         Route::get('product-categories', [CrmProductCategoryController::class, 'page'])->name('product-categories.page');
         Route::get('product-categories-list', [CrmProductCategoryController::class, 'index'])->name('product-categories.index'); // ?search=&isActive=

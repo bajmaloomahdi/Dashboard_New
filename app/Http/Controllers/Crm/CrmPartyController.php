@@ -64,6 +64,9 @@ class CrmPartyController extends CrmApiController
             'interactions' => $this->parties->listInteractions($partyId),
             'interactionTypes' => $this->masterData->listInteractionTypes(null, true),
             'partyImages' => $this->parties->listPartyImages($partyId),
+            'supplementaryInfo' => $this->parties->getSupplementaryInfo($partyId),
+            // فقط نوع‌هایِ فعال برایِ انتخابِ جدید؛ نوعِ غیرفعالی که همین حالا روی طرف‌حساب ثبت است از خودِ supplementaryInfo می‌آید
+            'ownershipTypes' => $this->masterData->listOwnershipTypes(null, true),
             'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))
                 ->map(fn ($u) => ['UserID' => (int) $u->UserID, 'FullName' => $u->FullName])->values()->all(),
             'addressTitles' => $this->masterData->listAddressTitles(null, true),
@@ -242,6 +245,42 @@ class CrmPartyController extends CrmApiController
             $res = $this->parties->updatePartyImageDescription($imageId, $validated['description'] ?? null, $this->actorId());
 
             return ['message' => $res->Message ?? 'توضیحاتِ تصویر به‌روزرسانی شد.'];
+        });
+    }
+
+    /* ---------- اطلاعاتِ تکمیلیِ طرف‌حساب (CrmPartySupplementaryInfo — تبِ «ضمائم و سایر ویژگی‌ها») ---------- */
+
+    /** GET crm/parties/{partyId}/supplementary-info — item: null یعنی هنوز چیزی ثبت نشده است. */
+    public function supplementaryInfoShow(int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        return $this->runCrm(fn () => ['item' => $this->parties->getSupplementaryInfo($partyId)]);
+    }
+
+    /** POST crm/parties/{partyId}/supplementary-info — Upsert؛ PartyID فقط از Route (نه از بدنهٔ درخواست). */
+    public function supplementaryInfoStore(Request $request, int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        $validated = $request->validate([
+            'ownershipTypeId' => 'nullable|integer|exists:CrmOwnershipTypes,OwnershipTypeID',
+            'areaSqm'         => 'bail|nullable|numeric|min:0|max:9999999999.99|decimal:0,2',
+        ], [
+            'areaSqm.numeric' => 'متراژ باید عدد باشد.',
+            'areaSqm.min'     => 'متراژ نمی‌تواند منفی باشد.',
+            'areaSqm.max'     => 'متراژ بیش از حدِ مجاز است.',
+            'areaSqm.decimal' => 'متراژ حداکثر دو رقمِ اعشار می‌پذیرد.',
+            'ownershipTypeId.exists' => 'نوعِ مالکیت یافت نشد.',
+        ]);
+
+        return $this->runCrm(function () use ($validated, $partyId) {
+            $res = $this->parties->saveSupplementaryInfo($partyId, $validated, $this->actorId());
+
+            return [
+                'message' => $res->Message ?? 'اطلاعاتِ تکمیلی ذخیره شد.',
+                'item' => $this->parties->getSupplementaryInfo($partyId),
+            ];
         });
     }
 

@@ -17,6 +17,7 @@ import RelationsPanel from './RelationsPanel';
 import ClassificationsPanel from './ClassificationsPanel';
 import InteractionsPanel from './InteractionsPanel';
 import PartyImagesPanel from './PartyImagesPanel';
+import PartySupplementaryInfoPanel, { PartySupplementaryInfo, OwnershipTypeOption } from './PartySupplementaryInfoPanel';
 
 const { Text } = Typography;
 
@@ -43,6 +44,8 @@ export default function CrmPartyShow() {
         interactions: any[];
         interactionTypes: { InteractionTypeID: number; Code: string; DisplayName: string }[];
         partyImages: { PartyImageID: number; PartyID: number; ImageMimeType: string; Description: string | null; SortOrder: number; IsActive: boolean | number | string; Date_InsertFirst: string; CreatedByName: string | null; ImageUrl: string }[];
+        supplementaryInfo: PartySupplementaryInfo | null;
+        ownershipTypes: OwnershipTypeOption[];
         users: { UserID: number; FullName: string }[];
         addressTitles: any[];
         provinces: any[];
@@ -59,7 +62,7 @@ export default function CrmPartyShow() {
     };
 
     const {
-        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, users, addressTitles, provinces, contactTypes,
+        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
         positions, contactRoles, titles, departments, partyTypes, activities, canManage, neshanMapKey, neshanSearchEnabled,
     } = props;
 
@@ -210,6 +213,17 @@ export default function CrmPartyShow() {
                         items={brandCategories || []}
                         canManage={canManage}
                         onChanged={() => router.reload({ only: ['brandCategories'] })}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'attachments' && (
+                <Card style={{ ...STYLES.card, marginBottom: 16 }}>
+                    <PartySupplementaryInfoPanel
+                        partyId={currentParty.PartyID}
+                        info={supplementaryInfo ?? null}
+                        ownershipTypes={ownershipTypes || []}
+                        canManage={canManage}
                     />
                 </Card>
             )}

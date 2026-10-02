@@ -30,6 +30,7 @@ class CrmDirectoryController extends CrmApiController
             'contactTypes'   => $this->masterData->listContactTypes(),
             'addressTitles'  => $this->masterData->listAddressTitles(),
             'interactionTypes' => $this->masterData->listInteractionTypes(),
+            'ownershipTypes' => $this->masterData->listOwnershipTypes(),
             'canManage'      => true,
         ]);
     }
@@ -231,6 +232,46 @@ class CrmDirectoryController extends CrmApiController
             $res = $this->masterData->toggleInteractionTypeActive($interactionTypeId, $this->actorId());
 
             return ['message' => $res->Message ?? 'وضعیتِ نوعِ تعامل تغییر کرد.'];
+        });
+    }
+
+    /* ---------- نوعِ مالکیت ---------- */
+
+    public function ownershipTypesIndex(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate(['search' => 'nullable|string|max:200', 'isActive' => 'nullable|boolean']);
+
+        return $this->runCrm(fn () => ['items' => $this->masterData->listOwnershipTypes(
+            $validated['search'] ?? null,
+            array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+        )]);
+    }
+
+    public function ownershipTypesStore(Request $request)
+    {
+        $this->authorizeCrm(self::PERM);
+        $validated = $request->validate([
+            'ownershipTypeId' => 'nullable|integer|exists:CrmOwnershipTypes,OwnershipTypeID',
+            'displayName'     => 'required|string|max:200',
+            'sortOrder'       => 'nullable|integer',
+        ]);
+
+        return $this->runCrm(function () use ($validated) {
+            $res = $this->masterData->saveOwnershipType($validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'نوعِ مالکیت ذخیره شد.', 'ownershipTypeId' => (int) $res->OwnershipTypeID];
+        });
+    }
+
+    public function ownershipTypesToggle(int $ownershipTypeId)
+    {
+        $this->authorizeCrm(self::PERM);
+
+        return $this->runCrm(function () use ($ownershipTypeId) {
+            $res = $this->masterData->toggleOwnershipTypeActive($ownershipTypeId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'وضعیتِ نوعِ مالکیت تغییر کرد.'];
         });
     }
 

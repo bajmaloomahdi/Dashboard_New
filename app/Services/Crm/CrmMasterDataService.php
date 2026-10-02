@@ -195,6 +195,28 @@ class CrmMasterDataService
         return $this->store->toggleInteractionTypeActive($interactionTypeId, $userId);
     }
 
+    /* ---------- نوعِ مالکیت ---------- */
+
+    public function listOwnershipTypes(?string $search = null, ?bool $isActive = null): array
+    {
+        return $this->store->getOwnershipTypes($search, $isActive);
+    }
+
+    public function saveOwnershipType(array $input, int $userId): object
+    {
+        return $this->store->saveOwnershipType([
+            'ownershipTypeId' => $input['ownershipTypeId'] ?? null,
+            'displayName'     => trim($input['displayName'] ?? ''),
+            'sortOrder'       => $input['sortOrder'] ?? 0,
+            'userId'          => $userId,
+        ]);
+    }
+
+    public function toggleOwnershipTypeActive(int $ownershipTypeId, int $userId): object
+    {
+        return $this->store->toggleOwnershipTypeActive($ownershipTypeId, $userId);
+    }
+
     /* ---------- عنوانِ آدرس ---------- */
 
     public function listAddressTitles(?string $search = null, ?bool $isActive = null): array

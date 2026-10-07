@@ -654,18 +654,19 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                         ) : null}
                     </div>
 
-                    <Space style={{ width: '100%' }} wrap align="start">
-                        <div>
+                    {/* flex به‌جایِ Space تا در موبایل هر فیلد تا عرضِ صفحه کوچک شود (دسکتاپ همان 340px) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 8, width: '100%' }}>
+                        <div style={{ flex: '0 1 340px', minWidth: 0 }}>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>توضیحات</Text>
-                            <Input.TextArea rows={2} style={{ width: 340 }} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />
+                            <Input.TextArea rows={2} style={{ width: '100%' }} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />
                         </div>
                         {draftTypeCode !== 'NOTE' ? (
-                            <div>
+                            <div style={{ flex: '0 1 340px', minWidth: 0 }}>
                                 <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نتیجه</Text>
-                                <Input.TextArea rows={2} style={{ width: 340 }} value={draft.outcome} onChange={(e) => setDraft((d) => ({ ...d, outcome: e.target.value }))} />
+                                <Input.TextArea rows={2} style={{ width: '100%' }} value={draft.outcome} onChange={(e) => setDraft((d) => ({ ...d, outcome: e.target.value }))} />
                             </div>
                         ) : null}
-                    </Space>
+                    </div>
 
                     <div className="crm-int-attach">
                         <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>پیوست‌ها</Text>
@@ -746,7 +747,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                 </Space>
             ) : null}
 
-            <Table rowKey="InteractionID" columns={columns} dataSource={shown} pagination={false} locale={{ emptyText: <Empty description="تعاملی ثبت نشده است" /> }} />
+            <Table rowKey="InteractionID" columns={columns} dataSource={shown} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="تعاملی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

@@ -195,6 +195,7 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
                         columns={columns}
                         dataSource={categories}
                         pagination={false}
+                        scroll={{ x: true }}
                         locale={{ emptyText: <Empty description="دسته‌ای تعریف نشده" /> }}
                     />
                 </>

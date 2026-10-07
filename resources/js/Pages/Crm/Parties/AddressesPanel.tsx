@@ -380,7 +380,7 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
                 </Space>
             ) : null}
 
-            <Table rowKey="AddressID" columns={columns} dataSource={items} pagination={false} locale={{ emptyText: <Empty description="آدرسی ثبت نشده است" /> }} />
+            <Table rowKey="AddressID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="آدرسی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

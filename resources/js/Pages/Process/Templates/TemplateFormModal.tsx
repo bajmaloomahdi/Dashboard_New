@@ -339,9 +339,9 @@ export default function TemplateFormModal({ open, onClose, editingTemplate, onSu
                         size="large"
                     />
                 </Form.Item>
-                <Space style={{ marginTop: -12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: -12, marginBottom: 16 }}>
                     <Select
-                        style={{ width: 260 }}
+                        style={{ flex: '0 1 260px', minWidth: 0 }}
                         size="small"
                         placeholder="انتخابِ پارامتر..."
                         value={subjectInsertCode ?? undefined}
@@ -353,7 +353,7 @@ export default function TemplateFormModal({ open, onClose, editingTemplate, onSu
                     <Button size="small" icon={<PlusCircleOutlined />} disabled={!subjectInsertCode} onClick={handleInsertSubject}>
                         درجِ پارامتر در موضوع
                     </Button>
-                </Space>
+                </div>
 
                 <Form.Item
                     label="متنِ نامه"
@@ -371,9 +371,9 @@ export default function TemplateFormModal({ open, onClose, editingTemplate, onSu
                         style={{ direction: 'rtl', textAlign: 'right' }}
                     />
                 </Form.Item>
-                <Space>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
                     <Select
-                        style={{ width: 260 }}
+                        style={{ flex: '0 1 260px', minWidth: 0 }}
                         size="small"
                         placeholder="انتخابِ پارامتر..."
                         value={bodyInsertCode ?? undefined}
@@ -385,7 +385,7 @@ export default function TemplateFormModal({ open, onClose, editingTemplate, onSu
                     <Button size="small" icon={<PlusCircleOutlined />} disabled={!bodyInsertCode} onClick={handleInsertBody}>
                         درجِ پارامتر در متن
                     </Button>
-                </Space>
+                </div>
 
                 {isEdit ? (
                     <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 16 }}>

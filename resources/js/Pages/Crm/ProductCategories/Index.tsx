@@ -224,6 +224,7 @@ export default function CrmProductCategoriesIndex() {
                     columns={columns}
                     dataSource={tree}
                     pagination={false}
+                    scroll={{ x: true }}
                     expandable={{
                         expandedRowKeys: filtering ? allKeys : expandedKeys,
                         onExpandedRowsChange: (keys) => setExpandedKeys(keys as number[]),

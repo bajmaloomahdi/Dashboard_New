@@ -230,7 +230,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                 </Space>
             ) : null}
 
-            <Table rowKey="ContactID" columns={columns} dataSource={items} pagination={false} locale={{ emptyText: <Empty description="اطلاعاتِ تماسی ثبت نشده است" /> }} />
+            <Table rowKey="ContactID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="اطلاعاتِ تماسی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

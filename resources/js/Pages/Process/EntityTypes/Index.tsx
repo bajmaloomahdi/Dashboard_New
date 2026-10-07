@@ -262,6 +262,7 @@ export default function ProcessEntityTypesIndex() {
                     columns={columns}
                     dataSource={items}
                     pagination={false}
+                    scroll={{ x: true }}
                     locale={{ emptyText: <Empty description="موجودیتی ثبت نشده است" /> }}
                 />
             </Card>

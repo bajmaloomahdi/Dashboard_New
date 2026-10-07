@@ -148,6 +148,7 @@ export default function CrmBrandShow() {
                         columns={columns}
                         dataSource={parties || []}
                         pagination={false}
+                        scroll={{ x: true }}
                         locale={{ emptyText: <Empty description="این برند به هیچ طرف‌حسابی مرتبط نیست" /> }}
                     />
                 </Card>

@@ -268,7 +268,7 @@ function ConditionEditor({ condition, fields, readOnly, onChange, onRemove }: Co
                 </Space>
 
                 {fieldIsUnknownOrInactive && (
-                    <Tag color="warning" style={{ width: 'fit-content' }}>
+                    <Tag color="warning" style={{ width: 'fit-content', maxWidth: '100%', whiteSpace: 'normal' }}>
                         این فیلد غیرفعال یا نامعتبر است — این Rule تا Publish مسدود می‌ماند.
                     </Tag>
                 )}

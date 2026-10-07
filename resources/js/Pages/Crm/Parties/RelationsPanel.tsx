@@ -309,7 +309,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                     <Space style={{ width: '100%' }} wrap align="start">
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>سمت</Text>
-                            <Space>
+                            <Space wrap>
                                 <Select
                                     allowClear
                                     style={{ width: 200 }}
@@ -348,7 +348,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                 </Space>
             ) : null}
 
-            <Table rowKey="RelationID" columns={columns} dataSource={items} pagination={false} locale={{ emptyText: <Empty description="مخاطبی ثبت نشده است" /> }} />
+            <Table rowKey="RelationID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="مخاطبی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

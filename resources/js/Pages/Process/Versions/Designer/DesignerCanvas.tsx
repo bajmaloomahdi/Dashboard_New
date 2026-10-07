@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ReactFlow,
     ReactFlowProvider,
@@ -150,6 +150,9 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const propsPanelRef = useRef<HTMLDivElement>(null);
+    // در عرضِ موبایل اجازهٔ zoom-outِ بیشتر تا fitView کلِ فرایند را در Canvasِ باریک نشان دهد (دسکتاپ همان پیش‌فرضِ 0.5)
+    const [narrowViewport] = useState(() => window.matchMedia('(max-width: 767px)').matches);
     const lookupLists = useMemo(() => ({ users, roles, positions, units }), [users, roles, positions, units]);
 
     // منبعِ حقیقت GraphDraft است؛ nodes/edges فقط بازتابِ بصریِ آن هستند.
@@ -359,11 +362,18 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
     const selectedTransition = selectedEdge ? graph.transitions.find((t) => t.code === selectedEdge.id) : null;
     const fromStepTypeOfSelectedEdge = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source)?.type : null;
 
+    // موبایل: پنلِ تنظیمات زیرِ Canvas است؛ با انتخابِ آیتم به آن اسکرول می‌شود تا کاربر تغییر را ببیند.
+    useEffect(() => {
+        if (!selectedNodeId && !selectedEdgeId) return;
+        if (!window.matchMedia('(max-width: 767px)').matches) return;
+        propsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, [selectedNodeId, selectedEdgeId]);
+
     return (
-        <div style={{ display: 'flex', gap: 12, height: 660, direction: 'rtl' }}>
+        <div className="wf-designer" style={{ display: 'flex', gap: 12, height: 660, direction: 'rtl' }}>
             {/* ابزارها — سمتِ چپ */}
             {!readOnly && (
-                <div style={{ width: 150, ...STYLES.card, padding: 12, order: 3 }}>
+                <div className="wf-designer-palette" style={{ width: 150, ...STYLES.card, padding: 12, order: 3 }}>
                     <Title level={5} style={{ marginTop: 0, fontSize: 13 }}>ابزارها</Title>
                     <Space direction="vertical" style={{ width: '100%' }} size={8}>
                         {(Object.keys(NODE_TYPE_META) as PaletteType[]).map((type) => {
@@ -388,7 +398,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
             )}
 
             {/* Canvas — وسط */}
-            <div ref={wrapperRef} style={{ flex: 1, ...STYLES.card, padding: 0, overflow: 'hidden', order: 2 }}>
+            <div ref={wrapperRef} className="wf-designer-canvas" style={{ flex: 1, ...STYLES.card, padding: 0, overflow: 'hidden', order: 2 }}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -405,6 +415,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                     elementsSelectable
                     deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
                     fitView
+                    minZoom={narrowViewport ? 0.2 : 0.5}
                     proOptions={{ hideAttribution: true }}
                 >
                     <Background />
@@ -414,7 +425,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
             </div>
 
             {/* Properties — سمتِ راست */}
-            <div style={{ width: 320, ...STYLES.card, padding: 16, overflowY: 'auto', order: 1 }}>
+            <div ref={propsPanelRef} className="wf-designer-props" style={{ width: 320, ...STYLES.card, padding: 16, overflowY: 'auto', order: 1 }}>
                 <Title level={5} style={{ marginTop: 0 }}>تنظیماتِ آیتم</Title>
                 {selectedNode ? (
                     <Space direction="vertical" style={{ width: '100%' }} size={14}>
@@ -659,6 +670,20 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                     <Empty description="یک آیتم یا اتصال را انتخاب کنید" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                 )}
             </div>
+
+            {/* موبایل/تبلتِ باریک: چیدمانِ عمودی (ابزارها ← Canvas ← تنظیمات)؛ دسکتاپ بدونِ تغییر */}
+            <style>{`
+                @media (max-width: 767px) {
+                    .wf-designer { flex-direction: column; height: auto !important; }
+                    .wf-designer > div { width: 100% !important; min-width: 0; }
+                    .wf-designer-palette { order: 1 !important; }
+                    .wf-designer-palette .ant-space { flex-direction: row; flex-wrap: wrap; }
+                    .wf-designer-palette .ant-btn { width: auto; }
+                    .wf-designer-canvas { order: 2 !important; flex: none !important; height: 60vh; min-height: 380px; }
+                    .wf-designer-canvas .react-flow__minimap { display: none; }
+                    .wf-designer-props { order: 3 !important; overflow-y: visible !important; scroll-margin-top: 12px; }
+                }
+            `}</style>
         </div>
     );
 }

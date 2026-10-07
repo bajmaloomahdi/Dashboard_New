@@ -174,7 +174,9 @@ export default function ProjectFormModal({
             ]}
         >
             <Form form={form} layout="vertical" requiredMark>
-                <Row gutter={16}>
+                {/* زیرِ md همهٔ ستون‌ها xs=24 هستند؛ gutterِ افقی فقط margin منفی می‌سازد که در بدنهٔ
+                    اسکرول‌شوندهٔ responsive-modal اسکرولِ افقیِ 8px ایجاد می‌کرد. دسکتاپ همان 16 */}
+                <Row gutter={{ xs: 0, sm: 0, md: 16 }}>
                     <Col xs={24} md={8}>
                         <Form.Item
                             label="کد پروژه"

@@ -208,7 +208,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                 </Space>
             ) : null}
 
-            <Table rowKey="ClassificationID" columns={deptColumns} dataSource={departmentRows} pagination={false} locale={{ emptyText: <Empty description="دپارتمانی ثبت نشده است" /> }} />
+            <Table rowKey="ClassificationID" columns={deptColumns} dataSource={departmentRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="دپارتمانی ثبت نشده است" /> }} />
 
             <Divider />
 
@@ -257,7 +257,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                 </Space>
             ) : null}
 
-            <Table rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} locale={{ emptyText: <Empty description="نوعی ثبت نشده است" /> }} />
+            <Table rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="نوعی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

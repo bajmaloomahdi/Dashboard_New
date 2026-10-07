@@ -149,15 +149,16 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
             {editing ? (
                 <Space direction="vertical" style={{ width: '100%' }} size={12}>
                     {error ? <Alert type="error" showIcon message={error} style={{ borderRadius: 8 }} /> : null}
-                    <Space wrap align="start" size={16}>
-                        <div>
+                    {/* flex به‌جایِ Space تا در موبایل هر فیلد تا عرضِ صفحه کوچک شود (دسکتاپ همان 320/240px) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}>
+                        <div style={{ flex: '0 1 320px', minWidth: 0 }}>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>طرف‌حساب</Text>
                             <Select
                                 allowClear
                                 showSearch
                                 virtual={false}
                                 filterOption={false}
-                                style={{ width: 320 }}
+                                style={{ width: '100%' }}
                                 placeholder="انتخاب نشده (پروژهٔ داخلی)"
                                 value={partyId ?? undefined}
                                 onChange={onPartyChange}
@@ -167,13 +168,13 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
                                 notFoundContent={searching ? 'در حالِ جست‌وجو...' : 'طرف‌حسابی یافت نشد'}
                             />
                         </div>
-                        <div>
+                        <div style={{ flex: '0 1 240px', minWidth: 0 }}>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>برند</Text>
                             <Select
                                 allowClear
                                 showSearch
                                 optionFilterProp="label"
-                                style={{ width: 240 }}
+                                style={{ width: '100%' }}
                                 placeholder="انتخابِ برند"
                                 value={brandId ?? undefined}
                                 onChange={(v) => setBrandId(v ?? null)}
@@ -182,7 +183,7 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
                                 notFoundContent={partyId === null ? 'برندی تعریف نشده است' : 'برایِ این طرف‌حساب برندی ثبت نشده است'}
                             />
                         </div>
-                    </Space>
+                    </div>
                     <Space>
                         <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>ذخیره</Button>
                         <Button icon={<CloseOutlined />} disabled={saving} onClick={() => setEditing(false)}>انصراف</Button>

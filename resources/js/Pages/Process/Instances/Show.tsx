@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Table, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Table, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty, Grid } from 'antd';
 import {
     ApartmentOutlined,
     UserOutlined,
@@ -159,6 +159,8 @@ export default function ProcessInstanceShow() {
 
     const [data, setData] = useState<InstanceData>({ instance, steps, tasks, history });
     const [refreshing, setRefreshing] = useState(false);
+    // موبایل: Descriptions عمودی تا برچسب و مقدار هر کدام تمامِ عرض را داشته باشند
+    const screens = Grid.useBreakpoint();
 
     const [lifecycleModal, setLifecycleModal] = useState<'cancel' | 'suspend' | null>(null);
     const [reason, setReason] = useState('');
@@ -320,7 +322,7 @@ export default function ProcessInstanceShow() {
                     style={{ ...STYLES.card, marginBottom: 16 }}
                 >
                     {displayStep ? (
-                        <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
+                        <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered layout={screens.xs ? 'vertical' : 'horizontal'}>
                             <Descriptions.Item label="عنوانِ مرحله">{displayTask?.StepName ?? displayStep.StepCode}</Descriptions.Item>
                             <Descriptions.Item label="نوعِ مرحله">{stepTypeLabel[displayStep.StepType] ?? displayStep.StepType}</Descriptions.Item>
                             <Descriptions.Item label="وضعیتِ مرحله">
@@ -347,7 +349,7 @@ export default function ProcessInstanceShow() {
                             ) : null}
                             {displayStep.MessageID ? (
                                 <Descriptions.Item label="تسکِ کارتابلی" span={2}>
-                                    <Button size="small" icon={<MessageOutlined />} onClick={() => router.visit(`/messages/${displayStep.MessageID}`)}>
+                                    <Button size="small" icon={<MessageOutlined />} style={{ whiteSpace: 'normal', height: 'auto', maxWidth: '100%' }} onClick={() => router.visit(`/messages/${displayStep.MessageID}`)}>
                                         مشاهدهٔ تسک {displayTask?.MessageNumber ? `(${displayTask.MessageNumber})` : ''}
                                     </Button>
                                 </Descriptions.Item>

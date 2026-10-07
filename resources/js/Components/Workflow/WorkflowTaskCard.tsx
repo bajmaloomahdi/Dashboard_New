@@ -324,6 +324,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                         <span>فرایندِ اتوماسیون — {task.DefinitionName}</span>
                     </Space>
                 )}
+                className="wf-task-card"
                 headStyle={gradientHeadStyle}
                 style={{ borderRadius: 12, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}
                 extra={
@@ -517,6 +518,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                     onChange={(e) => setActionComment(e.target.value)}
                     maxLength={1000}
                     showCount
+                    style={{ marginBottom: 16 }} // جا برایِ شمارندهٔ absoluteِ showCount تا رویِ دکمه‌هایِ Footer نیفتد
                 />
             </Modal>
 
@@ -541,6 +543,16 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                 message={notification.message}
                 onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
             />
+
+            {/* موبایل: عنوانِ کارت (نامِ فرایند) به‌جایِ بریده‌شدن در یک خط، می‌شکند؛ دسکتاپ بدونِ تغییر */}
+            <style>{`
+                @media (max-width: 575px) {
+                    .wf-task-card .ant-card-head { padding-block: 10px; }
+                    .wf-task-card .ant-card-head-wrapper { flex-wrap: wrap; row-gap: 4px; }
+                    .wf-task-card .ant-card-head-title { flex: 1 1 100%; white-space: normal; overflow: visible; line-height: 1.7; }
+                    .wf-task-card .ant-card-extra { margin-inline-start: 0; }
+                }
+            `}</style>
         </>
     );
 }

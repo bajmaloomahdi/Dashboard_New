@@ -385,6 +385,7 @@ export default function MasterDataManager({
                 columns={columns}
                 dataSource={displayedItems}
                 pagination={false}
+                scroll={{ x: true }}
                 locale={{ emptyText: <Empty description={`${entityLabel}ی ثبت نشده است`} /> }}
             />
 

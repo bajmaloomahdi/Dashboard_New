@@ -200,6 +200,16 @@ export default function PageHeader({
                     flex-direction: column;
                     align-items: center;
                 }
+                @media (max-width: 575px) {
+                    .page-hero { padding: 14px; border-radius: 14px; }
+                    .page-hero-topbar { flex-wrap: wrap; gap: 8px; }
+                    .page-hero-actions { max-width: 100%; }
+                    .page-hero-actions .ant-space { flex-wrap: wrap; row-gap: 8px; }
+                    .page-hero-body { gap: 12px; }
+                    .page-hero-main { min-width: 0; }
+                    .page-hero h2.ant-typography { font-size: 20px; line-height: 1.5; }
+                    .page-hero-stats { gap: 12px; }
+                }
             `}</style>
         </div>
     );

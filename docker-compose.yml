@@ -42,7 +42,10 @@ services:
       CHOKIDAR_INTERVAL: "1000"
       VITE_HOST: "${VITE_HOST}"
     command: sh -c "[ -d node_modules/vite ] || npm install; npm run dev -- --host 0.0.0.0"
-    restart: unless-stopped
+    # Vite فقط دستی و برای توسعه: docker compose --profile dev up -d vite
+    # (با up -d عادی/Restart سیستم بالا نمی‌آید؛ وگرنه public/hot ساخته می‌شود و Demo سفید می‌شود)
+    restart: "no"
+    profiles: ["dev"]
     networks:
       - dashboard
 

@@ -66,7 +66,14 @@ Route::middleware('guest')->group(function () {
 // --- مسیرهای احراز هویت‌شده ---
 Route::middleware('auth')->group(function () {
 
- 
+    // جست‌وجویِ سراسری — پیش‌فرض خاموش (GLOBAL_SEARCH_ENABLED)؛ خاموش = 404
+    // پاسخِ JSONِ خالص است؛ HandleInertiaRequests لازم نیست (و هدرِ Vary را بازنویسی می‌کند).
+    // POST + CSRF (میان‌افزارِ web): متنِ جست‌وجو هرگز در URL، لاگِ وب‌سرور، Referer یا session نمی‌آید.
+    Route::post('/global-search', \App\Http\Controllers\GlobalSearchController::class)
+        ->middleware([\App\Http\Middleware\EnsureGlobalSearchEnabled::class, \App\Http\Middleware\ThrottleGlobalSearch::class])
+        ->withoutMiddleware([\App\Http\Middleware\HandleInertiaRequests::class])
+        ->name('global-search');
+
     // داشبورد
     Route::get('/dashboard', function () {
         $userId = Auth::id();

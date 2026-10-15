@@ -11,10 +11,12 @@ import {
     IdcardOutlined,
     CalendarOutlined,
     ClockCircleOutlined,
+    SearchOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import type { User } from '../Types';
+import MenuSearchPalette from './GlobalSearch/MenuSearchPalette';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -66,12 +68,50 @@ const getPersianTime = (date: Date): string => {
     return formatter.format(date);
 };
 
+/** پلتفرمِ مک (و iPad با کیبورد) — میان‌برِ جستجو آنجا ⌘K است، نه Ctrl+K */
+const isMacPlatform = (): boolean =>
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+
+/**
+ * آیا کلیدِ زده‌شده «K» است؟
+ * - چیدمان‌هایِ لاتین (QWERTY، AZERTY، Dvorak، ...): حرفِ منطقی (event.key) ملاک است.
+ * - چیدمان‌هایِ غیرلاتین (مثلاً فارسی که event.key آن «ن» است): جایِ فیزیکیِ کلیدِ K (event.code).
+ */
+const isSearchKey = (e: KeyboardEvent): boolean => {
+    if (e.key.length === 1 && /^[a-z]$/i.test(e.key)) return e.key.toLowerCase() === 'k';
+    return e.code === 'KeyK';
+};
+
 export default function Header({ user, collapsed, isMobile = false, onToggleCollapse }: HeaderProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     // دریافت تعداد پیام‌ها و شماره نسخه از props سراسری اینرشیا
     const { unreadNotificationsCount, appVersion } = usePage().props as any;
     const unreadCount = unreadNotificationsCount || 0;
+
+    // جستجوی سریع منوها (مرحلهٔ ۱) — فقط روی prop فعلیِ menus، بدون درخواستِ شبکه یا دیتابیس
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchFocusToken, setSearchFocusToken] = useState(0);
+    const isMac = isMacPlatform();
+    const openSearch = () => {
+        setSearchOpen(true);
+        setSearchFocusToken((t) => t + 1);
+    };
+
+    // Ctrl+K (ویندوز/لینوکس) یا ⌘K (مک). در مک فقط ⌘K، چون Ctrl+K آنجا در کادرهای متن
+    // «حذف تا انتهای خط» است. Alt/AltGr و Shift (مثلاً Ctrl+Shift+K = کنسولِ Firefox) نادیده گرفته می‌شوند.
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.repeat || e.isComposing || e.altKey || e.shiftKey) return;
+            const modifierOk = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+            if (!modifierOk || !isSearchKey(e)) return;
+            e.preventDefault();
+            setSearchOpen(true);
+            setSearchFocusToken((t) => t + 1);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isMac]);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -228,6 +268,20 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                         flexShrink: 0,
                     }}
                 />
+                {/* جستجوی سریع منوها — دسکتاپ و تبلت (در موبایل با CSS پنهان می‌شود) */}
+                <button
+                    type="button"
+                    className="app-header-search"
+                    onClick={openSearch}
+                    aria-label="جستجوی صفحه‌ها و گزارش‌ها"
+                    aria-haspopup="dialog"
+                    aria-expanded={searchOpen}
+                    aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+                >
+                    <SearchOutlined aria-hidden />
+                    <span className="app-header-search-text">جستجوی صفحه‌ها…</span>
+                    <kbd className="app-header-search-kbd" dir="ltr" aria-hidden>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+                </button>
                 {/* برند فشرده — فقط در موبایل (در دسکتاپ لوگو داخل Sider است) */}
                 <span className="app-header-brand">🎯 داشبورد</span>
             </div>
@@ -301,6 +355,18 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                     </div>
                 </div>
 
+                {/* جستجوی سریع منوها — فقط موبایل (در دسکتاپ/تبلت با CSS پنهان می‌شود) */}
+                <Button
+                    type="text"
+                    className="app-header-search-icon"
+                    aria-label="جستجوی صفحه‌ها و گزارش‌ها"
+                    aria-haspopup="dialog"
+                    aria-expanded={searchOpen}
+                    icon={<SearchOutlined style={{ fontSize: 22 }} aria-hidden />}
+                    onClick={openSearch}
+                    style={{ height: 48, width: 48 }}
+                />
+
                 {/* آیکون پیام‌ها */}
                 <Tooltip title={unreadCount > 0 ? `${unreadCount} پیام خوانده‌نشده` : 'پیام‌ها'}>
                     <Badge count={unreadCount} showZero={false} overflowCount={99} offset={[2, 8]}>
@@ -373,6 +439,13 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                 </Dropdown>
             </Space>
 
+            <MenuSearchPalette
+                open={searchOpen}
+                onClose={() => setSearchOpen(false)}
+                focusToken={searchFocusToken}
+                isMobile={isMobile}
+            />
+
             <style>{`
                 .user-profile-trigger:hover {
                     background: #f5f5f5;
@@ -417,6 +490,46 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                         padding: 5px !important;
                         border-color: transparent !important;
                     }
+                }
+
+                /* جستجوی سریع منوها */
+                .app-header-search {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    height: 40px;
+                    width: 280px;
+                    padding: 0 12px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    background: #f9fafb;
+                    color: #6b7280;
+                    font: inherit;
+                    font-size: 13px;
+                    cursor: pointer;
+                    flex-shrink: 1;
+                    min-width: 0;
+                    transition: border-color 0.2s, background 0.2s;
+                }
+                .app-header-search:hover { border-color: #c7d2fe; background: #fff; }
+                .app-header-search:focus-visible { outline: 2px solid #667eea; outline-offset: -2px; }
+                .app-header-search-text { flex: 1; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .app-header-search-kbd {
+                    font-family: monospace;
+                    font-size: 11px;
+                    padding: 1px 6px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 4px;
+                    background: #fff;
+                    color: #6b7280;
+                }
+                .app-header-search-icon { display: none !important; }
+                @media (max-width: 991px) {
+                    .app-header-search { width: 180px; }
+                }
+                @media (max-width: 767px) {
+                    .app-header-search { display: none !important; }
+                    .app-header-search-icon { display: inline-flex !important; }
                 }
             `}</style>
         </AntHeader>

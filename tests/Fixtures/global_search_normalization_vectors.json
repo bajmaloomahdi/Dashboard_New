@@ -1,0 +1,26 @@
+{
+  "description": "Shared Persian normalization vectors (spec section 4). Must give identical results in PHP (PersianNormalizer) and TypeScript (persianSearch.ts).",
+  "vectors": [
+    { "name": "arabic yeh",                 "input": "پيام",                   "expected": "پیام" },
+    { "name": "arabic kaf",                 "input": "كارتابل", "expected": "کارتابل" },
+    { "name": "zwnj to space",              "input": "پیام‌های", "expected": "پیام های" },
+    { "name": "collapse and trim spaces",   "input": "  پیام   های ", "expected": "پیام های" },
+    { "name": "remove damma",               "input": "مُشتری",       "expected": "مشتری" },
+    { "name": "remove kashida",             "input": "پیـــام", "expected": "پیام" },
+    { "name": "persian digits",             "input": "۱۴۰۵",                   "expected": "1405" },
+    { "name": "arabic-indic digits",        "input": "١٤٠٥",                   "expected": "1405" },
+    { "name": "alef madda",                 "input": "آرشیو",             "expected": "ارشیو" },
+    { "name": "alef variants",              "input": "أإٱ",                         "expected": "ااا" },
+    { "name": "alef maksura",               "input": "ى",                                     "expected": "ی" },
+    { "name": "code with persian digits",   "input": "TSK-۱۴۰۵-۰۰۰۰۵۰", "expected": "tsk-1405-000050" },
+    { "name": "keep yeh with hamza",        "input": "مسئول",             "expected": "مسئول" },
+    { "name": "keep waw with hamza",        "input": "مؤسسه",             "expected": "مؤسسه" },
+    { "name": "keep teh marbuta (N10)",     "input": "مدرسة",             "expected": "مدرسة" },
+    { "name": "keep heh with yeh (N10)",    "input": "خانۀ",                   "expected": "خانۀ" },
+    { "name": "remove lrm rlm zwj",         "input": "a‎b‏c‍d",                     "expected": "abcd" },
+    { "name": "like specials kept",         "input": "50%_[x]",                                    "expected": "50%_[x]" },
+    { "name": "only spaces",                "input": "   ",                                        "expected": "" },
+    { "name": "latin lowercase",            "input": "ABC Def",                                    "expected": "abc def" },
+    { "name": "js whitespace set",          "input": " پیام　 نامه﻿", "expected": "پیام نامه" }
+  ]
+}

@@ -20,6 +20,11 @@ class HandleInertiaRequests extends Middleware
             // شماره نسخه برای نمایش در هدر
             'appVersion' => config('app.version', '1.0.1'),
 
+            // قابلیت‌هایِ دارایِ Feature Flag — UI فقط وقتی true است آن‌ها را نشان می‌دهد
+            'features' => [
+                'globalSearch' => (bool) config('global_search.enabled'),
+            ],
+
             // اطلاعات شرکت (لوگو و نام)
             'company' => fn () => $this->getCompany(),
 

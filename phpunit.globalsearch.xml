@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Global Search tests ONLY — against the isolated LocalDB test database, never Dashboard_DB.
+    Run: php vendor/bin/phpunit -c phpunit.globalsearch.xml
+    Prerequisites (developer machine): (localdb)\GsTest / Dashboard_GsTest with the Gs procedures and synthetic data.
+    Every test also refuses to run (fails) if the connection is not that LocalDB.
+    Redis rate-limit tests run only if GS_RATELIMIT_REDIS_* point to the isolated test Garnet on 127.0.0.1:6390;
+    otherwise they are skipped as "not provisioned".
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="GlobalSearch">
+            <directory>tests/Unit/GlobalSearch</directory>
+            <directory>tests/Feature/GlobalSearch</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="LOG_CHANNEL" value="null" force="true"/>
+        <!-- Isolated LocalDB only (Windows auth, named pipe). -->
+        <env name="DB_CONNECTION" value="sqlsrv" force="true"/>
+        <env name="DB_HOST" value="(localdb)\GsTest" force="true"/>
+        <env name="DB_PORT" value="" force="true"/>
+        <env name="DB_DATABASE" value="Dashboard_GsTest" force="true"/>
+        <env name="DB_USERNAME" value="" force="true"/>
+        <env name="DB_PASSWORD" value="" force="true"/>
+        <env name="DB_ENCRYPT" value="no" force="true"/>
+        <!-- Global Search stays OFF unless a test enables it explicitly. -->
+        <env name="GLOBAL_SEARCH_ENABLED" value="false" force="true"/>
+        <env name="GLOBAL_SEARCH_CRM_ENABLED" value="false" force="true"/>
+        <env name="GLOBAL_SEARCH_MESSAGES_ENABLED" value="false" force="true"/>
+        <env name="GLOBAL_SEARCH_PROJECTS_ENABLED" value="false" force="true"/>
+        <env name="GLOBAL_SEARCH_PROCESSES_ENABLED" value="false" force="true"/>
+        <env name="GLOBAL_SEARCH_RATE_LIMIT_STORE" value="array" force="true"/>
+        <!-- Most tests use the in-memory limiter; Redis/Garnet tests switch to driver=redis explicitly. -->
+        <env name="GLOBAL_SEARCH_RATE_LIMIT_DRIVER" value="cache" force="true"/>
+    </php>
+</phpunit>

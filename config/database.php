@@ -112,6 +112,27 @@ return [
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        // اتصالِ اختصاصیِ جست‌وجویِ سراسری — همان سرور و دیتابیسِ sqlsrv، ولی بدونِ Connection Pooling.
+        // با Poolingِ ODBC در ویندوز، Query Timeout رویِ اولین دستورِ اتصالِ برداشته‌شده از Pool اعمال نمی‌شود
+        // (اندازه‌گیری‌شده)؛ این اتصال همیشه تازه است تا سقفِ زمانیِ جست‌وجو قابلِ اتکا باشد.
+        // فقط ConnectionPooling=0 به DSNِ همین اتصال اضافه می‌شود؛ اتصالِ sqlsrv و Poolingِ آن تغییری نمی‌کند.
+        'sqlsrv_search' => [
+            'driver' => 'sqlsrv',
+            'url' => env('DB_URL'),
+            'host' => env('DB_HOST', 'localhost'),
+            'port' => env('DB_PORT', '1433'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_USERNAME', 'root'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('DB_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
+            'pooling' => false,
+            'appname' => 'RagaGlobalSearch',
+        ],
+
     ],
 
     /*

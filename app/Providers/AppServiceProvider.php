@@ -13,7 +13,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // جست‌وجویِ سراسری — منبعِ مجوزها (sp_GetUserPermissions)؛ در آزمون‌ها با نسخهٔ ساختگی جایگزین می‌شود
+        $this->app->bind(
+            \App\Services\GlobalSearch\Contracts\AccessContextResolver::class,
+            \App\Services\GlobalSearch\Support\SqlAccessContextResolver::class
+        );
+
+        // جست‌وجویِ سراسری — محدودیتِ نرخ: redis (پیش‌فرض، اتمیک، fail-closed) یا cache (فقط آزمون، Store = array).
+        // هر مقدارِ ناشناخته هم Redis در نظر گرفته می‌شود تا محدودیت هرگز بی‌صدا ضعیف نشود.
+        $this->app->bind(\App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class, function () {
+            if (config('global_search.rate_limit.driver') === 'cache') {
+                return new \App\Services\GlobalSearch\RateLimit\CacheSearchRateLimiter(
+                    (string) config('global_search.rate_limit.store', 'array')
+                );
+            }
+
+            return new \App\Services\GlobalSearch\RateLimit\RedisSearchRateLimiter(
+                (array) config('global_search.rate_limit.redis', [])
+            );
+        });
     }
 
     /**

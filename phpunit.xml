@@ -7,9 +7,12 @@
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
+            <!-- Global Search tests need the isolated LocalDB; run them with: phpunit -c phpunit.globalsearch.xml -->
+            <exclude>tests/Unit/GlobalSearch</exclude>
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <exclude>tests/Feature/GlobalSearch</exclude>
         </testsuite>
     </testsuites>
     <source>

@@ -1,100 +1,354 @@
-# راهنمای انتشار و بازگشتِ Global Search — نسخهٔ 1.0.5
+# راهنمای انتشار و بازگشتِ نسخهٔ 1.0.5 (Global Search) — سرورِ ویندوزیِ شرکت
 
-این راهنما برای به‌روزرسانیِ سرورِ شرکت (`C:\Project\Dashboard_New`) از نسخهٔ 1.0.2 به **1.0.5** است.
-هیچ رمز یا مقدارِ محرمانه‌ای در این فایل یا در Git نیست؛ همهٔ مقادیرِ حساس فقط در `.env` همان سرور قرار می‌گیرند.
+**محیطِ هدف:** ویندوز؛ Laravel با **Nginx** و **PHP FastCGI** که هر دو به‌صورتِ **سرویسِ خودکارِ ویندوز** اجرا می‌شوند؛ دسترسی از پورتِ **8080**؛ مسیرِ برنامه `C:\Project\Dashboard_New`. **IIS استفاده نمی‌شود و تغییر نمی‌کند.**
 
-## ۱. اجزایِ قابلیت
+قواعدِ این راهنما:
+- هر دستور برچسب دارد: **[فقط‌خواندنی]** هیچ چیز را تغییر نمی‌دهد؛ **[تغییردهنده]** چیزی را تغییر می‌دهد و فقط در پنجرهٔ انتشار و پس از بکاپ اجرا شود.
+- هر جا «**توقف**» آمده، ادامه ندهید و موضوع را بررسی/گزارش کنید. هیچ پچی کورکورانه اجرا نمی‌شود.
+- هیچ رمز یا مقدارِ محرمانه‌ای در این فایل یا در Git نیست؛ مقادیرِ حساس فقط در `.env` همان سرور.
+- مقادیرِ داخلِ `<...>` باید با مقدارِ واقعیِ سرور جایگزین شوند (بخشِ ۲ آن‌ها را مشخص می‌کند؛ `<PREVIOUS_COMMIT>` در بخشِ ۳ و `<RELEASE_COMMIT>` در بخشِ ۴-۱).
+- همهٔ شرط‌هایِ توقفِ کد، Composer و پچ‌ها در بخشِ ۴-۱ و **پیش از اولین تغییر** بررسی می‌شوند.
 
-| جزء | محل | توضیح |
+## ۱. خلاصه و تصمیمِ کلیدی
+
+- **مرحلهٔ ۱ — انتشارِ کد با Global Searchِ خاموش (بخش‌هایِ ۲ تا ۴):** فقط **پس از گذراندنِ همهٔ بررسی‌هایِ سرور** (بخشِ ۲)، بکاپِ Verifyشده (بخشِ ۳) و همهٔ شرط‌هایِ توقفِ بخشِ ۴ مجاز است. در این حالت به Redis نیازی نیست و رفتارِ سایت مثلِ قبل است (فقط نسخه 1.0.5 نمایش داده می‌شود و Ctrl+K منوها را جست‌وجو می‌کند).
+- **مرحلهٔ ۲ — روشن‌کردنِ Global Search (بخش‌هایِ ۵ تا ۷):** **مجاز نیست** تا زمانی که Redisِ مستقل و پیش‌نیازهایِ **واقعیِ همان سرور** (Docker با کانتینرِ لینوکسی، اجرایِ خودکارِ Docker پس از Restart، سالم‌بودنِ `gs-redis` و آزمونِ اتصالِ برنامه) بررسی و **جداگانه تأیید** شوند. انجامِ مرحلهٔ ۱ به‌معنایِ اجازهٔ مرحلهٔ ۲ نیست. تنها روشِ آزموده‌شده در این پروژه سرویسِ `gs-redis` در `docker-compose.yml` است (بخشِ ۶)؛ اگر این پیش‌نیازها وجود ندارند یا تأیید نشده‌اند، Global Search خاموش می‌ماند.
+- بدونِ Redis، اگر قابلیت به اشتباه روشن شود، جست‌وجو با **503** متوقف می‌شود (fail-closed) و بقیهٔ سایت سالم می‌ماند.
+
+| جزء | محل | نکته |
 |---|---|---|
-| کدِ PHP | `app/Services/GlobalSearch`، `GlobalSearchController`، دو Middleware، `config/global_search.php` | مسیرِ `POST /global-search` (با CSRF) |
-| UI | `resources/js/Components/GlobalSearch/*`، `Header.tsx`، Build در `public/build` (در Git) | نیاز به `npm run build` رویِ سرور **ندارد** |
-| اتصالِ SQL | اتصالِ `sqlsrv_search` در `config/database.php` (همان سرور/دیتابیسِ `sqlsrv`، بدونِ Pooling) | از همان `DB_*` در `.env` استفاده می‌کند |
-| دیتابیس | `sql/085_global_search_procedures.sql`، `sql/086_global_search_crm_address_location.sql` | ۱ تابع + ۴ رویه؛ فقط اشیایِ جدید، بدونِ تغییرِ جدول یا داده |
-| Composer | `predis/predis` 2.4.1 | کلاینتِ Redis برایِ Rate Limit |
-| Rate Limit | سرویسِ `gs-redis` در `docker-compose.yml` (پروفایلِ `globalsearch`) + `docker/gs-redis/redis.conf` | Redisِ **مستقل** از Redisِ اصلی؛ اتمیک و fail-closed |
+| کد | `app/Services/GlobalSearch`، `GlobalSearchController`، دو Middleware، `config/global_search.php`، `routes/web.php` | مسیرِ `POST /global-search` با CSRF؛ تغییری در Nginx لازم نیست |
+| UI | `resources/js/Components/GlobalSearch/*`، `Header.tsx`، `public/build` (در Git) | Build رویِ سرور لازم نیست؛ **Vite اجرا نشود** |
+| SQL | اتصالِ `sqlsrv_search` (همان `DB_*`، بدونِ Connection Pooling) + پچ‌هایِ `085` و `086` | فقط ۱ تابع و ۴ رویهٔ جدید؛ بدونِ تغییرِ جدول یا داده |
+| Composer | `predis/predis` 2.4.1 | کلاینتِ Redis |
+| Rate Limit | سرویسِ `gs-redis` (Docker) | فقط هنگامِ روشن‌کردن |
 
-## ۲. پیش‌نیازها (پیش از روزِ انتشار بررسی شود)
+## ۲. شناختِ سرور (پیش از روزِ انتشار؛ همه [فقط‌خواندنی])
 
-1. **SQL Server 2017 یا بالاتر** (پچِ 086 از `CONCAT_WS` و پچِ 085 از `CREATE OR ALTER` استفاده می‌کند):
-   `SELECT SERVERPROPERTY('ProductVersion');` → نسخهٔ اصلی باید ۱۴ یا بیشتر باشد.
-2. پچ‌هایِ قبلیِ موجود در Git تا `079` رویِ دیتابیسِ شرکت اجرا شده باشند (`php artisan db:patch --status`).
-   پچ‌هایِ 085/086 به جدول‌هایِ CRM، پیام‌ها، پروژه‌ها و Workflow (پچ‌هایِ 014، 039، 046، 055، 056 و …) و مجوزهایِ `CRM_VIEW` و `WORKFLOW_VIEW` وابسته‌اند.
-3. حسابِ اتصالِ برنامه به SQL (همان `DB_USERNAME`) اجازهٔ ساختِ رویه و اجرایِ آن را داشته باشد (پچ‌هایِ پروژه هیچ `GRANT` جداگانه‌ای ندارند).
-4. Docker Compose با همین `docker-compose.yml` (سرویس‌هایِ `app` و `nginx`). اگر سرورِ شرکت به‌جایِ Docker با IIS اجرا می‌شود، بخشِ ۸ را ببینید.
-5. دسترسیِ اینترنت برایِ `composer` (Packagist/GitHub) و Docker Hub (ایمیج `redis:7.4.11-alpine`). اگر سرور اینترنت ندارد، بخشِ ۹ (انتقالِ آفلاین).
+این موارد در مخزن نیستند و **نباید فرض شوند**؛ خروجیِ هرکدام را ثبت کنید.
+
+| مورد | دستور [فقط‌خواندنی] | انتظار / توقف |
+|---|---|---|
+| سرویس‌هایِ Nginx و PHP | `Get-CimInstance Win32_Service \| Where-Object { $_.Name -match 'nginx\|php' -or $_.PathName -match 'nginx\|php-cgi' } \| Select-Object Name, State, StartMode, PathName` | نامِ دو سرویس، `Running` و `Auto`؛ مسیرِ `nginx.exe` و `php-cgi.exe` را ثبت کنید (`<NGINX_SERVICE>`، `<PHP_SERVICE>`، `<NGINX_DIR>`، `<PHP_DIR>`) |
+| پورتِ 8080 | `Get-NetTCPConnection -State Listen -LocalPort 8080 \| ForEach-Object { (Get-Process -Id $_.OwningProcess).Path }` | باید `nginx.exe` باشد |
+| تنظیمِ Nginx | `& "<NGINX_DIR>\nginx.exe" -t -p "<NGINX_DIR>\"` | `test is successful`؛ در فایلِ کانفیگ `root` باید `C:/Project/Dashboard_New/public` و `fastcgi_pass` آدرسِ PHP FastCGI باشد |
+| دستورِ واقعیِ سرویسِ PHP FastCGI | `PathName`ِ سرویس (ردیفِ اول)؛ اگر `PathName` یک Wrapper است (مثلاً `nssm.exe` یا WinSW)، دستورِ واقعی از تنظیماتِ Wrapper خوانده می‌شود (بلوکِ زیر) | ثبت کنید: `<PHP_CGI_EXE>` (مسیرِ دقیقِ `php-cgi.exe`)، `<PHP_CGI_INI_ARGS>` (آرگومانِ `-c <مسیر>` اگر هست؛ وگرنه خالی)، و درگاهِ `-b` (باید با `fastcgi_pass` در Nginx یکی باشد). اگر سرویس `PHPRC` دارد، همان مسیر را به‌صورتِ `-c <مسیر>` در `<PHP_CGI_INI_ARGS>` بگذارید |
+| نسخه و افزونه‌هایِ PHP در **هر دو** محیط | CLI (برایِ artisan و Composer): `& "<PHP_DIR>\php.exe" -v`، `--ini`، `-m`؛ CGI (برایِ سایت): `& "<PHP_CGI_EXE>" <PHP_CGI_INI_ARGS> -v` و `-m` (بلوکِ زیر) | هر دو PHP **8.2+** و **یک نسخه**؛ همهٔ افزونه‌هایِ فهرستِ بلوکِ زیر در **هر دو** `True`. هر `False` یا نسخهٔ متفاوت = **توقف**. (PHP پیش از `php.ini` به‌دنبالِ `php-cli.ini` برایِ CLI و `php-cgi-fcgi.ini` برایِ CGI می‌گردد؛ پس حتی در یک پوشه ممکن است تنظیمات متفاوت باشد.) |
+| php.ini و OPcacheِ سرویس | `& "<PHP_CGI_EXE>" <PHP_CGI_INI_ARGS> -i \| Select-String 'Loaded Configuration File','Scan this dir','opcache.enable','opcache.validate_timestamps'` | فایلِ ini همان باشد که سرویس استفاده می‌کند. اگر `opcache.validate_timestamps => Off` باشد، پس از به‌روزرسانیِ کد باید سرویسِ PHP یک‌بار Restart شود (بخشِ ۴-۶) |
+| مخزنِ Git | `git -C C:\Project\Dashboard_New status -sb` و `git -C C:\Project\Dashboard_New remote -v` | پوشه یک clone با remoteِ GitHub و **بدونِ تغییرِ محلی** باشد؛ در غیرِ این صورت **توقف** |
+| Composer | `& "<PHP_DIR>\php.exe" <COMPOSER_PHAR> --version` | Composer 2؛ اگر نیست یا اینترنت ندارد، **توقف** (بخشِ ۹) |
+| نسخهٔ SQL Server | `sqlcmd -S <SQL_SERVER> <AUTH> -Q "SELECT SERVERPROPERTY('ProductVersion')"` | نسخهٔ اصلی **۱۴+** (SQL Server 2017+؛ پچِ 086 از `CONCAT_WS` استفاده می‌کند). کمتر = **توقف** |
+| `APP_VERSION` در `.env` | `Get-Content C:\Project\Dashboard_New\.env \| Where-Object { $_ -match '^\s*APP_VERSION\s*=' }` (فقط همین کلید؛ محرمانه نیست) | **فقط خروجیِ خالی (کلید تعریف نشده)** پذیرفته است. هر خطِ پیداشده = **توقف** پیش از روزِ انتشار؛ تغییرِ آن تصمیمِ جداگانه است. دلیل: نسخه از `env('APP_VERSION', <پیش‌فرضِ کد>)` خوانده می‌شود و هر تعریفی پیش‌فرضِ کد را کنار می‌گذارد — مقدارِ قدیمی آزمونِ ۴-۷ را خراب می‌کند، `APP_VERSION=1.0.5` باعث می‌شود پس از Rollback هم 1.0.5 نمایش داده شود (گامِ ۶ بخشِ ۸)، و `APP_VERSION=` با مقدارِ خالی نسخه را رشتهٔ خالی نشان می‌دهد |
+| دسترسیِ حسابِ برنامه در SQL | بلوکِ «دسترسیِ SQL» در زیر (با همان اتصالِ `.env` برنامه که `db:patch` استفاده می‌کند) | همهٔ مقادیر مطابقِ انتظارِ زیرِ بلوک **و** تأییدِ دستیِ صریحِ مسئولِ دیتابیس بر پایهٔ همین خروجی؛ هر انحراف یا نبودِ تأیید = **توقف** (این بررسی شرطِ لازم است، نه تضمینِ کافی) |
+| Config/Route Cache | `Test-Path C:\Project\Dashboard_New\bootstrap\cache\config.php`؛ `Get-ChildItem C:\Project\Dashboard_New\bootstrap\cache -Filter 'routes-*.php'` | ثبت کنید که سرور از `config:cache`/`route:cache` استفاده می‌کند یا نه (بخشِ ۴-۶) |
+| Docker (فقط برایِ روشن‌کردنِ Global Search) | `docker version` و `docker info --format '{{.OSType}}'` | باید `linux` باشد. نبودِ Docker یا `windows` = Global Search خاموش می‌ماند (بخشِ ۶) |
+| فضایِ دیسک | `Get-PSDrive C, D` | فضایِ کافی برایِ بکاپِ دیتابیس و کپیِ پوشه |
+
+همان دستورها برایِ کپی (در جدول، نویسهٔ `|` برایِ Markdown به‌صورتِ `\|` آمده است) — همه **[فقط‌خواندنی]**:
+```powershell
+Get-CimInstance Win32_Service | Where-Object { $_.Name -match 'nginx|php' -or $_.PathName -match 'nginx|php-cgi' } | Select-Object Name, State, StartMode, PathName
+Get-NetTCPConnection -State Listen -LocalPort 8080 | ForEach-Object { (Get-Process -Id $_.OwningProcess).Path }
+& "<NGINX_DIR>\nginx.exe" -t -p "<NGINX_DIR>\"
+git -C C:\Project\Dashboard_New status -sb
+git -C C:\Project\Dashboard_New remote -v
+& "<PHP_DIR>\php.exe" <COMPOSER_PHAR> --version
+sqlcmd -S <SQL_SERVER> <AUTH> -C -Q "SELECT SERVERPROPERTY('ProductVersion')"
+Get-Content C:\Project\Dashboard_New\.env | Where-Object { $_ -match '^\s*APP_VERSION\s*=' }
+Test-Path C:\Project\Dashboard_New\bootstrap\cache\config.php
+Get-ChildItem C:\Project\Dashboard_New\bootstrap\cache -Filter 'routes-*.php'
+docker version
+docker info --format '{{.OSType}}'
+Get-PSDrive C, D
+```
+
+`<AUTH>` یعنی روشِ احرازِ هویتِ sqlcmd رویِ آن سرور (`-E` برایِ Windows Authentication یا `-U <user>` و دریافتِ رمز به‌صورتِ تعاملی). رمز را در دستور یا اسکریپت ننویسید.
+
+**دستورِ واقعیِ سرویسِ PHP** — **[فقط‌خواندنی]**؛ فقط اگر `PathName` به یک Wrapper اشاره می‌کند. از متغیرهایِ محیطیِ سرویس فقط `PHPRC` و `PHP_INI_SCAN_DIR` را نمایش دهید:
+```powershell
+# NSSM:
+Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\<PHP_SERVICE>\Parameters" | Select-Object Application, AppParameters, AppDirectory
+@((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\<PHP_SERVICE>\Parameters").AppEnvironmentExtra) | Where-Object { $_ -match '^(PHPRC|PHP_INI_SCAN_DIR)=' }
+# WinSW (فایلِ XML کنارِ exeِ Wrapper با همان نام):
+Select-String -Path "<WRAPPER_DIR>\<WRAPPER_NAME>.xml" -Pattern '<executable>|<arguments>|PHPRC|PHP_INI_SCAN_DIR'
+# در هر حالت (متغیرِ محیطیِ خودِ سرویس و متغیرِ سیستمی):
+@((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\<PHP_SERVICE>").Environment) | Where-Object { $_ -match '^(PHPRC|PHP_INI_SCAN_DIR)=' }
+[Environment]::GetEnvironmentVariable('PHPRC','Machine'); [Environment]::GetEnvironmentVariable('PHP_INI_SCAN_DIR','Machine')
+```
+
+**افزونه‌هایِ PHP در CLI و CGI** — **[فقط‌خواندنی]**؛ CGI با همان آرگومان‌هایِ سرویس:
+```powershell
+& "<PHP_DIR>\php.exe" -v
+& "<PHP_DIR>\php.exe" --ini
+& "<PHP_CGI_EXE>" <PHP_CGI_INI_ARGS> -v
+& "<PHP_CGI_EXE>" <PHP_CGI_INI_ARGS> -i | Select-String 'Loaded Configuration File','Scan this dir','opcache.enable','opcache.validate_timestamps'   # خروجی HTML است؛ مقدار در همان خطِ پیداشده است
+$need = 'pdo_sqlsrv','openssl','mbstring','fileinfo','tokenizer','ctype','dom','libxml','iconv','session','filter','hash','json','pcre'
+$cli = @(& "<PHP_DIR>\php.exe" -m)
+$cgi = @(& "<PHP_CGI_EXE>" <PHP_CGI_INI_ARGS> -m)
+$need | ForEach-Object { '{0,-11} CLI={1,-5} CGI={2}' -f $_, ($cli -contains $_), ($cgi -contains $_) }
+```
+اگر سرویس `PHP_INI_SCAN_DIR` دارد، فقط برایِ دستورهایِ CGI همان مقدار را در همین پنجره تنظیم کنید (`$env:PHP_INI_SCAN_DIR = '<مقدار>'` پیش از آن‌ها و `$env:PHP_INI_SCAN_DIR = $null` پس از آن‌ها؛ تنظیمِ سیستم تغییر نمی‌کند). فهرستِ `$need` همان نیازهایِ `composer.lock` (بخشِ ۴-۲) به‌علاوهٔ `pdo_sqlsrv` است.
+
+**دسترسیِ SQL حسابِ برنامه برایِ پچ‌هایِ 085/086** — **[فقط‌خواندنی]**؛ با همان اتصالی که `db:patch` استفاده می‌کند، بدونِ نمایشِ نامِ کاربری یا رمز. هیچ DDL اجرا نمی‌کند و هیچ مجوزی را تغییر نمی‌دهد. بلوک را **بدونِ تغییر** کپی کنید:
+```powershell
+Set-Location C:\Project\Dashboard_New
+$code = @'
+require 'vendor/autoload.php';
+$a = require 'bootstrap/app.php';
+$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$sql = <<<'SQL'
+SELECT DB_NAME() AS db,
+  HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'CREATE FUNCTION')       AS create_function,
+  HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'CREATE PROCEDURE')      AS create_procedure,
+  HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER')                       AS alter_schema_dbo,
+  HAS_PERMS_BY_NAME('dbo.fn_Gs_Normalize', 'OBJECT', 'ALTER')       AS alter_fn_Gs_Normalize,
+  HAS_PERMS_BY_NAME('dbo.sp_Gs_Search', 'OBJECT', 'ALTER')          AS alter_sp_Gs_Search,
+  HAS_PERMS_BY_NAME('dbo.sp_Gs_SearchMessages', 'OBJECT', 'ALTER')  AS alter_sp_Gs_SearchMessages,
+  HAS_PERMS_BY_NAME('dbo.sp_Gs_SearchProjects', 'OBJECT', 'ALTER')  AS alter_sp_Gs_SearchProjects,
+  HAS_PERMS_BY_NAME('dbo.sp_Gs_SearchProcesses', 'OBJECT', 'ALTER') AS alter_sp_Gs_SearchProcesses,
+  HAS_PERMS_BY_NAME('dbo.SysPatches', 'OBJECT', 'SELECT')           AS syspatches_select,
+  HAS_PERMS_BY_NAME('dbo.SysPatches', 'OBJECT', 'INSERT')           AS syspatches_insert,
+  (SELECT COUNT(*) FROM sys.triggers WHERE parent_id = OBJECT_ID('dbo.SysPatches') AND is_disabled = 0) AS syspatches_enabled_triggers,
+  HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'VIEW DEFINITION')       AS view_definition,
+  (SELECT COUNT(*) FROM sys.triggers WHERE parent_class = 0 AND is_disabled = 0) AS enabled_db_ddl_triggers,
+  HAS_PERMS_BY_NAME('dbo.DevChangeLog', 'OBJECT', 'INSERT')         AS devchangelog_insert,
+  HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW ANY DEFINITION')              AS view_any_definition,
+  (SELECT COUNT(*) FROM sys.server_triggers WHERE is_disabled = 0)  AS enabled_server_triggers,
+  HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'EXECUTE')                     AS execute_schema_dbo
+SQL;
+foreach ((array) Illuminate\Support\Facades\DB::selectOne($sql) as $k => $v) { echo $k, '=', var_export($v, true), PHP_EOL; }
+'@
+& "<PHP_DIR>\php.exe" -r $code; "php exit: $LASTEXITCODE"
+```
+عملیاتِ واقعیِ دو پچ (از رویِ فایل‌ها بررسی شده): فقط `CREATE OR ALTER FUNCTION dbo.fn_Gs_Normalize ... WITH SCHEMABINDING` و `CREATE OR ALTER PROCEDURE` برایِ چهار رویهٔ `dbo.sp_Gs_*`؛ همه در `dbo`، بدونِ `GRANT`، `EXECUTE AS`، SQLِ پویا، ارجاعِ بین‌دیتابیسی یا تغییرِ جدول و داده. تابع به هیچ جدول یا شیئی ارجاع ندارد، پس `SCHEMABINDING` برایِ ساختنش به `REFERENCES` نیاز ندارد. `db:patch` علاوه بر آن از `SysPatches` می‌خواند و در آن درج می‌کند. (sqlsrv ممکن است اعداد را به‌صورتِ `'1'` نشان دهد.)
+
+مجوزِ لازم بسته به این‌که شیء وجود دارد یا نه فرق می‌کند:
+- **شیء وجود ندارد (حالتِ عادیِ این انتشار؛ گامِ ۲ بخشِ ۴-۳ آن را الزامی می‌کند):** ساختن به `CREATE FUNCTION`/`CREATE PROCEDURE` در دیتابیس **و** `ALTER` رویِ schemaِ `dbo` نیاز دارد. انتظار: `create_function`، `create_procedure` و `alter_schema_dbo` همه `1`؛ و پنج ستونِ `alter_fn_*`/`alter_sp_*` همه `NULL`. `NULL` فقط یعنی «این حساب شیء را پیدا نکرد یا نمی‌بیند»، نه لزوماً «شیء وجود ندارد»؛ پس فقط وقتی به‌معنایِ نبودنِ شیء پذیرفته می‌شود که `view_definition` برابرِ `1` باشد **و** گامِ ۲ بخشِ ۴-۳ (پرس‌وجویِ `sys.objects`) هیچ ردیفی برنگرداند. هر `alter_*` غیرِ `NULL` (چه `0` چه `1`) یعنی شیء از قبل هست ← **توقف** (همان شرطِ گامِ ۲ بخشِ ۴-۳).
+- **شیء از قبل وجود دارد (اجرایِ مجدد؛ فقط با تأییدِ صریح):** تغییر به `ALTER` رویِ **خودِ همان شیء** نیاز دارد؛ ستونِ `alter_*` همان شیء باید `1` باشد. `alter_schema_dbo` به‌تنهایی **تضمینِ کافی نیست**: یک `DENY ALTER` رویِ خودِ شیء آن را بی‌اثر می‌کند، و تغییرِ تابعِ `WITH SCHEMABINDING` اگر شیءِ دیگری به آن schema-bound باشد شکست می‌خورد که `HAS_PERMS_BY_NAME` آن را نشان نمی‌دهد. پس شیءِ موجود همیشه بررسیِ دستیِ مسئولِ دیتابیس می‌خواهد.
+- **`SysPatches`:** `syspatches_select` و `syspatches_insert` باید `1` و `syspatches_enabled_triggers` باید `0` باشد (تریگرِ فعال رویِ این جدول می‌تواند درجِ نتیجه را خراب کند ← **توقف** و بررسیِ دستی).
+- **تریگرهایِ DDLِ دیتابیس:** تریگرِ DDL در **زمینهٔ حسابِ برنامه** همراهِ هر `CREATE OR ALTER` اجرا می‌شود و خطایِ آن پچ را متوقف می‌کند. `view_definition` باید `1` باشد؛ وگرنه شمارشِ تریگرها قابلِ اعتماد نیست (کاربر ممکن است تریگرِ موجود را نبیند) ← **توقف**. اگر `enabled_db_ddl_triggers` بیشتر از `0` است: نسخهٔ `trg_DevTrackSchemaChanges` در این مخزن (`routes/console.php`) فقط در `dbo.DevChangeLog` درج می‌کند و `EXECUTE AS` ندارد، پس `devchangelog_insert` باید `1` باشد؛ و چون تریگرِ سرور ممکن است با نسخهٔ مخزن فرق کند، متنِ هر تریگرِ فعال (`SELECT name, OBJECT_DEFINITION(object_id) FROM sys.triggers WHERE parent_class = 0 AND is_disabled = 0`) باید دستی بررسی شود.
+- **تریگرهایِ سطحِ سرور:** تریگرِ DDLِ سرور هم می‌تواند رویِ ساختِ تابع/رویه اجرا شود. `view_any_definition` باید `1` و `enabled_server_triggers` باید `0` باشد؛ در غیرِ این صورت **توقف** و بررسیِ دستی.
+- **`execute_schema_dbo`:** برایِ پچ لازم نیست؛ برایِ **روشن‌کردنِ** Global Search لازم است (بخشِ ۵).
+- تریگرها را غیرفعال یا حذف نکنید؛ هیچ `GRANT` یا تغییرِ دسترسی در این روند انجام نمی‌شود.
+
+**محدودیت و قاعدهٔ توقف:** `HAS_PERMS_BY_NAME` مجوزِ مؤثر (با عضویت در نقش‌ها، `db_owner`/`db_ddladmin`/`sysadmin` و `DENY`) را برایِ همان securableِ نام‌برده نشان می‌دهد، اما DDL را اجرا نمی‌کند، متنِ تریگرها را ارزیابی نمی‌کند، وابستگی‌هایِ schema-bound را نمی‌بیند و به دیدِ متادیتایِ حساب وابسته است. این راهنما بدونِ اتصال به دیتابیسِ سرور نوشته شده و این پرس‌وجو رویِ آن آزموده نشده است. بنابراین نتیجهٔ این بررسی **شرطِ لازم است، نه تضمینِ کافی**: `db:patch` (بخشِ ۴-۳، گامِ ۳) فقط پس از آن مجاز است که **مسئولِ دیتابیس** خروجیِ همین بلوک را دیده و **تأییدِ دستیِ صریح** داده باشد که حسابِ برنامه می‌تواند این عملیات را انجام دهد. هر مقدارِ خلافِ انتظارِ بالا، خطایِ اجرا، یا هر شکی = **توقف**.
 
 ## ۳. بکاپ (اجباری؛ بدونِ بکاپِ Verifyشده ادامه ندهید)
 
-```sql
--- COPY_ONLY: زنجیرهٔ بکاپِ جاری را تغییر نمی‌دهد
-BACKUP DATABASE [Dashboard_DB] TO DISK = N'<مسیرِ امن خارج از پوشهٔ پروژه>\Dashboard_DB_pre_1.0.5.bak'
-  WITH COPY_ONLY, CHECKSUM, COMPRESSION, INIT;
-RESTORE VERIFYONLY FROM DISK = N'<همان مسیر>\Dashboard_DB_pre_1.0.5.bak' WITH CHECKSUM;
+1. **[تغییردهنده — فقط فایلِ بکاپ می‌سازد، داده تغییر نمی‌کند]** بکاپِ کاملِ مستقل (`COPY_ONLY` زنجیرهٔ بکاپِ جاری را تغییر نمی‌دهد):
+   ```powershell
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -b -Q "BACKUP DATABASE [Dashboard_DB] TO DISK = N'<BACKUP_DIR>\Dashboard_DB_pre_1.0.5.bak' WITH COPY_ONLY, CHECKSUM, COMPRESSION, INIT, STATS = 25;"
+   ```
+   `<BACKUP_DIR>` خارج از پوشهٔ پروژه و خارج از مسیرهایِ قابلِ دسترسیِ وب باشد و حسابِ سرویسِ SQL Server در آن اجازهٔ نوشتن داشته باشد. اگر SQL Server نسخهٔ Express است و فشرده‌سازی را پشتیبانی نمی‌کند، `COMPRESSION` را حذف کنید.
+2. **[فقط‌خواندنی]** تأیید:
+   ```powershell
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -b -Q "RESTORE VERIFYONLY FROM DISK = N'<BACKUP_DIR>\Dashboard_DB_pre_1.0.5.bak' WITH CHECKSUM;"
+   ```
+   انتظار: `The backup set on file 1 is valid.` — در غیرِ این صورت **توقف**.
+3. **[تغییردهنده — فقط کپی می‌سازد]** کپیِ کاملِ پوشهٔ برنامه (شاملِ `.env` و `vendor`):
+   ```powershell
+   robocopy C:\Project\Dashboard_New <BACKUP_DIR>\Dashboard_New_pre_1.0.5 /E /COPY:DAT /R:1 /W:1 /XD C:\Project\Dashboard_New\node_modules
+   ```
+   کدِ خروجیِ ۰ تا ۷ یعنی موفق. (`/MIR` استفاده نکنید.)
+4. **[فقط‌خواندنی]** commitِ فعلی را برایِ مقایسه و بازگشت ثبت کنید:
+   ```powershell
+   git -C C:\Project\Dashboard_New rev-parse HEAD
+   git -C C:\Project\Dashboard_New branch --show-current
+   ```
+   هشِ کاملِ ۴۰ نویسه‌ایِ خروجیِ اول `<PREVIOUS_COMMIT>` است. خروجیِ دوم باید `main` باشد؛ در غیرِ این صورت **توقف**.
+
+## ۴. انتشارِ نسخه (Global Search خاموش)
+
+### ۴-۱. بررسی‌هایِ پیش از هر تغییر و دریافتِ نسخهٔ مشخص
+
+**`<RELEASE_COMMIT>`** هشِ کاملِ ۴۰ نویسه‌ایِ commitی است که برایِ انتشار **بررسی و تأیید** شده است. برایِ 1.0.5 در زمانِ نگارشِ این راهنما:
+`cca17f92018145de66188321119609d14e30d5af` (کدِ `2b417fb` + آماده‌سازیِ استقرار). اگر بعداً commitِ دیگری (مثلاً اصلاحِ همین راهنما) جداگانه بررسی و تأیید شد، هشِ همان جایگزین می‌شود. **هرگز `origin/main` یا «آخرین نسخه» را به‌جایِ آن به کار نبرید**؛ هیچ commitِ بررسی‌نشده‌ای منتشر نمی‌شود.
+
+1. **[فقط‌خواندنی]** `git -C C:\Project\Dashboard_New status --porcelain` باید خالی باشد (تغییرِ محلیِ سرور را بدونِ بررسی Overwrite نکنید)، و `git -C C:\Project\Dashboard_New rev-parse HEAD` باید دقیقاً `<PREVIOUS_COMMIT>` باشد. در غیرِ این صورت **توقف**.
+2. **[تغییردهنده — فقط refهایِ remote]** `git -C C:\Project\Dashboard_New fetch origin`
+3. **[فقط‌خواندنی]** تأییدِ commitِ مقصد و مرورِ بازه:
+   ```powershell
+   Set-Location C:\Project\Dashboard_New
+   git cat-file -t <RELEASE_COMMIT>                                          # commit
+   git merge-base --is-ancestor <RELEASE_COMMIT> origin/main; $LASTEXITCODE   # 0 = در شاخهٔ رسمیِ main هست
+   git merge-base --is-ancestor HEAD <RELEASE_COMMIT>; $LASTEXITCODE          # 0 = Fast-forward ممکن است
+   git log --oneline <PREVIOUS_COMMIT>..<RELEASE_COMMIT>
+   git diff --stat <PREVIOUS_COMMIT> <RELEASE_COMMIT>
+   ```
+   انتظار: `commit` و دو بار `0`. اگر سرور رویِ `3179c37` است، `git log` دقیقاً دو خط نشان می‌دهد: `cca17f9 chore(deploy): …` و `2b417fb release: v1.0.5 …`. اگر سرور عقب‌تر است، هر commitِ اضافه باید جزوِ انتشارهایِ قبلاً بررسی‌شده باشد. هر commitِ ناشناخته یا تأییدنشده، یا خروجیِ غیرِ `0` = **توقف**.
+4. **[فقط‌خواندنی]** تغییرِ وابستگی‌ها در همین بازه (این فهرست «عملیاتِ مجازِ Composer» در بخشِ ۴-۲ است):
+   ```powershell
+   git diff <PREVIOUS_COMMIT> <RELEASE_COMMIT> -- composer.json composer.lock | Select-String '^[+-] {8}"[a-z0-9-]+/[a-z0-9.-]+": "|^[+-] {12}"(name|version)": '
+   ```
+   انتظار برایِ بازهٔ `3179c37` تا `cca17f9`: در `composer.json` خطِ `laravel/tinker` فقط به‌خاطرِ ویرگول یک‌بار با `-` و یک‌بار با `+` می‌آید و `+ "predis/predis": "2.4.1"` اضافه می‌شود؛ در `composer.lock` فقط `+ "name": "predis/predis"` و `+ "version": "v2.4.1"`. هر بستهٔ دیگر یا هر خطِ `-` در `composer.lock` = **توقف** (مگر جزوِ انتشارِ قبلاً بررسی‌شده‌ای در همین بازه باشد).
+5. **[فقط‌خواندنی]** تطبیقِ وضعیتِ واقعیِ `SysPatches` با پچ‌هایِ دو نسخه. با همان اتصالی که `db:patch` استفاده می‌کند (`.env` برنامه) و بدونِ نمایشِ هیچ تنظیمی؛ اگر `SysPatches` نباشد چیزی نمی‌سازد. بلوک را **بدونِ تغییر** کپی کنید (کدِ PHP نباید نویسهٔ `"` داشته باشد):
+```powershell
+Set-Location C:\Project\Dashboard_New
+$prev = '<PREVIOUS_COMMIT>'; $rel = '<RELEASE_COMMIT>'
+$code = @'
+require 'vendor/autoload.php';
+$a = require 'bootstrap/app.php';
+$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$db = Illuminate\Support\Facades\DB::connection();
+echo 'DB=', $db->getDatabaseName(), PHP_EOL;
+if (! $db->getSchemaBuilder()->hasTable('SysPatches')) { echo 'NO_SYSPATCHES', PHP_EOL; exit(2); }
+foreach ($db->table('SysPatches')->orderBy('PatchID')->get(['PatchName', 'Status']) as $r) { echo $r->PatchName, '|', $r->Status, PHP_EOL; }
+'@
+$out = @(& "<PHP_DIR>\php.exe" -r $code); "php exit: $LASTEXITCODE"
+$rows        = @($out | Where-Object { $_ -like '*|*' })
+$ok          = @($rows | Where-Object { $_ -like '*|SUCCESS' } | ForEach-Object { ($_ -split '\|')[0] })
+$recorded    = @($rows | ForEach-Object { ($_ -split '\|')[0] })
+$prevPatches = @(git ls-tree --name-only $prev -- sql/ | Where-Object { $_ -like '*.sql' } | ForEach-Object { Split-Path $_ -Leaf })
+$relPatches  = @(git ls-tree --name-only $rel  -- sql/ | Where-Object { $_ -like '*.sql' } | ForEach-Object { Split-Path $_ -Leaf })
+$newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
+'0. DB / table:                   ' + (@($out | Where-Object { $_ -notlike '*|*' }) -join ' ')
+'1. new patches in range:         ' + ($newPatches -join ', ')
+'2. existing patches changed:     ' + (@(git diff --name-status --no-renames $prev $rel -- sql/ | Where-Object { $_ -notmatch '^A\s' }) -join ', ')
+'3. old patches without SUCCESS:  ' + (@($prevPatches | Where-Object { $ok -notcontains $_ }) -join ', ')
+'4. new patches already recorded: ' + (@($newPatches | Where-Object { $recorded -contains $_ }) -join ', ')
+'5. rows not SUCCESS:             ' + (@($rows | Where-Object { $_ -notlike '*|SUCCESS' }) -join '; ')
+'6. SUCCESS rows with no file:    ' + (@($ok | Where-Object { $relPatches -notcontains $_ } | Select-Object -Unique) -join ', ')
+'7. sql\patches folder:           ' + (Test-Path sql\patches) + ' / in release: ' + @(git ls-tree --name-only $rel -- sql/patches).Count
 ```
-- از کلِ پوشهٔ پروژه (شاملِ `.env`) یک کپی خارج از پوشهٔ پروژه و خارج از مسیرهایِ وب بگیرید.
-- از `vendor`ِ داخلِ کانتینر هم کپی بگیرید: `docker cp dashboard_app:/var/www/html/vendor <مسیرِ بکاپ>\container_vendor`.
+   انتظار — هر انحراف = **توقف** و بررسیِ جداگانه:
+   - `php exit: 0` و `0.` برابرِ `DB=Dashboard_DB` (همان دیتابیسِ بکاپِ بخشِ ۳). `NO_SYSPATCHES` یعنی روندِ پچ رویِ این سرور با انتظار هم‌خوان نیست.
+   - `1.` برایِ بازهٔ `3179c37` تا `cca17f9` دقیقاً `085_global_search_procedures.sql, 086_global_search_crm_address_location.sql`. اگر سرور عقب‌تر است، هر پچِ اضافه باید متعلق به commitهایِ بررسی‌شدهٔ گامِ ۳ باشد.
+   - `2.` تا `6.` خالی. (`3.` یعنی پچی که در نسخهٔ فعلی هست ولی `SUCCESS` ندارد؛ `db:patch` آن را **دوباره اجرا می‌کند** — ممکن است قبلاً دستی اجرا شده باشد. رویِ دیتابیسِ توسعه چنین وضعیتی برایِ 005، 031، 033، 034، 035، 045 و 079 دیده شده است. `2.` یعنی پچِ قبلاً اجراشده تغییر کرده و `db:patch` تغییرش را اجرا نمی‌کند.)
+   - `7.` برابرِ `False / in release: 0` (اگر پوشهٔ `sql\patches` باشد، `db:patch` فقط همان را می‌خواند).
+   - ردیف‌هایِ `SysPatches` را با دست اضافه، ویرایش یا حذف نکنید مگر با تأییدِ صریح و جداگانه.
+6. **[تغییردهنده]** فقط پس از گذشتن از گام‌هایِ ۱ تا ۵:
+   ```powershell
+   git -C C:\Project\Dashboard_New merge --ff-only <RELEASE_COMMIT>
+   git -C C:\Project\Dashboard_New rev-parse HEAD     # باید دقیقاً <RELEASE_COMMIT> باشد
+   ```
+   اگر Fast-forward ممکن نبود، **توقف** (از `reset --hard` یا `push --force` استفاده نکنید). شاخهٔ محلیِ `main` رویِ `<RELEASE_COMMIT>` می‌ماند، حتی اگر `origin/main` جلوتر باشد.
+7. **[فقط‌خواندنی]** `Test-Path C:\Project\Dashboard_New\public\hot` باید `False` باشد (وجودِ آن = صفحهٔ سفید؛ **توقف**). `public\build\manifest.json` باید وجود داشته باشد.
 
-## ۴. ترتیبِ انتشار
+### ۴-۲. وابستگی‌هایِ Composer
+نصبِ Production همیشه با `--no-dev` است. همهٔ دستورها با PHPِ CLI (`<PHP_DIR>\php.exe`) اجرا می‌شوند.
 
-> قابلیت تا گامِ ۷ **خاموش** می‌ماند؛ کدِ جدید بدونِ کلیدهایِ `.env` دقیقاً مثلِ قبل رفتار می‌کند.
+1. **[فقط‌خواندنی]** نوعِ نصبِ فعلیِ vendor:
+   ```powershell
+   & "<PHP_DIR>\php.exe" -r "echo json_decode(file_get_contents('C:/Project/Dashboard_New/vendor/composer/installed.json'))->dev ? 'dev' : 'no-dev';"
+   ```
+   انتظار: `no-dev`. اگر `dev` بود، **توقف**: نصبِ `--no-dev` بسته‌هایِ توسعه را حذف می‌کند و با `--no-scripts` فایلِ `bootstrap\cache\packages.php` هنوز به Providerهایِ حذف‌شده اشاره می‌کند (خطایِ کلاسِ ناموجود). تغییرِ نوعِ نصبِ vendor تصمیمِ جداگانه‌ای است و جزوِ این انتشار نیست.
+2. **[فقط‌خواندنی]** سازگاریِ PHPِ CLI با `composer.lock` نسخهٔ جدید (Composer 2.3+):
+   ```powershell
+   & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> check-platform-reqs --lock --no-dev --no-interaction --working-dir=C:\Project\Dashboard_New
+   ```
+   انتظار: همهٔ ردیف‌ها `success`. هر `failed`/`missing` = **توقف** و بازگشتِ کد (بخشِ ۸، گامِ ۲). (برایِ CGI همان افزونه‌ها در بخشِ ۲ بررسی شده‌اند.)
+3. **[فقط‌خواندنی]** شبیه‌سازی:
+   ```powershell
+   & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
+   ```
+   انتظار: هیچ هشدارِ «lock file is not up to date»؛ عملیات دقیقاً همان فهرستِ گامِ ۴-۱-۴. برایِ بازهٔ `3179c37` تا `cca17f9`: **`Package operations: 1 install, 0 updates, 0 removals`** و فقط `Installing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**.
+4. **[تغییردهنده]** همان دستور بدونِ `--dry-run`:
+   ```powershell
+   & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --working-dir=C:\Project\Dashboard_New
+   ```
+   - `--no-dev`: بسته‌هایِ توسعه نصب نمی‌شوند. `--optimize-autoloader` و `--prefer-dist`: تنظیمِ Production (در `composer.json` هم آمده‌اند). `--no-interaction`: بدونِ پرسش.
+   - `--no-scripts` عمدی است: predis پکیجِ Laravel نیست و نیازی به `package:discover` ندارد؛ هیچ دستورِ artisanی ضمنِ نصب اجرا نمی‌شود.
+   - هرگز `composer update` اجرا نکنید؛ فقط `install` از رویِ `composer.lock`.
 
-1. **کد** (در `C:\Project\Dashboard_New`):
+### ۴-۳. پچ‌هایِ دیتابیس (با گام‌هایِ توقف)
+تطبیقِ کاملِ `SysPatches` پیش از merge انجام شده است (بخشِ ۴-۱، گامِ ۵). اگر آنجا توقف داشتید، به این بخش نرسیده‌اید.
+1. **[فقط‌خواندنی]** تأییدِ دوباره با خودِ ابزار (جدولِ `SysPatches` در ۴-۱ وجودش تأیید شده، پس این دستور چیزی نمی‌سازد):
    ```powershell
-   git fetch origin
-   git status            # Working Tree باید تمیز باشد؛ تغییرِ محلی را بدونِ بررسی Overwrite نکنید
-   git merge --ff-only origin/main
+   Set-Location C:\Project\Dashboard_New
+   & "<PHP_DIR>\php.exe" artisan db:patch --status
    ```
-   `public/build` در Git است؛ **Vite را اجرا نکنید** و `public/hot` نسازید.
-2. **Composer داخلِ کانتینر** (vendor یک Volumeِ جداست و با `git pull` به‌روز نمی‌شود):
+   فهرستِ «در انتظار اجرا (Pending)» باید **دقیقاً** همان ردیفِ `1.` در ۴-۱-۵ باشد (برایِ این انتشار: `085_global_search_procedures.sql` و `086_global_search_crm_address_location.sql`). هر تفاوت = **توقف**.
+2. **[فقط‌خواندنی]** این اشیا نباید از قبل وجود داشته باشند (اگر وجود دارند، **توقف** و بررسی):
    ```powershell
-   docker compose exec -w /var/www/html app composer install --dry-run --no-scripts
-   # انتظار: «1 install, 0 updates, 0 removals — predis/predis (v2.4.1)». اگر حذف/به‌روزرسانیِ دیگری دیدید، متوقف شوید.
-   docker compose exec -w /var/www/html app composer install --no-scripts
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name FROM sys.objects WHERE name IN ('fn_Gs_Normalize','sp_Gs_Search','sp_Gs_SearchMessages','sp_Gs_SearchProjects','sp_Gs_SearchProcesses');"
    ```
-   (اگر `vendor`ِ کانتینر با `--no-dev` نصب شده، همین فلگ را هم اضافه کنید تا پکیجی حذف/اضافه نشود؛ ملاک خروجیِ dry-run است.)
-3. **دیتابیس** — فقط با ابزارِ پروژه:
+3. **[تغییردهنده — دیتابیس]** فقط اگر بررسیِ «دسترسیِ SQL» در بخشِ ۲ بدونِ توقف گذشته **و** مسئولِ دیتابیس تأییدِ دستیِ صریح داده است: `& "<PHP_DIR>\php.exe" artisan db:patch` — همهٔ پچ‌هایِ Pending به ترتیبِ نام اجرا می‌شوند (به همین دلیل گامِ ۱ باید دقیقاً همان فهرست را نشان دهد)، با اولین خطا متوقف می‌شود و نتیجه در `SysPatches` ثبت می‌شود.
+   اگر خطا داد: **توقف**؛ دوباره اجرا نکنید. ردیفِ `FAILED` ثبت می‌شود و بخش‌هایِ (batchهایِ) پیش از خطا ممکن است اعمال شده باشند؛ وضعیت گزارش و جداگانه تصمیم‌گیری شود.
+4. **[فقط‌خواندنی]** بررسی:
    ```powershell
-   docker compose exec app php artisan db:patch --status   # 085 و 086 باید «Pending» باشند
-   docker compose exec app php artisan db:patch
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name, type_desc FROM sys.objects WHERE name LIKE 'sp[_]Gs[_]%' OR name LIKE 'fn[_]Gs[_]%'; SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '08[56]%';"
    ```
-   - **گامِ توقف:** پیش از اجرا، خروجیِ `--status` باید **فقط** `085_global_search_procedures.sql` و `086_global_search_crm_address_location.sql` را «Pending» نشان دهد.
-     اگر پچِ قدیمی‌تری هم Pending است (مثلاً به این دلیل که قبلاً دستی اجرا شده و در `SysPatches` ثبت نشده)، `db:patch` آن را **هم** اجرا می‌کند؛
-     در این حالت اجرا نکنید و ابتدا وضعیتِ همان پچ‌ها را بررسی کنید (رویِ دیتابیسِ توسعه چنین موردی برایِ 005، 031، 033، 034، 035، 045 و 079 دیده شده است).
-   - `db:patch` فایل‌ها را به ترتیبِ نام اجرا می‌کند، اجراشده‌ها را از `SysPatches` تشخیص می‌دهد و **دوباره اجرا نمی‌کند**؛ با اولین خطا متوقف می‌شود.
-   - هر دو پچ `CREATE OR ALTER` هستند؛ اجرایِ مجددِ «085 سپس 086» بدونِ خطا و با همان نتیجهٔ نهایی است (آزموده‌شده).
-   - **هرگز 085 را به‌تنهایی پس از 086 دستی اجرا نکنید** (رویهٔ `sp_Gs_Search` به نسخهٔ پیش از اصلاحِ جست‌وجویِ آدرس برمی‌گردد). اگر اجرایِ دستی لازم شد، همیشه 085 و سپس 086.
-   - بررسی:
-     ```sql
-     SELECT name, type_desc FROM sys.objects
-     WHERE name IN ('fn_Gs_Normalize','sp_Gs_Search','sp_Gs_SearchMessages','sp_Gs_SearchProjects','sp_Gs_SearchProcesses');
-     SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '08[56]%';
-     ```
-4. **بررسیِ سلامتِ پایه (قابلیت هنوز خاموش):** صفحهٔ ورود 200، نسخهٔ نمایش‌داده‌شده 1.0.5، ورود/خروج و صفحه‌هایِ اصلی عادی؛ پنجرهٔ Ctrl+K فقط منوها را جست‌وجو می‌کند.
-5. **Redis مستقلِ Rate Limit**:
-   - یک رمزِ قویِ تصادفی بسازید (فقط `A-Z a-z 0-9 _ -`، حداقل ۳۲ نویسه)، مثلاً:
-     ```powershell
-     $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
-     [Convert]::ToBase64String($b).TrimEnd('=').Replace('+','-').Replace('/','_')
-     ```
-   - در `.env` سرور (نه در Git):
-     ```
-     GS_RATELIMIT_REDIS_HOST=gs-redis
-     GS_RATELIMIT_REDIS_PORT=6379
-     GS_RATELIMIT_REDIS_PASSWORD=<رمزِ ساخته‌شده>
-     ```
-   - راه‌اندازی (پایدار؛ با `restart: unless-stopped` پس از Restartِ سرور خودکار بالا می‌آید):
-     ```powershell
-     docker compose --profile globalsearch up -d gs-redis
-     docker inspect dashboard_gs_redis --format "{{.State.Health.Status}}"   # healthy
-     ```
-   - Redisِ اصلیِ برنامه دست نمی‌خورد. `gs-redis` فقط رویِ شبکهٔ داخلیِ Compose و `127.0.0.1:6392` در دسترس است؛ ACL فقط کلیدهایِ `gs:rl:*` و دستورهایِ لازمِ Rate Limit را اجازه می‌دهد؛ ذخیره‌سازی ندارد.
-6. **بررسیِ اتصالِ برنامه به Redis** (بدونِ چاپِ رمز):
+   انتظار: ۵ شیء و دو ردیفِ `SUCCESS`.
+
+نکته‌هایِ ایمنی:
+- هر دو پچ `CREATE OR ALTER` هستند؛ اجرایِ مجددِ «085 سپس 086» بدونِ خطا و با همان نتیجه است (در محیطِ ایزوله آزموده شد).
+- **هرگز 085 را به‌تنهایی پس از 086 اجرا نکنید** (اصلاحِ جست‌وجویِ آدرس برمی‌گردد). اجرایِ دستی فقط به ترتیبِ 085 سپس 086.
+- اگر سرور تریگرِ DDLِ `trg_DevTrackSchemaChanges` دارد، این دو پچ در `DevChangeLog` هم ثبت می‌شوند؛ این ثبت بی‌اثر است، ولی حسابِ برنامه باید اجازهٔ درج در `DevChangeLog` را داشته باشد (بررسیِ «دسترسیِ SQL» در بخشِ ۲).
+### ۴-۴. `.env` برایِ این مرحله
+هیچ کلیدِ Global Search لازم نیست (پیش‌فرضِ کد خاموش است). اگر کلیدها از قبل وجود دارند، **[فقط‌خواندنی]** فقط کلیدهایِ `GLOBAL_SEARCH_*` و **مقدارشان** را بررسی کنید (این مقادیر فقط `true`/`false` و محرمانه نیستند):
+```powershell
+Get-Content C:\Project\Dashboard_New\.env | Where-Object { $_ -match '^\s*GLOBAL_SEARCH_' } | ForEach-Object { ($_ -split '=')[0] + ' = ' + ($_ -split '=', 2)[1] }
+```
+هیچ کلیدِ دیگری را نمایش ندهید (به‌ویژه `GS_RATELIMIT_REDIS_PASSWORD`، `DB_*` و `APP_KEY`؛ الگویِ بالا آن‌ها را نشان نمی‌دهد). در این مرحله همه باید `false` یا تعریف‌نشده باشند.
+### ۴-۵. پاک‌سازیِ امنِ کشِ Laravel
+**[تغییردهنده — فقط فایل‌هایِ کامپایل‌شده را حذف می‌کند؛ به داده دست نمی‌زند]**
+```powershell
+Set-Location C:\Project\Dashboard_New
+& "<PHP_DIR>\php.exe" artisan config:clear
+& "<PHP_DIR>\php.exe" artisan route:clear
+& "<PHP_DIR>\php.exe" artisan view:clear
+```
+- اگر در بخشِ ۲ دیدید سرور از `config:cache`/`route:cache` استفاده می‌کرد، همان را دوباره بسازید: `artisan config:cache` و `artisan route:cache`.
+- **`cache:clear` و `optimize:clear` را اجرا نکنید**؛ لازم نیستند و کلِ کشِ برنامه را پاک می‌کنند.
+
+### ۴-۶. OPcacheِ PHP FastCGI
+- اگر `opcache.validate_timestamps` روشن است (پیش‌فرضِ PHP)، فایل‌هایِ جدید ظرفِ چند ثانیه خوانده می‌شوند؛ اقدامی لازم نیست.
+- اگر خاموش است: **[تغییردهنده — قطعِ کوتاه]** `Restart-Service <PHP_SERVICE>`. Nginx نیازی به Restart ندارد (کانفیگش تغییر نکرده است).
+
+### ۴-۷. آزمونِ سلامت (قابلیت خاموش) — همه [فقط‌خواندنی]
+```powershell
+$r = Invoke-WebRequest http://localhost:8080/login -UseBasicParsing
+$r.StatusCode                                                   # 200
+[regex]::Match($r.Content, '"appVersion":"[^"]+"').Value         # "appVersion":"1.0.5"
+[regex]::Match($r.Content, '"globalSearch":(true|false)').Value  # "globalSearch":false
+```
+سپس با یک حسابِ واقعی: ورود/خروج، داشبورد، CRM، نامه‌ها، پروژه‌ها و فرایندها عادی؛ Ctrl+K فقط منوها را نشان می‌دهد؛ `storage\logs\laravel.log` خطایِ جدید ندارد. **انتشارِ کد در این نقطه کامل است.**
+
+## ۵. پیش از روشن‌کردن: چه چیزی لازم است
+همهٔ موارد زیر باید **پیش از** بخشِ ۷ تأیید شده باشند؛ نبودِ هرکدام = **توقف** و Global Search خاموش می‌ماند:
+1. Redisِ مستقلِ آماده و سالم (بخشِ ۶).
+2. **اجرایِ خودکارِ Docker پس از Restartِ سرور تأیید شده باشد:** پس از یک Restartِ برنامه‌ریزی‌شدهٔ سرور (که خودش تغییردهنده است و پنجره و تأییدِ جداگانه می‌خواهد)، **بدونِ ورودِ هیچ کاربری به ویندوز**، `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}}"` باید `healthy` بدهد. تنظیمِ «شروع پس از ورودِ کاربر» در Docker Desktop یا `Automatic` بودنِ سرویسِ Docker به‌تنهایی کافی نیست؛ اگر این آزمون انجام نشده یا موفق نبوده، **توقف**.
+3. در بررسیِ «دسترسیِ SQL» بخشِ ۲، `execute_schema_dbo` برابرِ `1` باشد (یا دسترسیِ اجرایِ چهار رویهٔ `dbo.sp_Gs_*` توسطِ مسئولِ دیتابیس تأیید شده باشد).
+4. پنجرهٔ تغییرِ جداگانه و یک حسابِ دارایِ `CRM_VIEW`/`WORKFLOW_VIEW` و یک حسابِ بدونِ آن‌ها برایِ آزمون.
+
+## ۶. Redisِ اختصاصیِ Global Search
+
+**وابستگیِ صریح:** راهِ آزموده‌شده سرویسِ `gs-redis` در `docker-compose.yml` است (ایمیج `redis:7.4.11-alpine`، پروفایلِ `globalsearch`). این یعنی رویِ سرورِ شرکت باید **Docker با قابلیتِ اجرایِ کانتینرِ لینوکسی** (`docker info --format '{{.OSType}}'` → `linux`) نصب باشد.
+- اگر Docker نیست یا فقط کانتینرِ ویندوزی اجرا می‌کند: **Global Search خاموش بماند.** در این پروژه هیچ جایگزینِ دیگری برایِ تولید آزموده و تأیید نشده است؛ هر گزینهٔ دیگر (از جمله اجرایِ Redis-compatible به‌صورتِ سرویسِ ویندوز) پیش از استفاده باید جداگانه ارزیابی، آزموده و تأیید شود.
+- **پایداری پس از Restartِ سرور:** کانتینر `restart: unless-stopped` دارد، ولی فقط وقتی دوباره بالا می‌آید که **خودِ Docker** پس از Restart اجرا شود. Docker Desktop به‌طورِ معمول پس از ورودِ کاربر شروع می‌شود؛ اجرایِ خودکارِ Docker رویِ این سرور باید طبقِ بخشِ ۵ (موردِ ۲) **آزموده و تأیید** شود؛ تا آن زمان Global Search روشن نمی‌شود. اگر پس از روشن‌شدن Docker بالا نیاید، جست‌وجو با 503 متوقف می‌شود و بقیهٔ سایت سالم است.
+- اتصالِ برنامه: PHPِ این سرور خارج از Docker اجرا می‌شود، پس از طریقِ loopbackِ منتشرشده وصل می‌شود: `127.0.0.1:6392`. این پورت فقط رویِ `127.0.0.1` منتشر است و از شبکه در دسترس نیست. اگر پورتِ 6392 رویِ سرور اشغال است، در `.env` مقدارِ `GS_REDIS_HOST_PORT` را عوض کنید و همان را در `GS_RATELIMIT_REDIS_PORT` بگذارید.
+- Redisِ اصلیِ برنامه (اگر وجود دارد) هیچ نقشی ندارد و دست نمی‌خورد.
+- **هشدار — Docker Compose رویِ سرورِ شرکت:** اجرایِ عمومیِ `docker compose up -d` (یا هر `up` بدونِ نامِ سرویس)، `docker compose down` و `--remove-orphans` **مجاز نیست**. `docker-compose.yml` سرویس‌هایِ `app` (PHP-FPM) و `nginx` (پورت‌هایِ 8080 و 443) را هم دارد که با Nginx و PHPِ ویندوزی تداخل می‌کنند. فقط پس از تأییدِ پیش‌نیازهایِ همین بخش، و فقط با هدف‌گرفتنِ صریحِ سرویسِ `gs-redis` (گامِ ۴ زیر).
+
+گام‌ها:
+1. **[فقط‌خواندنی]** `Get-NetTCPConnection -State Listen -LocalPort 6392 -ErrorAction SilentlyContinue` — باید خالی باشد.
+2. **[فقط‌خواندنی]** ساختِ رمزِ قوی (فقط `A-Z a-z 0-9 _ -`، حداقل ۳۲ نویسه؛ خروجی را جایی جز `.env` ذخیره نکنید):
    ```powershell
-   docker compose exec app php -r "require 'vendor/autoload.php'; `$a = require 'bootstrap/app.php'; `$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); var_dump(`$a->make(App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class)->attempt('deploy-check', 20, 10)->allowed);"
-   # انتظار: bool(true)
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+   [Convert]::ToBase64String($b).TrimEnd('=').Replace('+','-').Replace('/','_')
    ```
-7. **فعال‌سازی** — در `.env`:
+3. **[تغییردهنده]** افزودن به `.env` سرور (نه Git):
+   ```
+   GS_RATELIMIT_REDIS_HOST=127.0.0.1
+   GS_RATELIMIT_REDIS_PORT=6392
+   GS_RATELIMIT_REDIS_PASSWORD=<رمزِ ساخته‌شده>
+   ```
+   پیش از افزودن بررسی کنید این کلیدها تکراری نشوند (در `.env` اولین تعریف معتبر است).
+4. **[تغییردهنده]** راه‌اندازیِ فقط همین سرویس (نامِ `gs-redis` و `--no-deps` الزامی است؛ سرویس‌هایِ دیگرِ compose اجرا نمی‌شوند):
+   ```powershell
+   Set-Location C:\Project\Dashboard_New
+   docker compose --profile globalsearch up -d --no-deps gs-redis
+   ```
+   اگر سرور به Docker Hub دسترسی ندارد، بخشِ ۹.
+5. **[فقط‌خواندنی]** `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}} {{.HostConfig.RestartPolicy.Name}}"` → `healthy unless-stopped`.
+6. **[فقط‌خواندنی]** اتصالِ برنامه (بدونِ چاپِ رمز؛ فقط یک شمارندهٔ کوتاه‌عمر در خودِ gs-redis ثبت می‌شود):
+   ```powershell
+   Set-Location C:\Project\Dashboard_New
+   & "<PHP_DIR>\php.exe" -r "require 'vendor/autoload.php'; `$a = require 'bootstrap/app.php'; `$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); var_dump(`$a->make(App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class)->attempt('deploy-check', 20, 10)->allowed);"
+   ```
+   انتظار: `bool(true)`. خطا = Global Search روشن نشود.
+
+## ۷. روشن‌کردنِ Global Search
+1. **[تغییردهنده]** در `.env`:
    ```
    GLOBAL_SEARCH_ENABLED=true
    GLOBAL_SEARCH_CRM_ENABLED=true
@@ -102,41 +356,71 @@ RESTORE VERIFYONLY FROM DISK = N'<همان مسیر>\Dashboard_DB_pre_1.0.5.bak'
    GLOBAL_SEARCH_PROJECTS_ENABLED=true
    GLOBAL_SEARCH_PROCESSES_ENABLED=true
    ```
-   فقط مقدارِ دقیقِ `true` روشن می‌کند. اگر رویِ سرور `php artisan config:cache` استفاده می‌شود، پس از تغییرِ `.env` دوباره اجرا شود (در این پروژه Config Cache وجود ندارد و تغییر از درخواستِ بعدی اعمال می‌شود).
+   فقط مقدارِ دقیقِ `true` روشن می‌کند.
+2. اگر سرور Config Cache دارد: **[تغییردهنده]** `artisan config:cache`؛ وگرنه تغییر از درخواستِ بعدی اعمال می‌شود.
+3. آزمون — همه [فقط‌خواندنی]:
+   - صفحهٔ ورود: `"globalSearch":true`.
+   - حسابِ دارایِ `CRM_VIEW` و `WORKFLOW_VIEW`: Ctrl+K → نامِ یک طرف‌حساب یا یک شهر (مثلاً «تهران») → گروه‌هایِ CRM، نامه‌ها، پروژه‌ها، فرایندها.
+   - حسابِ بدونِ `CRM_VIEW`: گروهِ CRM **نمایش داده نمی‌شود**؛ نامه‌ها فقط برایِ فرستنده/گیرنده/رونوشت؛ پروژه‌ها فقط برایِ سازنده/عضوِ فعال؛ فرایندها فقط با `WORKFLOW_VIEW`.
+   - بیش از ۲۰ جست‌وجو در ۱۰ ثانیه: پیامِ «تعداد درخواست‌ها زیاد است» (429).
+   - `laravel.log` متنِ جست‌وجو را ثبت نمی‌کند؛ هشدارهایِ `global_search.*` فقط نامِ کلاسِ خطا دارند.
 
-## ۵. بررسیِ سلامت پس از فعال‌سازی
+## ۸. خاموش‌کردنِ فوری و بازگشت
 
-- صفحهٔ ورود حاویِ `"globalSearch":true` است.
-- با یک حسابِ دارایِ `CRM_VIEW` و `WORKFLOW_VIEW`: Ctrl+K → «تهران» یا نامِ یک طرف‌حساب → گروه‌هایِ طرف‌حساب، نامه‌ها، پروژه‌ها و فرایندها.
-- با حسابِ بدونِ `CRM_VIEW`: گروهِ CRM نمایش داده **نمی‌شود**؛ نامه‌ها فقط برایِ فرستنده/گیرنده/رونوشت؛ پروژه‌ها فقط برایِ سازنده/عضوِ فعال.
-- درخواستِ بدونِ ورود: 401/419. بیش از ۲۰ جست‌وجو در ۱۰ ثانیه: 429.
-- قطعِ `gs-redis`: جست‌وجو با 503 متوقف می‌شود و بقیهٔ سایت سالم می‌ماند (fail-closed).
-- لاگ (`storage/logs/laravel.log`) متنِ جست‌وجو را ثبت نمی‌کند؛ هشدارهایِ `global_search.*` فقط نامِ کلاسِ خطا دارند.
+### خاموش‌کردنِ فوری (بدونِ قطعی)
+1. **[تغییردهنده]** در `.env`: `GLOBAL_SEARCH_ENABLED=false`
+2. اگر سرور Config Cache دارد: **[تغییردهنده]** `artisan config:cache` (یا `artisan config:clear`).
+3. **[فقط‌خواندنی]** صفحهٔ ورود باید `"globalSearch":false` را نشان دهد. مسیرِ جست‌وجو 404 می‌شود و Ctrl+K فقط منوها را جست‌وجو می‌کند. نیازی به Restartِ سرویس، Build یا تغییرِ دیتابیس نیست.
 
-## ۶. خاموش‌کردنِ سریع
+### بازگشت به نسخهٔ قبل (فقط کد و vendor)
 
-در `.env`: `GLOBAL_SEARCH_ENABLED=false` — از درخواستِ بعدی، مسیر 404 می‌شود و Ctrl+K فقط منوها را جست‌وجو می‌کند. نیازی به Restart، Build یا تغییرِ دیتابیس نیست.
+> **مهم: بازگشتِ کد، دیتابیس را به حالتِ پیش از انتشار برنمی‌گرداند و بازگشتِ کامل یا بدونِ اثر نیست.**
+> - تابع و چهار رویهٔ پچ‌هایِ 085/086 در `Dashboard_DB` **باقی می‌مانند** (کدِ قبلی از آن‌ها استفاده نمی‌کند).
+> - ردیف‌هایِ `SUCCESS` این پچ‌ها در `SysPatches` **باقی می‌مانند**؛ در انتشارِ دوباره `db:patch` آن‌ها را اجرا نمی‌کند. در آن انتشار ردیفِ `4.` بررسیِ ۴-۱-۵ همین دو پچ را نشان می‌دهد، `db:patch --status` (۴-۳، گامِ ۱) آن‌ها را Pending نشان نمی‌دهد و گامِ ۲ بخشِ ۴-۳ پنج شیء را موجود می‌یابد؛ این انحرافِ شناخته‌شده باید پیش از ادامه صریحاً بررسی و تأیید شود.
+> - اشیا یا ردیف‌هایِ `SysPatches` را با دست حذف یا ویرایش نکنید.
+> - برگرداندنِ کاملِ دیتابیس فقط با Restore از بکاپِ بخشِ ۳ ممکن است: آخرین راه‌حل است، همهٔ داده‌هایِ ثبت‌شده پس از بکاپ را از بین می‌برد، به تأییدِ صریح و جداگانه نیاز دارد و جزوِ این روند نیست.
 
-## ۷. بازگشت (Rollback)
+1. خاموش‌کردنِ فوری (بالا).
+2. **[تغییردهنده]** کد:
+   ```powershell
+   git -C C:\Project\Dashboard_New checkout <PREVIOUS_COMMIT>
+   git -C C:\Project\Dashboard_New rev-parse HEAD     # باید دقیقاً <PREVIOUS_COMMIT> باشد
+   ```
+   (همان مقدارِ بخشِ ۳-۴؛ تاریخچه را بازنویسی نکنید: نه `reset --hard`، نه `push --force`.) پس از این دستور مخزن در حالتِ **detached HEAD** است و شاخهٔ `main` هنوز به `<RELEASE_COMMIT>` اشاره می‌کند؛ این عمدی است. `git checkout main` خودش کدِ نسخهٔ جدید را برمی‌گرداند، پس فقط در یک انتشارِ مجددِ تأییدشده اجرا شود: بخش‌هایِ ۳ و ۴ با `<PREVIOUS_COMMIT>` برابرِ همین commitِ فعلی دنبال شوند، با دو تفاوت: در ۳-۴ خروجیِ `branch --show-current` خالی است (detached؛ قابلِ انتظار)، و در ۴-۱-۶ به‌جایِ `merge` دستورِ `git -C C:\Project\Dashboard_New checkout main` اجرا شود که پس از آن `rev-parse HEAD` باید دقیقاً `<RELEASE_COMMIT>` باشد؛ در غیرِ این صورت **توقف**.
+3. **[فقط‌خواندنی سپس تغییردهنده]** Composer (همان گزینه‌هایِ Production در بخشِ ۴-۲):
+   ```powershell
+   & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
+   ```
+   انتظار: دقیقاً عکسِ فهرستِ ۴-۱-۴؛ برایِ بازهٔ `3179c37` تا `cca17f9`: `Package operations: 0 installs, 0 updates, 1 removal` و فقط `Removing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**. سپس همان دستور بدونِ `--dry-run`.
+4. **[تغییردهنده]** کش: `artisan config:clear`، `route:clear`، `view:clear` (و اگر سرور از قبل استفاده می‌کرد، `config:cache`/`route:cache`)؛ اگر OPcache بدونِ validate_timestamps است، `Restart-Service <PHP_SERVICE>`.
+5. Redis (فقط اگر در بخشِ ۶ راه‌اندازی شده بود): **[تغییردهنده]** `docker stop dashboard_gs_redis` (داده‌ای ندارد؛ کانتینر حذف نمی‌شود). از `docker compose down` استفاده نکنید.
+6. **[فقط‌خواندنی]** آزمونِ سلامتِ بخشِ ۴-۷: کدِ `200` و `appVersion` نسخهٔ قبلی (نه `1.0.5`).
 
-1. `GLOBAL_SEARCH_ENABLED=false` (کافی برایِ توقفِ کاملِ قابلیت).
-2. در صورتِ نیاز به بازگشتِ کد: `git checkout <commitِ نسخهٔ قبل>` (پیش از 1.0.5: `3179c37`) یا بازگرداندنِ کپیِ پوشه از بکاپ، سپس `composer install` داخلِ کانتینر با dry-run.
-3. اشیایِ دیتابیسِ 085/086 فقط رویه/تابعِ جدید هستند و بدونِ قابلیت استفاده نمی‌شوند؛ نگه‌داشتنِ آن‌ها بی‌خطر است. بازگرداندنِ کاملِ دیتابیس از بکاپ فقط آخرین راه‌حل است (داده‌هایِ پس از بکاپ از دست می‌رود).
-4. `gs-redis` را می‌توان متوقف کرد: `docker stop dashboard_gs_redis` (داده‌ای ندارد).
-
-## ۸. اگر سرورِ شرکت با IIS اجرا می‌شود (نه Docker)
-
-- `gs-redis` همچنان با Docker اجرا می‌شود و فقط رویِ `127.0.0.1:6392` منتشر است؛ در `.env`: `GS_RATELIMIT_REDIS_HOST=127.0.0.1` و `GS_RATELIMIT_REDIS_PORT=6392`.
-- Composer با PHPِ میزبان: `php composer.phar install --dry-run --no-scripts` سپس بدونِ `--dry-run`؛ `db:patch` با `php artisan db:patch`.
-- PHPِ IIS باید `pdo_sqlsrv` داشته باشد. اگر IIS و Docker هر دو از یک `.env` استفاده کنند، فقط یکی از دو مقدارِ Host قابلِ استفاده است؛ برایِ سرویس‌دهیِ دیگری جست‌وجو با 503 متوقف می‌شود (امن).
-
-## ۹. انتقالِ آفلاین (اگر سرور اینترنت ندارد)
-
-- ایمیج: رویِ ماشینِ توسعه `docker save redis:7.4.11-alpine -o redis-7.4.11-alpine.tar` و رویِ سرور `docker load -i redis-7.4.11-alpine.tar`.
-- Predis: پوشهٔ `vendor/predis` و فایل‌هایِ `vendor/composer/*` از محیطی با همان `composer.lock`، یا راه‌اندازیِ یک Composer Cacheِ محلی. (پیش‌نهاد: پیش از روزِ انتشار دسترسیِ `composer` رویِ سرور آزموده شود.)
+## ۹. سرورِ بدونِ دسترسیِ اینترنت
+- **Composer:** بدونِ دسترسی به Packagist/GitHub نصبِ predis ممکن نیست. یا دسترسیِ موقت فراهم شود، یا انتقالِ `vendor` از محیطی با همان `composer.lock` و همان نسخهٔ PHP — این روش رویِ سرورِ شرکت آزموده نشده و پیش از استفاده باید تأیید شود. تا آن زمان انتشار را متوقف کنید.
+- **ایمیجِ Redis:** رویِ ماشینی که ایمیج را دارد `docker save redis:7.4.11-alpine -o redis-7.4.11-alpine.tar` و رویِ سرور `docker load -i redis-7.4.11-alpine.tar` (فقط اگر Docker رویِ سرور وجود دارد).
 
 ## ۱۰. نکته‌هایِ امنیتی
+- `.env`، رمزِ Redis، بکاپ‌ها و لاگ‌ها هرگز وارد Git نشوند و در خروجیِ دستورها نمایش داده نشوند.
+- رمزِ Redis در متغیرِ محیطیِ کانتینر قرار می‌گیرد و با `docker inspect` قابلِ مشاهده است؛ دسترسیِ Docker رویِ سرور را محدود نگه دارید.
+- آزمون‌هایِ خودکار (`phpunit -c phpunit.globalsearch.xml`) فقط برایِ LocalDBِ ایزولهٔ توسعه هستند و **رویِ سرورِ شرکت اجرا نشوند**.
+- IIS در این روند نقشی ندارد و نباید تغییر کند.
+- رویِ سرورِ شرکت `docker compose up -d`ِ عمومی، `docker compose down` و `--remove-orphans` مجاز نیست؛ فقط `gs-redis` با نامِ صریح (بخشِ ۶).
 
-- `.env`، رمزِ Redis، فایل‌هایِ بکاپ و لاگ‌ها هرگز وارد Git نشوند.
-- رمزِ Redis در متغیرِ محیطیِ کانتینر قرار می‌گیرد و برایِ کسی که دسترسیِ `docker inspect` دارد قابلِ مشاهده است؛ دسترسیِ Docker رویِ سرور را محدود نگه دارید.
-- آزمون‌هایِ خودکار (`phpunit -c phpunit.globalsearch.xml`) فقط رویِ LocalDBِ ایزولهٔ توسعه اجرا می‌شوند و نباید رویِ سرورِ شرکت اجرا شوند.
+## ۱۱. فهرستِ کنترلِ روزِ انتشار
+
+| # | گام | نوع | توقف اگر |
+|---|---|---|---|
+| 1 | شناختِ سرور (بخشِ ۲) | فقط‌خواندنی | PHP < 8.2؛ نسخهٔ متفاوتِ CLI و CGI؛ نبودِ هر افزونهٔ فهرست در CLI **یا** CGI؛ SQL < 2017؛ Working Treeِ ناتمیز؛ نبودِ Composer؛ هر تعریفِ `APP_VERSION` در `.env`؛ خروجیِ «دسترسیِ SQL» خلافِ انتظار، تریگرِ بررسی‌نشده، یا نبودِ تأییدِ دستیِ مسئولِ دیتابیس |
+| 2 | بکاپ + VERIFYONLY + کپیِ پوشه + ثبتِ `<PREVIOUS_COMMIT>` | ایجادِ فایل | VERIFYONLY ناموفق؛ شاخه `main` نباشد |
+| 3 | تعیینِ `<RELEASE_COMMIT>`، `fetch`، مرورِ commitهایِ بازه | فقط‌خواندنی (+ refهایِ remote) | commitِ ناشناخته؛ مقصد در `origin/main` نباشد؛ Fast-forward ممکن نباشد |
+| 4 | تغییراتِ `composer.json`/`composer.lock` در بازه | فقط‌خواندنی | بسته‌ای جز موارد بررسی‌شده (برایِ این انتشار فقط افزودنِ predis 2.4.1) |
+| 5 | تطبیقِ `SysPatches` با پچ‌هایِ دو نسخه (۴-۱-۵) | فقط‌خواندنی | دیتابیسِ دیگر؛ نبودِ جدول؛ هر مقدار در ردیف‌هایِ ۲ تا ۶؛ پچِ جدیدِ توضیح‌داده‌نشده؛ پوشهٔ `sql\patches` |
+| 6 | `merge --ff-only <RELEASE_COMMIT>` | تغییردهنده | HEAD برابرِ `<RELEASE_COMMIT>` نشود؛ `public\hot` وجود داشته باشد |
+| 7 | Composer: نوعِ vendor، `check-platform-reqs`، dry-run سپس `install --no-dev` | تغییردهنده | vendorِ `dev`؛ نیازمندیِ ناموفق؛ عملیاتی جز فهرستِ گامِ ۴ |
+| 8 | `db:patch --status`، نبودِ اشیایِ Gs، `db:patch`، بررسی | تغییردهنده (دیتابیس) | نبودِ تأییدِ دستیِ مسئولِ دیتابیس برایِ دسترسیِ SQL؛ Pending ≠ فهرستِ ۴-۱-۵؛ اشیایِ Gs از قبل موجود؛ خطا یا کمتر از ۵ شیء |
+| 9 | پاک‌سازیِ کش (+ Restartِ PHP در صورتِ نیاز) | تغییردهنده | — |
+| 10 | آزمونِ سلامت با قابلیتِ خاموش | فقط‌خواندنی | هر خطا → بازگشت (بخشِ ۸؛ دیتابیس برنمی‌گردد) |
+| 11 | Redisِ مستقل (فقط اگر Docker لینوکسی هست؛ فقط سرویسِ `gs-redis`) | تغییردهنده | Docker نیست یا `healthy` نشود یا آزمونِ اتصال `true` ندهد |
+| 12 | تأییدِ اجرایِ خودکارِ Docker پس از Restart (بخشِ ۵، موردِ ۲) و `execute_schema_dbo` | Restart: تغییردهنده با تأییدِ جداگانه | پس از Restart و بدونِ ورودِ کاربر `healthy` نشود، یا آزمون انجام نشده باشد؛ نبودِ دسترسیِ اجرایِ رویه‌ها |
+| 13 | روشن‌کردن و آزمون با حساب‌هایِ مجاز/غیرمجاز | تغییردهنده | هر یک از ردیف‌هایِ ۱۱ و ۱۲ تأیید نشده؛ هر نشتِ اطلاعات → خاموش‌کردنِ فوری |

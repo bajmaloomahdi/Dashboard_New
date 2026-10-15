@@ -49,6 +49,49 @@ services:
     networks:
       - dashboard
 
+  # Global Search — Redis مستقلِ Rate Limit (کاملاً جدا از Redisِ اصلیِ برنامه).
+  # رمز فقط در .env: GS_RATELIMIT_REDIS_PASSWORD (فقط نویسه‌های A-Z a-z 0-9 _ -). کاربر/ACL هنگامِ شروع از همان مقدار ساخته می‌شود.
+  # فعال‌سازی/به‌روزرسانی: docker compose --profile globalsearch up -d gs-redis
+  # (پروفایلِ جدا: روی سروری که هنوز Global Search ندارد، `docker compose up` عادی را تحت‌تأثیر قرار نمی‌دهد.)
+  # برنامه با GS_RATELIMIT_REDIS_HOST=gs-redis و GS_RATELIMIT_REDIS_PORT=6379 به آن وصل می‌شود.
+  gs-redis:
+    image: redis:7.4.11-alpine
+    container_name: dashboard_gs_redis
+    restart: unless-stopped
+    profiles: ["globalsearch"]
+    command:
+      - sh
+      - -c
+      - >-
+        [ -n "$$GS_RATELIMIT_REDIS_PASSWORD" ] || { echo "GS_RATELIMIT_REDIS_PASSWORD is not set in .env" >&2; exit 1; };
+        umask 077;
+        printf 'user default on >%s ~gs:rl:* resetchannels -@all +ping +eval +evalsha +incr +pttl +pexpire +get +exists +info\n' "$$GS_RATELIMIT_REDIS_PASSWORD" > /tmp/users.acl;
+        exec redis-server /usr/local/etc/redis/redis.conf --aclfile /tmp/users.acl
+    environment:
+      GS_RATELIMIT_REDIS_PASSWORD: "${GS_RATELIMIT_REDIS_PASSWORD:-}"
+      REDISCLI_AUTH: "${GS_RATELIMIT_REDIS_PASSWORD:-}"
+    volumes:
+      - ./docker/gs-redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    tmpfs:
+      - /tmp:size=1m
+      - /data:size=16m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    # فقط loopbackِ میزبان (برایِ بررسیِ سلامت و حالتِ IIS)؛ هرگز روی شبکه منتشر نمی‌شود.
+    ports:
+      - "127.0.0.1:${GS_REDIS_HOST_PORT:-6392}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - dashboard
+
 volumes:
   app_vendor:
   vite_node_modules:

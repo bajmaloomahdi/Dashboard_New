@@ -21,8 +21,10 @@ export interface CategoryNode extends ProductCategoryRow {
 
 const id = (v: number | string | null) => (v === null || v === undefined ? null : Number(v));
 
+// همان قاعدهٔ sp_Crm_GetProductCategories: SortOrder > 0 ⇒ همان SortOrder؛ SortOrder = 0 ⇒ کد (عددی)؛ هم‌ارزها ⇒ کد، سپس شناسه
+const sortKey = (r: ProductCategoryRow) => (Number(r.SortOrder) > 0 ? Number(r.SortOrder) : Number(r.Code));
 const byOrder = (a: ProductCategoryRow, b: ProductCategoryRow) =>
-    Number(a.SortOrder) - Number(b.SortOrder) || a.DisplayName.localeCompare(b.DisplayName, 'fa');
+    sortKey(a) - sortKey(b) || Number(a.Code) - Number(b.Code) || Number(a.ProductCategoryID) - Number(b.ProductCategoryID);
 
 /** فهرستِ تختِ SP را به درخت تبدیل می‌کند؛ ردیف‌هایی که در `visible` نیستند حذف می‌شوند (برایِ جستجو/فیلتر). */
 export function buildCategoryTree(rows: ProductCategoryRow[], visible?: Set<number>): CategoryNode[] {

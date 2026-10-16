@@ -10,6 +10,7 @@ use App\Services\Workflow\WorkflowEngine;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * فیلدهایِ شرط (WorkflowConditionFields) — Global Registry (Phase 2): CRUD،
@@ -25,11 +26,10 @@ use Tests\TestCase;
  */
 class WorkflowConditionFieldTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
     private const USER_MGR7 = 4;
 
     private WorkflowDefinitionService $defs;
@@ -110,7 +110,7 @@ class WorkflowConditionFieldTest extends TestCase
         $latinName = $this->uniqueCode('LIST');
         $this->conditionFields->save($this->basePayload($latinName), self::USER_FULL);
 
-        $this->as(self::USER_NOPERM)->getJson('/workflow/condition-fields')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/workflow/condition-fields')->assertStatus(403);
 
         $res = $this->as(self::USER_FULL)->getJson('/workflow/condition-fields');
         $res->assertOk();
@@ -119,7 +119,7 @@ class WorkflowConditionFieldTest extends TestCase
 
     public function test_store_condition_field_requires_manage_permission(): void
     {
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson('/workflow/condition-fields', $this->basePayload())
             ->assertStatus(403);
     }
@@ -230,7 +230,7 @@ class WorkflowConditionFieldTest extends TestCase
     {
         $field = $this->conditionFields->save($this->basePayload(), self::USER_FULL);
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/condition-fields/{$field->FieldID}/toggle")
             ->assertStatus(403);
     }

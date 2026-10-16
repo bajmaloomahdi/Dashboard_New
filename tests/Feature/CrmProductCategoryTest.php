@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * دسته‌بندیِ محصولات (CrmProductCategories — درختِ نامحدود) + صفحه‌ها و Permission.
@@ -15,10 +16,9 @@ use Tests\TestCase;
  */
 class CrmProductCategoryTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -221,14 +221,14 @@ class CrmProductCategoryTest extends TestCase
         $cat = $this->category($this->uniq('ریشه'));
         $row = $this->share($party, $brand, $cat, '2030-01-01', null, 10)->json('partyBrandCategoryId');
 
-        $this->as(self::USER_NOPERM)->get('/crm/product-categories')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson('/crm/product-categories-list')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/product-categories', ['displayName' => 'ن'])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson("/crm/product-categories/{$cat}/toggle")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson("/crm/party-brand-categories?partyId={$party}")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/party-brand-categories', [
+        $this->as($this->permissionlessUser())->get('/crm/product-categories')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/product-categories-list')->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/product-categories', ['displayName' => 'ن'])->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/crm/product-categories/{$cat}/toggle")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/crm/party-brand-categories?partyId={$party}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/party-brand-categories', [
             'partyId' => $party, 'brandId' => $brand, 'productCategoryId' => $cat, 'entryDate' => '2031-01-01', 'sharePercent' => 1,
         ])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson("/crm/party-brand-categories/{$row}/toggle")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/crm/party-brand-categories/{$row}/toggle")->assertStatus(403);
     }
 }

@@ -12,8 +12,8 @@ class ExampleTest extends TestCase
      */
     public function test_the_application_returns_a_successful_response(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
+        // صفحهٔ اصلی عمداً به صفحهٔ ورود هدایت می‌کند (routes/web.php)؛ خودِ صفحهٔ ورود باید 200 بدهد.
+        $this->get('/')->assertRedirect(route('login'));
+        $this->get(route('login'))->assertOk();
     }
 }

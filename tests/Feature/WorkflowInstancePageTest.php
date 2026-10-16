@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تستِ صفحهٔ Inertiaِ جدیدِ Instance Detail (GET /process/instances/{id} →
@@ -18,11 +19,10 @@ use Tests\TestCase;
  */
 class WorkflowInstancePageTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
-    private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
 
     private WorkflowDefinitionService $defs;
     private WorkflowEngine $engine;
@@ -135,7 +135,7 @@ class WorkflowInstancePageTest extends TestCase
         // کاربرِ ۳ هیچ دسترسیِ WORKFLOW_ ندارد (نقشِ اتوماسیون بدونِ RolePermission)
         $instanceId = $this->startSimpleInstance(9202);
 
-        $this->as(self::USER_NOPERM)->get("/process/instances/{$instanceId}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/process/instances/{$instanceId}")->assertStatus(403);
     }
 
     public function test_instance_page_missing_instance_is_404(): void

@@ -9,6 +9,7 @@ use App\Services\Workflow\WorkflowEngine;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تستِ صفحهٔ Inertiaِ جدیدِ Instance List (GET /process/instances →
@@ -16,11 +17,10 @@ use Tests\TestCase;
  */
 class WorkflowInstanceListPageTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
-    private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
 
     private WorkflowDefinitionService $defs;
     private WorkflowEngine $engine;
@@ -153,7 +153,7 @@ class WorkflowInstanceListPageTest extends TestCase
 
     public function test_instance_list_requires_workflow_view_permission(): void
     {
-        $this->as(self::USER_NOPERM)->get('/process/instances')->assertStatus(403);
+        $this->as($this->permissionlessUser())->get('/process/instances')->assertStatus(403);
     }
 
     public function test_instance_list_requires_authentication(): void

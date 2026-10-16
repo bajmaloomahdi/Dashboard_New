@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Workflow\WorkflowDefinitionService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تستِ صفحاتِ Inertiaِ جدیدِ مدیریتِ Definitions (GET /process/definitions،
@@ -15,10 +16,9 @@ use Tests\TestCase;
  */
 class WorkflowDefinitionPageTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
-    private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
 
     private WorkflowDefinitionService $defs;
 
@@ -86,7 +86,7 @@ class WorkflowDefinitionPageTest extends TestCase
 
     public function test_definitions_index_requires_workflow_view_permission(): void
     {
-        $this->as(self::USER_NOPERM)->get('/process/definitions')->assertStatus(403);
+        $this->as($this->permissionlessUser())->get('/process/definitions')->assertStatus(403);
     }
 
     public function test_definitions_index_requires_authentication(): void
@@ -122,7 +122,7 @@ class WorkflowDefinitionPageTest extends TestCase
     {
         $definitionId = $this->createDefinition();
 
-        $this->as(self::USER_NOPERM)->get("/process/definitions/{$definitionId}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/process/definitions/{$definitionId}")->assertStatus(403);
     }
 
     /* ==================================================================== */
@@ -205,13 +205,10 @@ class WorkflowDefinitionPageTest extends TestCase
     {
         $definitionId = $this->createDefinition();
 
-        // موقتاً فقط WORKFLOW_VIEW (PermissionID=7) به نقشِ کاربرِ ۳ می‌دهیم؛ با Rollbackِ
-        // تست (DatabaseTransactions) پاک می‌شود — همان الگویِ WorkflowApiTest.php.
-        \Illuminate\Support\Facades\DB::table('RolePermissions')->insert([
-            'RoleID' => 4, 'PermissionID' => 7, 'CanAccess' => 1, 'IsActive' => 1,
-        ]);
+        // فقط WORKFLOW_VIEW به کاربرِ آزمون (نقشِ موقت)؛ با Rollbackِ تست (DatabaseTransactions) پاک می‌شود.
+        $this->grantPermissionsTo($this->permissionlessUser(), ['WORKFLOW_VIEW']);
 
-        $response = $this->as(self::USER_NOPERM)->get("/process/definitions/{$definitionId}/open");
+        $response = $this->as($this->permissionlessUser())->get("/process/definitions/{$definitionId}/open");
         $response->assertRedirect("/process/definitions/{$definitionId}");
 
         $versions = $this->defs->show($definitionId)['versions'];
@@ -227,7 +224,7 @@ class WorkflowDefinitionPageTest extends TestCase
     {
         $definitionId = $this->createDefinition();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/definitions/{$definitionId}/versions")
             ->assertStatus(403);
 
@@ -253,7 +250,7 @@ class WorkflowDefinitionPageTest extends TestCase
     {
         $definitionId = $this->createDefinition();
 
-        $this->as(self::USER_NOPERM)->get("/process/definitions/{$definitionId}/open")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/process/definitions/{$definitionId}/open")->assertStatus(403);
     }
 
     public function test_open_missing_definition_is_404(): void
@@ -274,7 +271,7 @@ class WorkflowDefinitionPageTest extends TestCase
             'RoleID' => 4, 'PermissionID' => 8, 'CanAccess' => 1, 'IsActive' => 1, // WORKFLOW_DESIGN فقط
         ]);
 
-        $this->as(self::USER_NOPERM)->get("/process/definitions/{$definitionId}/open")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/process/definitions/{$definitionId}/open")->assertStatus(403);
 
         $versions = $this->defs->show($definitionId)['versions'];
         $this->assertCount(0, $versions); // هیچ Draftی ساخته نشده

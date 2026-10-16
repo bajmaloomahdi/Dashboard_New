@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * Phase 3 — Phase A: Registryِ نوعِ موجودیت‌ها (WorkflowEntityTypes).
@@ -22,11 +23,10 @@ use Tests\TestCase;
  */
 class WorkflowEntityTypeTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private WorkflowDefinitionService $defs;
 
@@ -122,7 +122,7 @@ class WorkflowEntityTypeTest extends TestCase
 
     public function test_store_without_manage_permission_is_403(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/workflow/entity-types', [
+        $this->as($this->permissionlessUser())->postJson('/workflow/entity-types', [
             'code' => $this->uniqueCode('NOPERM'), 'displayName' => 'ن',
         ])->assertStatus(403);
     }
@@ -133,7 +133,7 @@ class WorkflowEntityTypeTest extends TestCase
             'code' => $this->uniqueCode('NOPERM2'), 'displayName' => 'ن',
         ])->assertOk()->json();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/entity-types/{$created['entityTypeId']}/toggle")
             ->assertStatus(403);
     }

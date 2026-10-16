@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Workflow\WorkflowDefinitionService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * دسته‌بندیِ فرایندها (WorkflowCategories): CRUD، گاردِ غیرفعال‌سازی، اثرِ
@@ -16,10 +17,9 @@ use Tests\TestCase;
  */
 class WorkflowCategoryTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private WorkflowDefinitionService $defs;
 
@@ -79,7 +79,7 @@ class WorkflowCategoryTest extends TestCase
 
     public function test_store_category_requires_manage_categories_permission(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/workflow/categories', [
+        $this->as($this->permissionlessUser())->postJson('/workflow/categories', [
             'code' => $this->uniqueCode('NOPERM'),
             'name' => 'بدونِ دسترسی',
         ])->assertStatus(403);
@@ -120,7 +120,7 @@ class WorkflowCategoryTest extends TestCase
     {
         $categoryId = $this->createCategory();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/categories/{$categoryId}/toggle")
             ->assertStatus(403);
     }

@@ -712,18 +712,34 @@ class WorkflowEngineTest extends TestCase
 
     public function test_assignment_type_position(): void
     {
-        // سمتِ ۲ «کارشناس استخدام» → کاربر ۳
-        $this->assertSame([3], $this->assigneesForType(
+        // سمتِ ۲ «کارشناس استخدام» (شاملِ کاربر ۳) → همهٔ دارندگانِ فعالِ همین سمت در UserPositions.
+        // فهرستِ مورد انتظار از دادهٔ واقعی خوانده می‌شود تا با اضافه‌شدنِ عضوِ جدید به سمت، آزمون نشکند.
+        $expected = $this->activePositionHolders('PositionID', self::POSITION_HR_EXPERT);
+        $this->assertContains(3, $expected);
+        $this->assertSame($expected, $this->assigneesForType(
             ['assigneeType' => 'POSITION', 'refId' => self::POSITION_HR_EXPERT], entityId: 5503
         ));
     }
 
     public function test_assignment_type_unit(): void
     {
-        // واحدِ ۷ «منابع انسانی» → کاربران ۳ و ۴
-        $this->assertSame([3, 4], $this->assigneesForType(
+        // واحدِ ۷ «منابع انسانی» (شاملِ کاربران ۳ و ۴) → همهٔ اعضایِ فعالِ واحد در UserPositions.
+        $expected = $this->activePositionHolders('UnitID', self::UNIT_HR);
+        $this->assertContains(3, $expected);
+        $this->assertContains(4, $expected);
+        $this->assertSame($expected, $this->assigneesForType(
             ['assigneeType' => 'UNIT', 'refId' => self::UNIT_HR], entityId: 5504
         ));
+    }
+
+    /** دارندگانِ فعالِ یک سمت/واحد طبقِ dbo.UserPositions (منبعِ حقیقتِ تخصیصِ POSITION/UNIT)، مرتب. */
+    private function activePositionHolders(string $column, int $id): array
+    {
+        return \Illuminate\Support\Facades\DB::table('UserPositions')
+            ->where($column, $id)->where('IsActive', 1)
+            ->distinct()->pluck('UserID')
+            ->map(fn ($v) => (int) $v)
+            ->sort()->values()->all();
     }
 
     public function test_assignment_type_unit_manager(): void

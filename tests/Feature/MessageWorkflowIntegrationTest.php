@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * Gap 1 + Gap 2 (تشخیصِ دقیقِ Workflow Task + Permissionِ Frontend) — پچ 021
@@ -23,11 +24,10 @@ use Tests\TestCase;
  */
 class MessageWorkflowIntegrationTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
-    private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
     private const USER_MGR7 = 4;   // محسن — مدیرِ واحدِ ۷ (گیرندهٔ مجازِ sp_InsertMessage نوعِ «وظیفه»)
     private const ROLE_AUTOMATION = 4;
     private const PERM_WORKFLOW_VIEW = 7;
@@ -66,7 +66,7 @@ class MessageWorkflowIntegrationTest extends TestCase
             'EXEC sp_InsertMessage @MessageTypeID = 1, @msgPriorityID = 1, @Subject = ?, @MessageText = NULL,
                  @RecipientType = 1, @RecipientUserIDs = ?, @CopyUserIDs = NULL, @CopyDescription = NULL,
                  @SenderUserID = ?, @Year = 1405, @CreateUser = ?, @DueDate = NULL',
-            ['پیامِ عادیِ تست', (string) self::USER_NOPERM, self::USER_FULL, self::USER_FULL]
+            ['پیامِ عادیِ تست', (string) $this->permissionlessUser(), self::USER_FULL, self::USER_FULL]
         );
         $this->assertSame(1, (int) $res->Success, $res->Message);
 
@@ -189,14 +189,14 @@ class MessageWorkflowIntegrationTest extends TestCase
 
     public function test_workflow_permissions_prop_excludes_forward_and_delegate_for_user_without_grant(): void
     {
-        // کاربرِ ۳ فقط WORKFLOW_VIEW دارد؛ خودش انجام‌دهندهٔ همین تسک است (چون
+        // کاربرِ آزمون فقط WORKFLOW_VIEW دارد؛ خودش انجام‌دهندهٔ همین تسک است (چون
         // MessageController::show() اکنون Participantِ‌بودن را الزامی می‌کند —
         // مطابقِ downloadAttachment/Start Workflow — پس یک شخصِ کاملاً بی‌ربط
         // دیگر نمی‌تواند صفحهٔ پیامِ او را ببیند).
-        $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW);
-        $messageId = $this->startWorkflowTaskMessage(self::USER_NOPERM, 9103);
+        $this->grantPermissionsTo($this->permissionlessUser(), ['WORKFLOW_VIEW']);
+        $messageId = $this->startWorkflowTaskMessage($this->permissionlessUser(), 9103);
 
-        $response = $this->as(self::USER_NOPERM)->get("/messages/{$messageId}");
+        $response = $this->as($this->permissionlessUser())->get("/messages/{$messageId}");
         $response->assertOk();
         $response->assertInertia(function ($page) {
             $page->component('Messages/Show')->where('isWfTask', true);
@@ -214,10 +214,10 @@ class MessageWorkflowIntegrationTest extends TestCase
     public function test_backend_still_enforces_403_for_forward_regardless_of_frontend_hint(): void
     {
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW);
-        $messageId = $this->startWorkflowTaskMessage(self::USER_NOPERM, 9104);
+        $messageId = $this->startWorkflowTaskMessage($this->permissionlessUser(), 9104);
 
         // حتی اگر Frontend دکمه را (فرضاً) نشان می‌داد، تلاشِ مستقیم روی endpoint باید ۴۰۳ بگیرد
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/messages/{$messageId}/forward", ['targetUserId' => self::USER_FULL])
             ->assertStatus(403);
     }

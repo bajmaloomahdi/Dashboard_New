@@ -9,6 +9,7 @@ use App\Services\Workflow\WorkflowDefinitionService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * Phase 3 — Phase C: LetterTemplates + TemplateRenderer + Message-from-Template.
@@ -25,10 +26,9 @@ use Tests\TestCase;
  */
 class WorkflowLetterTemplateTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private LetterTemplateService $templates;
     private TemplateRenderer $renderer;
@@ -464,7 +464,7 @@ class WorkflowLetterTemplateTest extends TestCase
             'MessageTypeID' => 1,
             'msgPriorityID' => 1,
             'RecipientType' => 1,
-            'RecipientUserIDs' => [self::USER_NOPERM],
+            'RecipientUserIDs' => [$this->permissionlessUser()],
         ])->assertOk()->json();
 
         $this->assertTrue($res['success']);
@@ -498,7 +498,7 @@ class WorkflowLetterTemplateTest extends TestCase
             'MessageTypeID' => 1,
             'msgPriorityID' => 1,
             'RecipientType' => 1,
-            'RecipientUserIDs' => [self::USER_NOPERM],
+            'RecipientUserIDs' => [$this->permissionlessUser()],
         ])->assertStatus(422)->assertJson(['success' => false]);
 
         $countAfter = DB::selectOne('SELECT COUNT(*) AS C FROM dbo.Messages')->C;
@@ -521,7 +521,7 @@ class WorkflowLetterTemplateTest extends TestCase
 
     public function test_templates_store_without_manage_permission_is_403(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/workflow/templates', $this->validPayload())
+        $this->as($this->permissionlessUser())->postJson('/workflow/templates', $this->validPayload())
             ->assertStatus(403);
     }
 
@@ -529,7 +529,7 @@ class WorkflowLetterTemplateTest extends TestCase
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/templates', $this->validPayload())->json();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/templates/{$created['letterTemplateId']}/toggle")
             ->assertStatus(403);
     }

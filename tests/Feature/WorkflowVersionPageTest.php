@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Workflow\WorkflowDefinitionService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تستِ صفحهٔ Inertiaِ Version Editor (GET /process/versions/{versionId}).
@@ -14,10 +15,9 @@ use Tests\TestCase;
  */
 class WorkflowVersionPageTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;   // مهدی — هر ۹ دسترسیِ WORKFLOW_*
-    private const USER_NOPERM = 3; // علی — بدونِ هیچ دسترسیِ WORKFLOW_
 
     private WorkflowDefinitionService $defs;
 
@@ -134,7 +134,7 @@ class WorkflowVersionPageTest extends TestCase
             'actions' => [],
             'assignments' => [
                 ['stepCode' => 'TASK_1', 'assigneeType' => 'USER', 'refId' => self::USER_FULL, 'sortOrder' => 0, 'isBackup' => false],
-                ['stepCode' => 'TASK_1', 'assigneeType' => 'USER', 'refId' => self::USER_NOPERM, 'sortOrder' => 1, 'isBackup' => true],
+                ['stepCode' => 'TASK_1', 'assigneeType' => 'USER', 'refId' => $this->permissionlessUser(), 'sortOrder' => 1, 'isBackup' => true],
             ],
             'transitions' => [
                 ['code' => 'T1', 'fromStepCode' => 'START', 'toStepCode' => 'TASK_1', 'isDefault' => true],
@@ -152,7 +152,7 @@ class WorkflowVersionPageTest extends TestCase
 
         $assignments = collect($graph['graph']['assignments'])->keyBy('RefID');
         $this->assertSame(0, (int) $assignments[self::USER_FULL]->IsBackup);
-        $this->assertSame(1, (int) $assignments[self::USER_NOPERM]->IsBackup);
+        $this->assertSame(1, (int) $assignments[$this->permissionlessUser()]->IsBackup);
 
         $transitions = collect($graph['graph']['transitions']);
         $this->assertSame('amount > 10000000', $transitions->firstWhere('Code', 'T2')->ConditionExpression);
@@ -167,7 +167,7 @@ class WorkflowVersionPageTest extends TestCase
     {
         $versionId = $this->createDraftVersion();
 
-        $this->as(self::USER_NOPERM)->get("/process/versions/{$versionId}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/process/versions/{$versionId}")->assertStatus(403);
     }
 
     public function test_version_show_requires_authentication(): void

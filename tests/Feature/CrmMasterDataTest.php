@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * CRM Phase 1 — Master Data (۱۲ Registry): دپارتمان، نوع، فعالیت (زیرمجموعهٔ نوع)،
@@ -21,10 +23,9 @@ use Tests\TestCase;
  */
 class CrmMasterDataTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -53,7 +54,7 @@ class CrmMasterDataTest extends TestCase
 
     public function test_store_without_permission_is_403(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/crm/classification/departments', [
+        $this->as($this->permissionlessUser())->postJson('/crm/classification/departments', [
             'displayName' => 'ن',
         ])->assertStatus(403);
     }
@@ -64,7 +65,7 @@ class CrmMasterDataTest extends TestCase
             'displayName' => 'ن',
         ])->assertOk()->json();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/crm/classification/departments/{$created['departmentId']}/toggle")
             ->assertStatus(403);
     }
@@ -328,9 +329,9 @@ class CrmMasterDataTest extends TestCase
 
     public function test_neighborhood_endpoints_require_master_data_permission(): void
     {
-        $this->as(self::USER_NOPERM)->getJson('/crm/geography/neighborhoods')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/geography/neighborhoods', ['cityId' => 1, 'displayName' => 'ن'])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/geography/neighborhoods/1/toggle')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/geography/neighborhoods')->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/geography/neighborhoods', ['cityId' => 1, 'displayName' => 'ن'])->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/geography/neighborhoods/1/toggle')->assertStatus(403);
     }
 
     /* ==================================================================== */
@@ -350,7 +351,7 @@ class CrmMasterDataTest extends TestCase
         ];
     }
 
-    /** @dataProvider simpleRegistryEndpoints */
+    #[DataProvider('simpleRegistryEndpoints')]
     public function test_simple_registry_create_list_toggle(string $endpoint): void
     {
         $name = 'ردیفِ تستیِ ' . $this->uniqueCode('SIMPLE');

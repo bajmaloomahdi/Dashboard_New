@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * لوگویِ برند (Private Disk 'local' → crm/brands/…؛ LogoPath/LogoMimeType در CrmBrands):
@@ -20,10 +21,9 @@ use Tests\TestCase;
  */
 class CrmBrandLogoTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     protected function setUp(): void
     {
@@ -233,7 +233,7 @@ class CrmBrandLogoTest extends TestCase
     {
         $id = $this->save(['name' => $this->uniq(), 'logo' => UploadedFile::fake()->image('logo.png')])->assertOk()->json('brandId');
 
-        $this->as(self::USER_NOPERM)->get("/crm/brands/{$id}/logo")->assertForbidden();
+        $this->as($this->permissionlessUser())->get("/crm/brands/{$id}/logo")->assertForbidden();
     }
 
     public function test_logo_route_404_when_missing(): void
@@ -303,7 +303,7 @@ class CrmBrandLogoTest extends TestCase
 
     public function test_upload_requires_manage_permission(): void
     {
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->post('/crm/brands', ['name' => $this->uniq(), 'logo' => UploadedFile::fake()->image('logo.png')], ['Accept' => 'application/json'])
             ->assertForbidden();
         $this->assertSame([], $this->files());

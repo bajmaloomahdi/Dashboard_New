@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تعریفِ برند برایِ طرف‌حساب (CrmPartyBrandCategories؛ ارتباطِ داخلیِ CrmPartyBrands خودکار):
@@ -18,10 +19,9 @@ use Tests\TestCase;
  */
 class CrmPartyBrandDefinitionTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -425,8 +425,8 @@ class CrmPartyBrandDefinitionTest extends TestCase
         $party = $this->party();
         $id = $this->ok($this->create($party, $this->brand()));
 
-        $this->as(self::USER_NOPERM)->getJson("/crm/party-brand-categories?partyId={$party}")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/party-brand-categories', ['partyId' => $party, 'brandId' => 1])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson("/crm/party-brand-categories/{$id}/toggle")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/crm/party-brand-categories?partyId={$party}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/party-brand-categories', ['partyId' => $party, 'brandId' => 1])->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/crm/party-brand-categories/{$id}/toggle")->assertStatus(403);
     }
 }

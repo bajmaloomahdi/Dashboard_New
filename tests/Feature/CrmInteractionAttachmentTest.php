@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * پیوستِ تعاملاتِ CRM (CrmInteractionAttachments؛ فایل رویِ Private Disk: crm/interactions/{InteractionID}/…):
@@ -20,10 +21,9 @@ use Tests\TestCase;
  */
 class CrmInteractionAttachmentTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     protected function setUp(): void
     {
@@ -152,7 +152,7 @@ class CrmInteractionAttachmentTest extends TestCase
         $this->assertSame('nosniff', $res->headers->get('X-Content-Type-Options'));
         $this->assertSame('hello', $res->streamedContent());
 
-        $this->as(self::USER_NOPERM)->get("/crm/interaction-attachments/{$attId}/download")->assertForbidden();
+        $this->as($this->permissionlessUser())->get("/crm/interaction-attachments/{$attId}/download")->assertForbidden();
         $this->as(self::USER_FULL)->get('/crm/interaction-attachments/999999999/download')->assertNotFound();
     }
 
@@ -163,7 +163,7 @@ class CrmInteractionAttachmentTest extends TestCase
         $this->upload($id, [UploadedFile::fake()->create('a.pdf', 10), UploadedFile::fake()->create('b.pdf', 10)])->assertOk();
         [$a, $b] = $this->rows($id)->all();
 
-        $this->as(self::USER_NOPERM)->postJson("/crm/interaction-attachments/{$a->InteractionAttachmentID}/delete")->assertForbidden();
+        $this->as($this->permissionlessUser())->postJson("/crm/interaction-attachments/{$a->InteractionAttachmentID}/delete")->assertForbidden();
 
         $this->as(self::USER_FULL)->postJson("/crm/interaction-attachments/{$a->InteractionAttachmentID}/delete")->assertOk()->assertJsonPath('success', true);
         Storage::disk('local')->assertMissing($a->FilePath);
@@ -177,7 +177,7 @@ class CrmInteractionAttachmentTest extends TestCase
     public function test_upload_requires_manage_permission(): void
     {
         $id = $this->interaction($this->party());
-        $this->upload($id, [UploadedFile::fake()->create('a.pdf', 10)], [], self::USER_NOPERM)->assertForbidden();
+        $this->upload($id, [UploadedFile::fake()->create('a.pdf', 10)], [], $this->permissionlessUser())->assertForbidden();
         $this->assertSame([], $this->files());
     }
 

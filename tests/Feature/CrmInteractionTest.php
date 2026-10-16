@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * CRM — تعاملات (CrmInteractions): تماس/جلسه/یادداشت/پیگیری، با قواعدِ وضعیتِ
@@ -14,10 +15,9 @@ use Tests\TestCase;
  */
 class CrmInteractionTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -69,8 +69,8 @@ class CrmInteractionTest extends TestCase
     public function test_permissions(): void
     {
         $party = $this->createParty();
-        $this->as(self::USER_NOPERM)->postJson('/crm/interactions', ['partyId' => $party])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson("/crm/interactions?partyId={$party}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/interactions', ['partyId' => $party])->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/crm/interactions?partyId={$party}")->assertStatus(403);
     }
 
     public function test_call_and_meeting_default_to_done_and_may_be_planned(): void

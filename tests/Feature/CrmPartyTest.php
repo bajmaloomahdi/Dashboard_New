@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * CRM Phase 2 — طرف‌حساب (CrmParties، همیشه یک نهادِ تجاری — فروشگاه/شرکت/
@@ -18,10 +19,9 @@ use Tests\TestCase;
  */
 class CrmPartyTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -61,7 +61,7 @@ class CrmPartyTest extends TestCase
 
     public function test_store_without_permission_is_403(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/crm/parties', [
+        $this->as($this->permissionlessUser())->postJson('/crm/parties', [
             'officialName' => 'ش', 'identifierNumber' => $this->uniqueDigits(11),
         ])->assertStatus(403);
     }
@@ -257,7 +257,7 @@ class CrmPartyTest extends TestCase
     {
         $created = $this->createParty();
 
-        $this->as(self::USER_NOPERM)->get("/crm/parties/{$created['partyId']}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/crm/parties/{$created['partyId']}")->assertStatus(403);
         $this->as(self::USER_FULL)->get("/crm/parties/{$created['partyId']}")->assertOk();
     }
 
@@ -396,10 +396,10 @@ class CrmPartyTest extends TestCase
 
     public function test_address_geography_lookups_require_view_permission(): void
     {
-        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/counties?provinceId=1')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/cities?countyId=1')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/neighborhoods?cityId=1')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson('/crm/addresses/municipal-zones')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/addresses/counties?provinceId=1')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/addresses/cities?countyId=1')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/addresses/neighborhoods?cityId=1')->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/addresses/municipal-zones')->assertStatus(403);
     }
 
     public function test_toggle_address_active(): void
@@ -525,7 +525,7 @@ class CrmPartyTest extends TestCase
     {
         $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ح', 'lastName' => 'ح'])->assertOk()->json();
 
-        $this->as(self::USER_NOPERM)->get("/crm/persons/{$person['personId']}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/crm/persons/{$person['personId']}")->assertStatus(403);
         $this->as(self::USER_FULL)->get("/crm/persons/{$person['personId']}")->assertOk();
     }
 

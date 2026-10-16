@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\RegistersTestEntityType;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تستِ لایهٔ API ماژولِ فرایند روی SQL Server واقعی.
@@ -25,12 +26,11 @@ use Tests\TestCase;
  */
 class WorkflowApiTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
     use RegistersTestEntityType;
 
     private const USER_FULL = 2;
     private const USER_FULL2 = 14;
-    private const USER_NOPERM = 3;
     private const UNIT_MGR7 = 4;  // محسن — مدیرِ واحد ۷ (گیرندهٔ مجازِ وظیفهٔ عادی)
 
     private const PERM_WORKFLOW_VIEW = 7;
@@ -143,7 +143,7 @@ class WorkflowApiTest extends TestCase
 
     public function test_user_without_permission_gets_403(): void
     {
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->getJson('/workflow/definitions')
             ->assertStatus(403);
     }
@@ -163,7 +163,7 @@ class WorkflowApiTest extends TestCase
     {
         [, $versionId] = $this->buildDraft();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/versions/{$versionId}/publish")
             ->assertStatus(403);
     }
@@ -316,7 +316,7 @@ class WorkflowApiTest extends TestCase
             'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
-        $this->as(self::USER_NOPERM)->postJson('/workflow/definitions', [
+        $this->as($this->permissionlessUser())->postJson('/workflow/definitions', [
             'definitionId' => $created['definitionId'], 'latinName' => 'API_X2', 'name' => 'تغییرِ غیرمجاز', 'entityType' => 'TEST_ENTITY',
         ])->assertStatus(403);
     }
@@ -365,7 +365,7 @@ class WorkflowApiTest extends TestCase
             'latinName' => 'API_' . strtoupper(bin2hex(random_bytes(4))), 'name' => 'ن', 'entityType' => 'TEST_ENTITY',
         ])->assertOk()->json();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/definitions/{$created['definitionId']}/toggle")
             ->assertStatus(403);
     }
@@ -478,7 +478,7 @@ class WorkflowApiTest extends TestCase
     {
         [, , $code] = $this->publishSimpleFlow();
 
-        $this->as(self::USER_NOPERM)->postJson('/workflow/instances', [
+        $this->as($this->permissionlessUser())->postJson('/workflow/instances', [
             'definitionCode' => $code, 'entityType' => 'TEST_ENTITY', 'entityId' => 7002,
         ])->assertStatus(403);
     }
@@ -566,7 +566,7 @@ class WorkflowApiTest extends TestCase
         // انجام‌دهنده (۱۴) آن را در کارتابلِ موجودِ خود می‌بیند
         $this->assertContains($messageId, $this->cartableMessageIds(self::USER_FULL2));
         // کسی که انجام‌دهنده نیست، نمی‌بیند
-        $this->assertNotContains($messageId, $this->cartableMessageIds(self::USER_NOPERM));
+        $this->assertNotContains($messageId, $this->cartableMessageIds($this->permissionlessUser()));
     }
 
     public function test_normal_task_and_workflow_task_share_one_cartable(): void
@@ -638,7 +638,7 @@ class WorkflowApiTest extends TestCase
         $instanceId = $this->startInstance($code, 7104);
         $taskId = $this->openTaskId($instanceId);
 
-        $this->as(self::USER_NOPERM)->getJson("/workflow/messages/{$taskId}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/workflow/messages/{$taskId}")->assertStatus(403);
     }
 
     public function test_perform_action_succeeds_and_completes_instance(): void
@@ -784,7 +784,7 @@ class WorkflowApiTest extends TestCase
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW); // کاربر ۳ فقط VIEW دارد، نه CANCEL
         [$instanceId] = $this->newInstance(7204);
 
-        $this->as(self::USER_NOPERM)->postJson("/workflow/instances/{$instanceId}/cancel")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/workflow/instances/{$instanceId}/cancel")->assertStatus(403);
     }
 
     public function test_cancel_missing_instance_is_404(): void
@@ -831,7 +831,7 @@ class WorkflowApiTest extends TestCase
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW);
         [$instanceId] = $this->newInstance(7214);
 
-        $this->as(self::USER_NOPERM)->postJson("/workflow/instances/{$instanceId}/suspend")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/workflow/instances/{$instanceId}/suspend")->assertStatus(403);
     }
 
     // ---------- Resume ----------
@@ -944,10 +944,10 @@ class WorkflowApiTest extends TestCase
     public function test_forward_endpoint_requires_forward_permission(): void
     {
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW); // ۳ فقط VIEW دارد
-        [, , $code] = $this->publishSimpleFlow(reviewAssignee: self::USER_NOPERM, allowForward: true);
+        [, , $code] = $this->publishSimpleFlow(reviewAssignee: $this->permissionlessUser(), allowForward: true);
         $messageId = $this->openTaskId($this->startInstance($code, 7302));
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/messages/{$messageId}/forward", ['targetUserId' => self::USER_FULL])
             ->assertStatus(403);
     }
@@ -971,7 +971,7 @@ class WorkflowApiTest extends TestCase
 
         $this->as(self::USER_FULL)
             ->postJson("/workflow/messages/{$messageId}/forward", [
-                'targetUserId' => self::USER_FULL2, 'actorUserId' => self::USER_NOPERM, 'userId' => self::USER_NOPERM,
+                'targetUserId' => self::USER_FULL2, 'actorUserId' => $this->permissionlessUser(), 'userId' => $this->permissionlessUser(),
             ])
             ->assertOk();
 
@@ -1031,10 +1031,10 @@ class WorkflowApiTest extends TestCase
     public function test_delegate_endpoint_requires_delegate_permission(): void
     {
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW);
-        [, , $code] = $this->publishSimpleFlow(reviewAssignee: self::USER_NOPERM);
+        [, , $code] = $this->publishSimpleFlow(reviewAssignee: $this->permissionlessUser());
         $messageId = $this->openTaskId($this->startInstance($code, 7312));
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/messages/{$messageId}/delegate", ['targetUserId' => self::USER_FULL])
             ->assertStatus(403);
     }
@@ -1047,7 +1047,7 @@ class WorkflowApiTest extends TestCase
             ->postJson("/workflow/messages/{$messageId}/delegate", ['targetUserId' => self::USER_FULL2])->assertOk();
 
         $this->grantAutomationPermission(self::PERM_WORKFLOW_VIEW); // ۳ فقط VIEW
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/messages/{$messageId}/revoke-delegation", ['delegateUserId' => self::USER_FULL2])
             ->assertStatus(403);
     }

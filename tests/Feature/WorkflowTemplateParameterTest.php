@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Workflow\TemplateParameterService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * Phase 3 — Phase B: Registryِ پارامترهایِ Template (TemplateParameters).
@@ -24,10 +25,9 @@ use Tests\TestCase;
  */
 class WorkflowTemplateParameterTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private TemplateParameterService $params;
 
@@ -375,7 +375,7 @@ class WorkflowTemplateParameterTest extends TestCase
 
     public function test_store_without_manage_permission_is_403(): void
     {
-        $this->as(self::USER_NOPERM)->postJson('/workflow/template-parameters', $this->validPayload())
+        $this->as($this->permissionlessUser())->postJson('/workflow/template-parameters', $this->validPayload())
             ->assertStatus(403);
     }
 
@@ -383,7 +383,7 @@ class WorkflowTemplateParameterTest extends TestCase
     {
         $created = $this->as(self::USER_FULL)->postJson('/workflow/template-parameters', $this->validPayload())->json();
 
-        $this->as(self::USER_NOPERM)
+        $this->as($this->permissionlessUser())
             ->postJson("/workflow/template-parameters/{$created['templateParameterId']}/toggle")
             ->assertStatus(403);
     }

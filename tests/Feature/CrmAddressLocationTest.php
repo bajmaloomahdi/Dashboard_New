@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * موقعیتِ مکانیِ آدرس (CrmAddresses.Latitude/Longitude، DECIMAL(9,6)، WGS84): اختیاری، هر دو با هم یا هیچ‌کدام،
@@ -14,7 +15,7 @@ use Tests\TestCase;
  */
 class CrmAddressLocationTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -216,7 +217,7 @@ class CrmAddressLocationTest extends TestCase
 
     public function test_location_search_requires_manage_permission(): void
     {
-        $this->actingAs(User::find(3));
+        $this->actingAs(User::find($this->permissionlessUser()));
         $this->getJson('/crm/addresses/location-search?term=x')->assertStatus(403);
     }
 

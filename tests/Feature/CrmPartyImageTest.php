@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * تصاویرِ طرف‌حساب (CrmPartyImages — تبِ «ضمائم و سایر ویژگی‌ها»، Stage E): Gallery با رابطهٔ
@@ -18,10 +19,9 @@ use Tests\TestCase;
  */
 class CrmPartyImageTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     protected function setUp(): void
     {
@@ -184,8 +184,8 @@ class CrmPartyImageTest extends TestCase
         $this->upload($partyId, [UploadedFile::fake()->image('a.jpg', 100, 100)])->assertOk();
         $imageId = (int) $this->images($partyId)[0]['PartyImageID'];
 
-        $this->as(self::USER_NOPERM)->getJson("/crm/parties/{$partyId}/images")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->get("/crm/party-images/{$imageId}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/crm/parties/{$partyId}/images")->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/crm/party-images/{$imageId}")->assertStatus(403);
     }
 
     public function test_upload_and_delete_require_manage_permission(): void
@@ -194,8 +194,8 @@ class CrmPartyImageTest extends TestCase
         $this->upload($partyId, [UploadedFile::fake()->image('a.jpg', 100, 100)])->assertOk();
         $imageId = (int) $this->images($partyId)[0]['PartyImageID'];
 
-        $this->upload($partyId, [UploadedFile::fake()->image('b.jpg', 100, 100)], self::USER_NOPERM)->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson("/crm/party-images/{$imageId}/delete")->assertStatus(403);
+        $this->upload($partyId, [UploadedFile::fake()->image('b.jpg', 100, 100)], $this->permissionlessUser())->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/crm/party-images/{$imageId}/delete")->assertStatus(403);
 
         // وضعیت دست‌نخورده مانده (همچنان همان ۱ تصویر، نه حذف‌شده نه اضافه‌شده)
         $this->assertCount(1, $this->images($partyId));
@@ -281,7 +281,7 @@ class CrmPartyImageTest extends TestCase
         $this->upload($partyId, [UploadedFile::fake()->image('a.jpg', 100, 100)])->assertOk();
         $imageId = (int) $this->images($partyId)[0]['PartyImageID'];
 
-        $this->updateDescription($imageId, 'دستکاری', self::USER_NOPERM)->assertStatus(403);
+        $this->updateDescription($imageId, 'دستکاری', $this->permissionlessUser())->assertStatus(403);
         $this->assertNull($this->images($partyId)[0]['Description']);
     }
 

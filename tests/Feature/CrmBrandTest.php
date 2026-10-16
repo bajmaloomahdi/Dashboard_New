@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
+use Tests\Concerns\CreatesPermissionlessUser;
 
 /**
  * برند (CrmBrands) — موجودیتِ مستقلِ CRM با نامِ یکتا — و ارتباطِ چندبه‌چندِ آن با طرف‌حساب که
@@ -15,10 +16,9 @@ use Tests\TestCase;
  */
 class CrmBrandTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesPermissionlessUser, DatabaseTransactions;
 
     private const USER_FULL = 2;
-    private const USER_NOPERM = 3;
 
     private function as(int $userId): self
     {
@@ -194,12 +194,12 @@ class CrmBrandTest extends TestCase
         $brand = $this->createBrand();
         $party = $this->createParty();
 
-        $this->as(self::USER_NOPERM)->get('/crm/brands-page')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->get("/crm/brands/{$brand['brandId']}")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson('/crm/brands')->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/brands', ['name' => $this->uniqueName()])->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson("/crm/brands/{$brand['brandId']}/toggle")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->getJson("/crm/party-brand-categories?partyId={$party['partyId']}")->assertStatus(403);
-        $this->as(self::USER_NOPERM)->postJson('/crm/party-brand-categories', ['partyId' => $party['partyId'], 'brandId' => $brand['brandId']])->assertStatus(403);
+        $this->as($this->permissionlessUser())->get('/crm/brands-page')->assertStatus(403);
+        $this->as($this->permissionlessUser())->get("/crm/brands/{$brand['brandId']}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson('/crm/brands')->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/brands', ['name' => $this->uniqueName()])->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson("/crm/brands/{$brand['brandId']}/toggle")->assertStatus(403);
+        $this->as($this->permissionlessUser())->getJson("/crm/party-brand-categories?partyId={$party['partyId']}")->assertStatus(403);
+        $this->as($this->permissionlessUser())->postJson('/crm/party-brand-categories', ['partyId' => $party['partyId'], 'brandId' => $brand['brandId']])->assertStatus(403);
     }
 }

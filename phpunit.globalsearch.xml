@@ -44,5 +44,11 @@
         <env name="GLOBAL_SEARCH_RATE_LIMIT_STORE" value="array" force="true"/>
         <!-- Most tests use the in-memory limiter; Redis/Garnet tests switch to driver=redis explicitly. -->
         <env name="GLOBAL_SEARCH_RATE_LIMIT_DRIVER" value="cache" force="true"/>
+        <!-- Never inherit the production rate-limit Redis from .env: only the isolated test Garnet on
+             127.0.0.1:6390. Empty password = Garnet tests are skipped as "not provisioned"; set
+             GS_RATELIMIT_REDIS_PASSWORD in the shell (and start the test Garnet) to run them. -->
+        <env name="GS_RATELIMIT_REDIS_HOST" value="127.0.0.1" force="true"/>
+        <env name="GS_RATELIMIT_REDIS_PORT" value="6390" force="true"/>
+        <env name="GS_RATELIMIT_REDIS_PASSWORD" value="" force="true"/>
     </php>
 </phpunit>

@@ -58,8 +58,9 @@ class WorkflowLetterConditionTest extends TestCase
     private function ensureAmountField(): void
     {
         if (collect($this->conditionFields->list(includeInactive: true))->firstWhere('Code', 'AMOUNT') === null) {
+            // Code خودکار ساخته می‌شود (ورودیِ code نادیده گرفته می‌شود)؛ عنوانِ فارسی → latinName لازم است.
             $this->conditionFields->save([
-                'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+                'latinName' => 'AMOUNT', 'displayName' => 'مبلغ',
                 'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
             ], self::STARTER);
         }

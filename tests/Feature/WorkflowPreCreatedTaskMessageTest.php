@@ -87,8 +87,9 @@ class WorkflowPreCreatedTaskMessageTest extends TestCase
         // فیلدها اکنون سراسری‌اند — اگر AMOUNT از قبل وجود دارد (دادهٔ واقعیِ COND_TASK_DEMO
         // یا تستِ دیگری) دوباره ساخته نمی‌شود، همان استفاده می‌شود.
         if (collect($this->conditionFields->list(includeInactive: true))->firstWhere('Code', 'AMOUNT') === null) {
+            // Code خودکار ساخته می‌شود (ورودیِ code نادیده گرفته می‌شود)؛ عنوانِ فارسی → latinName لازم است.
             $this->conditionFields->save([
-                'code' => 'AMOUNT', 'displayName' => 'مبلغ',
+                'latinName' => 'AMOUNT', 'displayName' => 'مبلغ',
                 'dataType' => 'DECIMAL', 'sourceType' => 'START_CONTEXT', 'sourceKey' => 'amount',
             ], self::USER_A);
         }

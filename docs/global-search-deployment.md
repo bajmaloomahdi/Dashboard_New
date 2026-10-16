@@ -23,7 +23,7 @@
 | SQL — Workflow | پچ‌هایِ `064` تا `069` | تغییرِ رویه‌هایِ موجود (از جمله `sp_GetMessages`، `sp_Wf_CreateTaskMessage`، `sp_Wf_GetStepTaskDetail`) و ۱ رویهٔ جدید؛ **رفتارِ صندوقِ نامه و فرایندهایِ در حالِ اجرا تغییر می‌کند** |
 | SQL — CRM و مرتب‌سازی | پچ‌هایِ `080` تا `084` | **۳ جدولِ جدید** (`CrmPartyRoles`، `CrmPartyPositions`، `CrmPartyPersonRelationPositions`)، رویه‌هایِ جدید و تغییرِ ۱۹ رویهٔ فهرست‌ها (`081`)؛ پچِ `083` دسترسیِ `CRM_DELETE` را می‌سازد و **به نقشِ ۱ (ادمین) می‌دهد** — حذفِ دائمیِ رکوردهایِ CRM (فقط وقتی جایی استفاده نشده باشند) |
 | Composer | `predis/predis` 2.4.1 | کلاینتِ Redis |
-| خارج از این نسخه (دادهٔ دیتابیس) | عنوانِ منویِ «CRM» در `dbo.Menu`، صفرکردنِ SortOrderِ فهرست‌هایِ پایهٔ CRM | فقط رویِ دیتابیسِ توسعه انجام شده یا قرار است دستی انجام شود؛ در هیچ پچی نیست و با این انتشار به سرورِ مشتری نمی‌رسد |
+| SQL — دادهٔ نمایشی | پچِ `087` (DMLِ دستی، Idempotent) | عنوانِ پوشهٔ منویِ CRM → «مخاطبین و ارتباطات» و «فهرست‌های CRM» → «فهرست‌های مخاطبین و ارتباطات»؛ `SortOrder = 0` در ۱۶ جدولِ فهرست‌هایِ پایهٔ CRM — **ترتیبِ دلخواهِ فعلیِ مشتری در این فهرست‌ها بازنویسی می‌شود** (`CrmPartyImages` شامل نیست). نامِ مجوزها (مثلِ «حذفِ اطلاعاتِ CRM») تغییر نمی‌کند. |
 | Rate Limit | سرویسِ `gs-redis` (Docker) | فقط هنگامِ روشن‌کردن |
 
 ## ۲. شناختِ سرور (پیش از روزِ انتشار؛ همه [فقط‌خواندنی])
@@ -91,7 +91,7 @@ $need | ForEach-Object { '{0,-11} CLI={1,-5} CGI={2}' -f $_, ($cli -contains $_)
 ```
 اگر سرویس `PHP_INI_SCAN_DIR` دارد، فقط برایِ دستورهایِ CGI همان مقدار را در همین پنجره تنظیم کنید (`$env:PHP_INI_SCAN_DIR = '<مقدار>'` پیش از آن‌ها و `$env:PHP_INI_SCAN_DIR = $null` پس از آن‌ها؛ تنظیمِ سیستم تغییر نمی‌کند). فهرستِ `$need` همان نیازهایِ `composer.lock` (بخشِ ۴-۲) به‌علاوهٔ `pdo_sqlsrv` است.
 
-**دسترسیِ SQL حسابِ برنامه برایِ پچ‌هایِ این نسخه (064–069، 080–086)** — **[فقط‌خواندنی]**؛ با همان اتصالی که `db:patch` استفاده می‌کند، بدونِ نمایشِ نامِ کاربری یا رمز. هیچ DDL اجرا نمی‌کند و هیچ مجوزی را تغییر نمی‌دهد. بلوک را **بدونِ تغییر** کپی کنید:
+**دسترسیِ SQL حسابِ برنامه برایِ پچ‌هایِ این نسخه (064–069، 080–087)** — **[فقط‌خواندنی]**؛ با همان اتصالی که `db:patch` استفاده می‌کند، بدونِ نمایشِ نامِ کاربری یا رمز. هیچ DDL اجرا نمی‌کند و هیچ مجوزی را تغییر نمی‌دهد. بلوک را **بدونِ تغییر** کپی کنید:
 ```powershell
 Set-Location C:\Project\Dashboard_New
 $code = @'
@@ -109,6 +109,8 @@ SELECT DB_NAME() AS db,
   HAS_PERMS_BY_NAME('dbo.Roles', 'OBJECT', 'SELECT')                AS roles_select,
   HAS_PERMS_BY_NAME('dbo.RolePermissions', 'OBJECT', 'SELECT')      AS rolepermissions_select,
   HAS_PERMS_BY_NAME('dbo.RolePermissions', 'OBJECT', 'INSERT')      AS rolepermissions_insert,
+  HAS_PERMS_BY_NAME('dbo.Menu', 'OBJECT', 'UPDATE')                 AS menu_update,
+  HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'UPDATE')                      AS update_schema_dbo,
   HAS_PERMS_BY_NAME('dbo.fn_Gs_Normalize', 'OBJECT', 'ALTER')       AS alter_fn_Gs_Normalize,
   HAS_PERMS_BY_NAME('dbo.sp_Gs_Search', 'OBJECT', 'ALTER')          AS alter_sp_Gs_Search,
   HAS_PERMS_BY_NAME('dbo.sp_Gs_SearchMessages', 'OBJECT', 'ALTER')  AS alter_sp_Gs_SearchMessages,
@@ -134,12 +136,13 @@ foreach ((array) Illuminate\Support\Facades\DB::selectOne($sql) as $k => $v) { e
 - `080`، `082`: `CREATE TABLE` (۳ جدول)، `CREATE INDEX` و `CREATE PROCEDURE` (بدونِ `OR ALTER` — اگر شیء از قبل باشد پچ خطا می‌دهد)، و `ALTER PROCEDURE` رویِ دو رویهٔ موجود.
 - `081`: `ALTER PROCEDURE` رویِ ۱۹ رویهٔ موجود.
 - `083`، `084`: `CREATE`/`ALTER PROCEDURE dbo.sp_Crm_DeleteRecord` (بدنه از `sp_executesql` با پارامتر استفاده می‌کند) و **درجِ داده**: ردیفِ `CRM_DELETE` در `dbo.Permissions` و اعطایِ آن به `RoleID = 1` در `dbo.RolePermissions` (هر دو با `IF NOT EXISTS`).
+- `087`: فقط **`UPDATE`ِ داده** (Idempotent): `MenuTitle` در `dbo.Menu` (۲ ردیف) و `SortOrder = 0` در ۱۶ جدولِ فهرست‌هایِ پایهٔ CRM. هیچ ردیفی حذف یا اضافه نمی‌شود.
 - همه در `dbo`، بدونِ `GRANT`، `EXECUTE AS` یا ارجاعِ بین‌دیتابیسی. در مجموع ۲۲ رویهٔ موجود با `ALTER PROCEDURE` تغییر می‌کنند. `db:patch` علاوه بر آن از `SysPatches` می‌خواند و در آن درج می‌کند. (sqlsrv ممکن است اعداد را به‌صورتِ `'1'` نشان دهد.)
 
-مجوزهایِ ساخت و داده: `create_table`، `create_procedure`، `create_function` و `alter_schema_dbo` باید `1` باشند (ساختِ جدول/رویه/تابع به مجوزِ `CREATE ...` در دیتابیس **و** `ALTER` رویِ schema نیاز دارد)؛ `permissions_select`، `permissions_insert`، `roles_select`، `rolepermissions_select` و `rolepermissions_insert` هم باید `1` باشند (پچِ `083`). تغییرِ ۲۲ رویهٔ موجود به `ALTER` رویِ همان رویه‌ها نیاز دارد؛ `alter_schema_dbo` آن را پوشش می‌دهد مگر یک `DENY` رویِ خودِ رویه باشد، که این بلوک آن را نشان نمی‌دهد — بخشی از بررسیِ دستیِ مسئولِ دیتابیس (پایین).
+مجوزهایِ ساخت و داده: `create_table`، `create_procedure`، `create_function` و `alter_schema_dbo` باید `1` باشند (ساختِ جدول/رویه/تابع به مجوزِ `CREATE ...` در دیتابیس **و** `ALTER` رویِ schema نیاز دارد)؛ `permissions_select`، `permissions_insert`، `roles_select`، `rolepermissions_select` و `rolepermissions_insert` هم باید `1` باشند (پچِ `083`)؛ `menu_update` و `update_schema_dbo` هم باید `1` باشند (پچِ `087`؛ یک `DENY UPDATE` رویِ یکی از ۱۶ جدولِ CRM را این بلوک نشان نمی‌دهد و جزوِ بررسیِ دستی است). تغییرِ ۲۲ رویهٔ موجود به `ALTER` رویِ همان رویه‌ها نیاز دارد؛ `alter_schema_dbo` آن را پوشش می‌دهد مگر یک `DENY` رویِ خودِ رویه باشد، که این بلوک آن را نشان نمی‌دهد — بخشی از بررسیِ دستیِ مسئولِ دیتابیس (پایین).
 
 مجوزِ لازم بسته به این‌که شیء وجود دارد یا نه فرق می‌کند:
-- **شیء وجود ندارد (حالتِ عادیِ این انتشار؛ گامِ ۲ بخشِ ۴-۳ آن را الزامی می‌کند):** ساختن به `CREATE FUNCTION`/`CREATE PROCEDURE` در دیتابیس **و** `ALTER` رویِ schemaِ `dbo` نیاز دارد. انتظار: `create_function`، `create_procedure` و `alter_schema_dbo` همه `1`؛ و پنج ستونِ `alter_fn_*`/`alter_sp_*` همه `NULL`. `NULL` فقط یعنی «این حساب شیء را پیدا نکرد یا نمی‌بیند»، نه لزوماً «شیء وجود ندارد»؛ پس فقط وقتی به‌معنایِ نبودنِ شیء پذیرفته می‌شود که `view_definition` برابرِ `1` باشد **و** گامِ ۲ بخشِ ۴-۳ (پرس‌وجویِ `sys.objects`) هیچ ردیفی برنگرداند. هر `alter_*` غیرِ `NULL` (چه `0` چه `1`) یعنی شیء از قبل هست ← **توقف** (همان شرطِ گامِ ۲ بخشِ ۴-۳).
+- **شیء وجود ندارد (حالتِ عادیِ این انتشار؛ گامِ ۲ بخشِ ۴-۳ آن را الزامی می‌کند):** ساختن به `CREATE FUNCTION`/`CREATE PROCEDURE`/`CREATE TABLE` در دیتابیس **و** `ALTER` رویِ schemaِ `dbo` نیاز دارد. انتظار: `create_function`، `create_procedure`، `create_table` و `alter_schema_dbo` همه `1`. **نبود یا بودنِ شیء را از ستون‌هایِ `alter_*` نتیجه نگیرید:** `HAS_PERMS_BY_NAME` برایِ شیئی که وجود ندارد (یا حساب آن را نمی‌بیند) `0` یا `NULL` برمی‌گرداند — رویِ نسخهٔ آزمایشیِ کاملِ دیتابیس با حسابِ sysadmin مقدارِ `0` دیده شد. وجود/نبودِ شیء فقط با پرس‌وجویِ `sys.objects` در گامِ ۲ بخشِ ۴-۳ تعیین می‌شود (با حسابِ اپراتور، و `view_definition = 1` برایِ حسابِ برنامه). اگر آن پرس‌وجو ردیفی برگرداند ← **توقف**.
 - **شیء از قبل وجود دارد (اجرایِ مجدد؛ فقط با تأییدِ صریح):** تغییر به `ALTER` رویِ **خودِ همان شیء** نیاز دارد؛ ستونِ `alter_*` همان شیء باید `1` باشد. `alter_schema_dbo` به‌تنهایی **تضمینِ کافی نیست**: یک `DENY ALTER` رویِ خودِ شیء آن را بی‌اثر می‌کند، و تغییرِ تابعِ `WITH SCHEMABINDING` اگر شیءِ دیگری به آن schema-bound باشد شکست می‌خورد که `HAS_PERMS_BY_NAME` آن را نشان نمی‌دهد. پس شیءِ موجود همیشه بررسیِ دستیِ مسئولِ دیتابیس می‌خواهد.
 - **`SysPatches`:** `syspatches_select` و `syspatches_insert` باید `1` و `syspatches_enabled_triggers` باید `0` باشد (تریگرِ فعال رویِ این جدول می‌تواند درجِ نتیجه را خراب کند ← **توقف** و بررسیِ دستی).
 - **تریگرهایِ DDLِ دیتابیس:** تریگرِ DDL در **زمینهٔ حسابِ برنامه** همراهِ هر `CREATE OR ALTER` اجرا می‌شود و خطایِ آن پچ را متوقف می‌کند. `view_definition` باید `1` باشد؛ وگرنه شمارشِ تریگرها قابلِ اعتماد نیست (کاربر ممکن است تریگرِ موجود را نبیند) ← **توقف**. اگر `enabled_db_ddl_triggers` بیشتر از `0` است: نسخهٔ `trg_DevTrackSchemaChanges` در این مخزن (`routes/console.php`) فقط در `dbo.DevChangeLog` درج می‌کند و `EXECUTE AS` ندارد، پس `devchangelog_insert` باید `1` باشد؛ و چون تریگرِ سرور ممکن است با نسخهٔ مخزن فرق کند، متنِ هر تریگرِ فعال (`SELECT name, OBJECT_DEFINITION(object_id) FROM sys.triggers WHERE parent_class = 0 AND is_disabled = 0`) باید دستی بررسی شود.
@@ -178,9 +181,9 @@ foreach ((array) Illuminate\Support\Facades\DB::selectOne($sql) as $k => $v) { e
 ### ۴-۱. بررسی‌هایِ پیش از هر تغییر و دریافتِ نسخهٔ مشخص
 
 **`<RELEASE_COMMIT>`** هشِ کاملِ ۴۰ نویسه‌ایِ commitی است که برایِ انتشار **بررسی و تأیید** شده است. برایِ 1.0.5 در زمانِ نگارشِ این راهنما:
-`50d42fe41e5174d7f47f8b43c71723b3acbd682e` (Global Search `2b417fb` + آماده‌سازیِ استقرار `cca17f9` + Workflow `b3a388c` + CRM `05a551f` + مرتب‌سازی `278c889` + Build `2ee3602`، و merge یِ Branchِ `workflow-letter-condition-stage`). این مقصدِ **ثابتِ کد** است و همهٔ دستورهایِ این بخش و بخش‌هایِ ۴-۲، ۴-۳ و ۸ با همین مقدار اجرا می‌شوند. **هرگز `origin/main` یا «آخرین نسخه» را به‌جایِ آن به کار نبرید**؛ هیچ commitِ بررسی‌نشده‌ای منتشر نمی‌شود.
+`790c0f3b019bd4bbd40b182bef3ab732bd0190ba` — نسخهٔ **1.0.5** (Global Search `2b417fb` + آماده‌سازیِ استقرار `cca17f9` + Workflow `b3a388c` + CRM `05a551f` + مرتب‌سازی `278c889` + Build `2ee3602` + merge یِ `workflow-letter-condition-stage` در `50d42fe` + اصلاحِ تست‌ها `8dba9fa` + پچِ داده‌ایِ `087` در `790c0f3`). این مقصدِ **ثابتِ کد** است و همهٔ دستورهایِ این بخش و بخش‌هایِ ۴-۲، ۴-۳ و ۸ با همین مقدار اجرا می‌شوند. **هرگز `origin/main` یا «آخرین نسخه» را به‌جایِ آن به کار نبرید**؛ هیچ commitِ بررسی‌نشده‌ای منتشر نمی‌شود.
 
-**نسخهٔ راهنما جدا از مقصدِ کد است.** نسخهٔ نهاییِ همین راهنما ممکن است در commitِ مستنداتیِ جدیدتری در `main` باشد (`<GUIDE_COMMIT>`؛ برایِ 1.0.5 commitِ مستنداتِ بعد از `50d42fe`) و از GitHub خوانده شود. این موضوع مقصدِ انتشار را تغییر نمی‌دهد: هشِ راهنما هرگز جایِ `<RELEASE_COMMIT>` نمی‌نشیند، و نسخهٔ راهنمایی که پس از merge در پوشهٔ سرور قرار می‌گیرد (نسخهٔ داخلِ `<RELEASE_COMMIT>`) ممکن است قدیمی‌تر باشد و نباید دنبال شود. **[فقط‌خواندنی]** پس از گامِ ۲ (`fetch`) تأیید کنید که commitهایِ مستندات کدی را تغییر نمی‌دهند:
+**نسخهٔ راهنما جدا از مقصدِ کد است.** نسخهٔ نهاییِ همین راهنما ممکن است در commitِ مستنداتیِ جدیدتری در `main` باشد (`<GUIDE_COMMIT>`؛ برایِ 1.0.5 commitِ مستنداتِ بعد از `790c0f3`) و از GitHub خوانده شود. این موضوع مقصدِ انتشار را تغییر نمی‌دهد: هشِ راهنما هرگز جایِ `<RELEASE_COMMIT>` نمی‌نشیند، و نسخهٔ راهنمایی که پس از merge در پوشهٔ سرور قرار می‌گیرد (نسخهٔ داخلِ `<RELEASE_COMMIT>`) ممکن است قدیمی‌تر باشد و نباید دنبال شود. **[فقط‌خواندنی]** پس از گامِ ۲ (`fetch`) تأیید کنید که commitهایِ مستندات کدی را تغییر نمی‌دهند:
 ```powershell
 git -C C:\Project\Dashboard_New diff --name-only <RELEASE_COMMIT> <GUIDE_COMMIT>
 ```
@@ -197,12 +200,12 @@ git -C C:\Project\Dashboard_New diff --name-only <RELEASE_COMMIT> <GUIDE_COMMIT>
    git log --oneline <PREVIOUS_COMMIT>..<RELEASE_COMMIT>
    git diff --stat <PREVIOUS_COMMIT> <RELEASE_COMMIT>
    ```
-   انتظار: `commit` و دو بار `0`. اگر سرور رویِ `3179c37` است، `git log` دقیقاً این ۱۳ commit را نشان می‌دهد: `50d42fe`، `2ee3602`، `d890b27`، `278c889`، `05a551f`، `b3a388c`، `9295992`، `2126e4b`، `cca17f9`، `2b417fb`، `c3340f6`، `302ae35`، `3662a5c` (commitهایِ مستنداتِ بعدیِ راهنما در این بازه نمی‌آیند). اگر سرور عقب‌تر است، هر commitِ اضافه باید جزوِ انتشارهایِ قبلاً بررسی‌شده باشد. هر commitِ ناشناخته یا تأییدنشده، یا خروجیِ غیرِ `0` = **توقف**.
+   انتظار: `commit` و دو بار `0`. اگر سرور رویِ `3179c37` است، `git log` دقیقاً این ۱۶ commit را نشان می‌دهد: `790c0f3`، `8dba9fa`، `ccef39d`، `50d42fe`، `2ee3602`، `d890b27`، `278c889`، `05a551f`، `b3a388c`، `9295992`، `2126e4b`، `cca17f9`، `2b417fb`، `c3340f6`، `302ae35`، `3662a5c` (commitهایِ مستنداتِ بعدیِ راهنما در این بازه نمی‌آیند). اگر سرور عقب‌تر است، هر commitِ اضافه باید جزوِ انتشارهایِ قبلاً بررسی‌شده باشد. هر commitِ ناشناخته یا تأییدنشده، یا خروجیِ غیرِ `0` = **توقف**.
 4. **[فقط‌خواندنی]** تغییرِ وابستگی‌ها در همین بازه (این فهرست «عملیاتِ مجازِ Composer» در بخشِ ۴-۲ است):
    ```powershell
    git diff <PREVIOUS_COMMIT> <RELEASE_COMMIT> -- composer.json composer.lock | Select-String '^[+-] {8}"[a-z0-9-]+/[a-z0-9.-]+": "|^[+-] {12}"(name|version)": '
    ```
-   انتظار برایِ بازهٔ `3179c37` تا `50d42fe`: در `composer.json` خطِ `laravel/tinker` فقط به‌خاطرِ ویرگول یک‌بار با `-` و یک‌بار با `+` می‌آید و `+ "predis/predis": "2.4.1"` اضافه می‌شود؛ در `composer.lock` فقط `+ "name": "predis/predis"` و `+ "version": "v2.4.1"`. هر بستهٔ دیگر یا هر خطِ `-` در `composer.lock` = **توقف** (مگر جزوِ انتشارِ قبلاً بررسی‌شده‌ای در همین بازه باشد).
+   انتظار برایِ بازهٔ `3179c37` تا `790c0f3`: در `composer.json` خطِ `laravel/tinker` فقط به‌خاطرِ ویرگول یک‌بار با `-` و یک‌بار با `+` می‌آید و `+ "predis/predis": "2.4.1"` اضافه می‌شود؛ در `composer.lock` فقط `+ "name": "predis/predis"` و `+ "version": "v2.4.1"`. هر بستهٔ دیگر یا هر خطِ `-` در `composer.lock` = **توقف** (مگر جزوِ انتشارِ قبلاً بررسی‌شده‌ای در همین بازه باشد).
 5. **[فقط‌خواندنی]** تطبیقِ وضعیتِ واقعیِ `SysPatches` با پچ‌هایِ دو نسخه. با همان اتصالی که `db:patch` استفاده می‌کند (`.env` برنامه) و بدونِ نمایشِ هیچ تنظیمی؛ اگر `SysPatches` نباشد چیزی نمی‌سازد. بلوک را **بدونِ تغییر** کپی کنید (کدِ PHP نباید نویسهٔ `"` داشته باشد):
 ```powershell
 Set-Location C:\Project\Dashboard_New
@@ -234,7 +237,7 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
 ```
    انتظار — هر انحراف = **توقف** و بررسیِ جداگانه:
    - `php exit: 0` و `0.` برابرِ `DB=Dashboard_DB` (همان دیتابیسِ بکاپِ بخشِ ۳). `NO_SYSPATCHES` یعنی روندِ پچ رویِ این سرور با انتظار هم‌خوان نیست.
-   - `1.` برایِ بازهٔ `3179c37` تا `50d42fe` دقیقاً این ۱۳ پچ به همین ترتیب: `064_workflow_clone_fix_and_auto_code.sql`، `065_workflow_auto_code_gap_fill.sql`، `066_workflow_instance_acted_assignees.sql`، `067_workflow_one_message_per_instance.sql`، `068_workflow_sent_status_tiebreak.sql`، `069_workflow_letter_condition_deferred.sql`، `080_crm_party_roles_positions.sql`، `081_sp_sort_order_code_rule.sql`، `082_crm_relation_multi_positions.sql`، `083_crm_delete_record.sql`، `084_crm_delete_record_party_brand_link.sql`، `085_global_search_procedures.sql`، `086_global_search_crm_address_location.sql`. اگر سرور عقب‌تر است، هر پچِ اضافه باید متعلق به commitهایِ بررسی‌شدهٔ گامِ ۳ باشد.
+   - `1.` برایِ بازهٔ `3179c37` تا `790c0f3` دقیقاً این ۱۴ پچ به همین ترتیب: `064_workflow_clone_fix_and_auto_code.sql`، `065_workflow_auto_code_gap_fill.sql`، `066_workflow_instance_acted_assignees.sql`، `067_workflow_one_message_per_instance.sql`، `068_workflow_sent_status_tiebreak.sql`، `069_workflow_letter_condition_deferred.sql`، `080_crm_party_roles_positions.sql`، `081_sp_sort_order_code_rule.sql`، `082_crm_relation_multi_positions.sql`، `083_crm_delete_record.sql`، `084_crm_delete_record_party_brand_link.sql`، `085_global_search_procedures.sql`، `086_global_search_crm_address_location.sql`، `087_crm_display_and_sortorder_alignment.sql`. اگر سرور عقب‌تر است، هر پچِ اضافه باید متعلق به commitهایِ بررسی‌شدهٔ گامِ ۳ باشد.
    - `2.` تا `6.` خالی. (`3.` یعنی پچی که در نسخهٔ فعلی هست ولی `SUCCESS` ندارد؛ `db:patch` آن را **دوباره اجرا می‌کند** — ممکن است قبلاً دستی اجرا شده باشد. رویِ دیتابیسِ توسعه چنین وضعیتی برایِ 005، 031، 033، 034، 035، 045 و 079 دیده شده است. `2.` یعنی پچِ قبلاً اجراشده تغییر کرده و `db:patch` تغییرش را اجرا نمی‌کند.)
    - `7.` برابرِ `False / in release: 0` (اگر پوشهٔ `sql\patches` باشد، `db:patch` فقط همان را می‌خواند).
    - ردیف‌هایِ `SysPatches` را با دست اضافه، ویرایش یا حذف نکنید مگر با تأییدِ صریح و جداگانه.
@@ -263,7 +266,7 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
    ```
-   انتظار: هیچ هشدارِ «lock file is not up to date»؛ عملیات دقیقاً همان فهرستِ گامِ ۴-۱-۴. برایِ بازهٔ `3179c37` تا `50d42fe`: **`Package operations: 1 install, 0 updates, 0 removals`** و فقط `Installing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**.
+   انتظار: هیچ هشدارِ «lock file is not up to date»؛ عملیات دقیقاً همان فهرستِ گامِ ۴-۱-۴. برایِ بازهٔ `3179c37` تا `790c0f3`: **`Package operations: 1 install, 0 updates, 0 removals`** و فقط `Installing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**.
 4. **[تغییردهنده]** همان دستور بدونِ `--dry-run`:
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --working-dir=C:\Project\Dashboard_New
@@ -279,24 +282,29 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
    Set-Location C:\Project\Dashboard_New
    & "<PHP_DIR>\php.exe" artisan db:patch --status
    ```
-   فهرستِ «در انتظار اجرا (Pending)» باید **دقیقاً** همان ردیفِ `1.` در ۴-۱-۵ باشد (برایِ این انتشار همان ۱۳ پچِ `064` تا `069` و `080` تا `086`). هر تفاوت = **توقف**.
+   فهرستِ «در انتظار اجرا (Pending)» باید **دقیقاً** همان ردیفِ `1.` در ۴-۱-۵ باشد (برایِ این انتشار همان ۱۴ پچِ `064` تا `069` و `080` تا `087`). هر تفاوت = **توقف**.
 2. **[فقط‌خواندنی]** این اشیا نباید از قبل وجود داشته باشند (اگر وجود دارند، **توقف** و بررسی):
    ```powershell
    sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name FROM sys.objects WHERE name IN ('fn_Gs_Normalize','sp_Gs_Search','sp_Gs_SearchMessages','sp_Gs_SearchProjects','sp_Gs_SearchProcesses','sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord');"
+   ```
+   **[فقط‌خواندنی]** و برعکس، این ۲۱ رویهٔ موجود که پچ‌ها با `ALTER PROCEDURE` تغییرشان می‌دهند **باید** وجود داشته باشند (`sp_GetMsgPriorities` در هیچ پچی ساخته نمی‌شود و جزوِ ساختارِ پایهٔ دیتابیس است). خروجی باید **خالی** باشد؛ هر نامِ چاپ‌شده = **توقف**:
+   ```powershell
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT v.n AS missing FROM (VALUES ('sp_Crm_GetActivities'),('sp_Crm_GetAddressTitles'),('sp_Crm_GetCities'),('sp_Crm_GetContactRoles'),('sp_Crm_GetContactTypes'),('sp_Crm_GetCounties'),('sp_Crm_GetDepartments'),('sp_Crm_GetMunicipalZones'),('sp_Crm_GetNeighborhoods'),('sp_Crm_GetOwnershipTypes'),('sp_Crm_GetPartyRelations'),('sp_Crm_GetPartyTypes'),('sp_Crm_GetPersonRelations'),('sp_Crm_GetPositions'),('sp_Crm_GetProductCategories'),('sp_Crm_GetProvinces'),('sp_Crm_GetTitles'),('sp_GetMsgPriorities'),('sp_GetProjectPriorities'),('sp_Wf_CloneVersion'),('sp_Wf_SaveDefinition')) v(n) WHERE OBJECT_ID('dbo.' + v.n, 'P') IS NULL;"
    ```
 3. **[تغییردهنده — دیتابیس]** فقط اگر بررسیِ «دسترسیِ SQL» در بخشِ ۲ بدونِ توقف گذشته **و** مسئولِ دیتابیس تأییدِ دستیِ صریح داده است: `& "<PHP_DIR>\php.exe" artisan db:patch` — همهٔ پچ‌هایِ Pending به ترتیبِ نام اجرا می‌شوند (به همین دلیل گامِ ۱ باید دقیقاً همان فهرست را نشان دهد)، با اولین خطا متوقف می‌شود و نتیجه در `SysPatches` ثبت می‌شود.
    اگر خطا داد: **توقف**؛ دوباره اجرا نکنید. ردیفِ `FAILED` ثبت می‌شود و بخش‌هایِ (batchهایِ) پیش از خطا ممکن است اعمال شده باشند؛ وضعیت گزارش و جداگانه تصمیم‌گیری شود.
 4. **[فقط‌خواندنی]** بررسی:
    ```powershell
-   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name, type_desc FROM sys.objects WHERE name LIKE 'sp[_]Gs[_]%' OR name LIKE 'fn[_]Gs[_]%' OR name IN ('sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord'); SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '06[4-9]%' OR PatchName LIKE '08[0-6]%'; SELECT PermissionCode FROM dbo.Permissions WHERE PermissionCode = 'CRM_DELETE';"
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name, type_desc FROM sys.objects WHERE name LIKE 'sp[_]Gs[_]%' OR name LIKE 'fn[_]Gs[_]%' OR name IN ('sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord'); SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '06[4-9]%' OR PatchName LIKE '08[0-7]%'; SELECT PermissionCode FROM dbo.Permissions WHERE PermissionCode = 'CRM_DELETE'; SELECT MenuTitle FROM dbo.Menu WHERE Url = '/crm/directory' OR MenuID IN (SELECT ParentID FROM dbo.Menu WHERE Url = '/crm/parties');"
    ```
-   انتظار: ۱۶ شیء (۵ شیءِ Global Search + `sp_Wf_AddTaskMessageRecipients` + ۳ جدول و ۷ رویهٔ CRM)، ۱۳ ردیفِ `SUCCESS` و یک ردیفِ `CRM_DELETE`.
+   انتظار: ۱۶ شیء (۵ شیءِ Global Search + `sp_Wf_AddTaskMessageRecipients` + ۳ جدول و ۷ رویهٔ CRM)، ۱۴ ردیفِ `SUCCESS`، یک ردیفِ `CRM_DELETE`، و عنوان‌هایِ منو «مخاطبین و ارتباطات» و «فهرست‌های مخاطبین و ارتباطات» (اگر سرورِ مشتری عنوانِ پوشه را قبلاً دستی عوض کرده باشد، `087` به آن دست نمی‌زند).
 
 نکته‌هایِ ایمنی:
 - پچ‌هایِ Global Search (`085`، `086`) هر دو `CREATE OR ALTER` هستند؛ اجرایِ مجددِ «085 سپس 086» بدونِ خطا و با همان نتیجه است (در محیطِ ایزوله آزموده شد).
 - **هرگز 085 را به‌تنهایی پس از 086 اجرا نکنید** (اصلاحِ جست‌وجویِ آدرس برمی‌گردد). اجرایِ دستی فقط به ترتیبِ 085 سپس 086.
 - پچ‌هایِ `067`، `068` و `069` رفتارِ نامه‌هایِ فرایندی و فهرستِ صندوقِ نامه (`sp_GetMessages`) را برایِ همهٔ کاربران تغییر می‌دهند؛ پس از انتشار، صندوقِ نامه و یک فرایندِ نمونه را با یک حسابِ واقعی بررسی کنید.
 - پچِ `083` دسترسیِ `CRM_DELETE` (حذفِ دائمیِ رکوردهایِ CRM که جایی استفاده نشده‌اند) را به **نقشِ ۱** می‌دهد؛ اگر نقشِ ۱ رویِ سرورِ مشتری کاربرانِ زیادی دارد، پیش از انتشار تصمیم بگیرید و پس از انتشار دسترسی‌ها را بررسی کنید.
+- پچِ `087` عنوانِ منویِ CRM را عوض می‌کند و `SortOrder`ِ فهرست‌هایِ پایهٔ CRM را صفر می‌کند؛ اگر مشتری ترتیبِ دلخواهی تعریف کرده، پس از انتشار ترتیب بر اساسِ Code (قاعدهٔ `081`) می‌شود. مقادیرِ قبلی فقط از بکاپِ بخشِ ۳ برمی‌گردند.
 - پچ‌هایِ `080`/`082`/`083` با `CREATE` (بدونِ `OR ALTER`) شیء می‌سازند؛ اجرایِ دوباره‌شان پس از موفقیت خطا می‌دهد — `db:patch` به‌خاطرِ `SysPatches` آن‌ها را دوباره اجرا نمی‌کند؛ دستی اجرا نکنید.
 - اگر سرور تریگرِ DDLِ `trg_DevTrackSchemaChanges` دارد، این پچ‌ها در `DevChangeLog` هم ثبت می‌شوند؛ این ثبت بی‌اثر است، ولی حسابِ برنامه باید اجازهٔ درج در `DevChangeLog` را داشته باشد (بررسیِ «دسترسیِ SQL» در بخشِ ۲).
 ### ۴-۴. `.env` برایِ این مرحله
@@ -401,7 +409,7 @@ $r.StatusCode                                                   # 200
 ### بازگشت به نسخهٔ قبل (فقط کد و vendor)
 
 > **مهم: بازگشتِ کد، دیتابیس را به حالتِ پیش از انتشار برنمی‌گرداند و بازگشتِ کامل یا بدونِ اثر نیست.**
-> - همهٔ تغییراتِ پچ‌هایِ `064`–`069` و `080`–`086` در `Dashboard_DB` **باقی می‌مانند**: ۳ جدولِ جدیدِ CRM (و هر داده‌ای که پس از انتشار در آن‌ها ثبت شده)، رویه‌هایِ جدید، ردیفِ `CRM_DELETE` و اعطایِ آن به نقشِ ۱، و **نسخهٔ جدیدِ ۲۲ رویهٔ موجود** (از جمله `sp_GetMessages` و رویه‌هایِ Workflow). کدِ قبلی با نسخهٔ جدیدِ این رویه‌ها آزموده نشده است؛ بازگشتِ کد ممکن است در Workflow و صندوقِ نامه رفتارِ ناسازگار داشته باشد و تنها راهِ بازگرداندنِ کاملِ آن‌ها Restore از بکاپ است.
+> - همهٔ تغییراتِ پچ‌هایِ `064`–`069` و `080`–`087` در `Dashboard_DB` **باقی می‌مانند**: ۳ جدولِ جدیدِ CRM (و هر داده‌ای که پس از انتشار در آن‌ها ثبت شده)، رویه‌هایِ جدید، ردیفِ `CRM_DELETE` و اعطایِ آن به نقشِ ۱، عنوان‌هایِ جدیدِ منو و `SortOrder`هایِ صفرشده (`087`؛ مقادیرِ قبلی فقط از بکاپ برمی‌گردند)، و **نسخهٔ جدیدِ ۲۲ رویهٔ موجود** (از جمله `sp_GetMessages` و رویه‌هایِ Workflow). کدِ قبلی با نسخهٔ جدیدِ این رویه‌ها آزموده نشده است؛ بازگشتِ کد ممکن است در Workflow و صندوقِ نامه رفتارِ ناسازگار داشته باشد و تنها راهِ بازگرداندنِ کاملِ آن‌ها Restore از بکاپ است.
 > - ردیف‌هایِ `SUCCESS` این پچ‌ها در `SysPatches` **باقی می‌مانند**؛ در انتشارِ دوباره `db:patch` آن‌ها را اجرا نمی‌کند. در آن انتشار ردیفِ `4.` بررسیِ ۴-۱-۵ همین پچ‌ها را نشان می‌دهد، `db:patch --status` (۴-۳، گامِ ۱) آن‌ها را Pending نشان نمی‌دهد و گامِ ۲ بخشِ ۴-۳ اشیایِ آن‌ها را موجود می‌یابد؛ این انحرافِ شناخته‌شده باید پیش از ادامه صریحاً بررسی و تأیید شود.
 > - اشیا یا ردیف‌هایِ `SysPatches` را با دست حذف یا ویرایش نکنید.
 > - برگرداندنِ کاملِ دیتابیس فقط با Restore از بکاپِ بخشِ ۳ ممکن است: آخرین راه‌حل است، همهٔ داده‌هایِ ثبت‌شده پس از بکاپ را از بین می‌برد، به تأییدِ صریح و جداگانه نیاز دارد و جزوِ این روند نیست.
@@ -417,7 +425,7 @@ $r.StatusCode                                                   # 200
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
    ```
-   انتظار: دقیقاً عکسِ فهرستِ ۴-۱-۴؛ برایِ بازهٔ `3179c37` تا `50d42fe`: `Package operations: 0 installs, 0 updates, 1 removal` و فقط `Removing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**. سپس همان دستور بدونِ `--dry-run`.
+   انتظار: دقیقاً عکسِ فهرستِ ۴-۱-۴؛ برایِ بازهٔ `3179c37` تا `790c0f3`: `Package operations: 0 installs, 0 updates, 1 removal` و فقط `Removing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**. سپس همان دستور بدونِ `--dry-run`.
 4. **[تغییردهنده]** کش: `artisan config:clear`، `route:clear`، `view:clear` (و اگر سرور از قبل استفاده می‌کرد، `config:cache`/`route:cache`)؛ اگر OPcache بدونِ validate_timestamps است، `Restart-Service <PHP_SERVICE>`.
 5. Redis (فقط اگر در بخشِ ۶ راه‌اندازی شده بود): **[تغییردهنده]** `docker stop dashboard_gs_redis` (داده‌ای ندارد؛ کانتینر حذف نمی‌شود). از `docker compose down` استفاده نکنید.
 6. **[فقط‌خواندنی]** آزمونِ سلامتِ بخشِ ۴-۷: کدِ `200` و `appVersion` نسخهٔ قبلی (نه `1.0.5`).
@@ -444,7 +452,7 @@ $r.StatusCode                                                   # 200
 | 5 | تطبیقِ `SysPatches` با پچ‌هایِ دو نسخه (۴-۱-۵) | فقط‌خواندنی | دیتابیسِ دیگر؛ نبودِ جدول؛ هر مقدار در ردیف‌هایِ ۲ تا ۶؛ پچِ جدیدِ توضیح‌داده‌نشده؛ پوشهٔ `sql\patches` |
 | 6 | `merge --ff-only <RELEASE_COMMIT>` | تغییردهنده | HEAD برابرِ `<RELEASE_COMMIT>` نشود؛ `public\hot` وجود داشته باشد |
 | 7 | Composer: نوعِ vendor، `check-platform-reqs`، dry-run سپس `install --no-dev` | تغییردهنده | vendorِ `dev`؛ نیازمندیِ ناموفق؛ عملیاتی جز فهرستِ گامِ ۴ |
-| 8 | `db:patch --status`، نبودِ اشیایِ جدید، `db:patch`، بررسی | تغییردهنده (دیتابیس) | نبودِ تأییدِ دستیِ مسئولِ دیتابیس برایِ دسترسیِ SQL؛ Pending ≠ فهرستِ ۴-۱-۵؛ هر یک از اشیایِ جدید از قبل موجود؛ خطا، کمتر از ۱۶ شیء یا ۱۳ ردیفِ `SUCCESS` |
+| 8 | `db:patch --status`، نبودِ اشیایِ جدید، `db:patch`، بررسی | تغییردهنده (دیتابیس) | نبودِ تأییدِ دستیِ مسئولِ دیتابیس برایِ دسترسیِ SQL؛ Pending ≠ فهرستِ ۴-۱-۵؛ هر یک از اشیایِ جدید از قبل موجود؛ خطا، کمتر از ۱۶ شیء یا ۱۴ ردیفِ `SUCCESS` |
 | 9 | پاک‌سازیِ کش (+ Restartِ PHP در صورتِ نیاز) | تغییردهنده | — |
 | 10 | آزمونِ سلامت با قابلیتِ خاموش | فقط‌خواندنی | هر خطا → بازگشت (بخشِ ۸؛ دیتابیس برنمی‌گردد) |
 | 11 | Redisِ مستقل (فقط اگر Docker لینوکسی هست؛ فقط سرویسِ `gs-redis`) | تغییردهنده | Docker نیست یا `healthy` نشود یا آزمونِ اتصال `true` ندهد |

@@ -12,7 +12,7 @@
 ## ۱. خلاصه و تصمیمِ کلیدی
 
 - **مرحلهٔ ۱ — انتشارِ کد با Global Searchِ خاموش (بخش‌هایِ ۲ تا ۴):** فقط **پس از گذراندنِ همهٔ بررسی‌هایِ سرور** (بخشِ ۲)، بکاپِ Verifyشده (بخشِ ۳) و همهٔ شرط‌هایِ توقفِ بخشِ ۴ مجاز است. در این حالت به Redis نیازی نیست؛ نسخه 1.0.5 نمایش داده می‌شود، Ctrl+K فقط منوها را جست‌وجو می‌کند، و قابلیت‌هایِ جدیدِ Workflow و CRM (جدولِ زیر) فعال می‌شوند.
-- **مرحلهٔ ۲ — روشن‌کردنِ Global Search (بخش‌هایِ ۵ تا ۷):** **مجاز نیست** تا زمانی که Redisِ مستقل و پیش‌نیازهایِ **واقعیِ همان سرور** (Docker با کانتینرِ لینوکسی، اجرایِ خودکارِ Docker پس از Restart، سالم‌بودنِ `gs-redis` و آزمونِ اتصالِ برنامه) بررسی و **جداگانه تأیید** شوند. انجامِ مرحلهٔ ۱ به‌معنایِ اجازهٔ مرحلهٔ ۲ نیست. تنها روشِ آزموده‌شده در این پروژه سرویسِ `gs-redis` در `docker-compose.yml` است (بخشِ ۶)؛ اگر این پیش‌نیازها وجود ندارند یا تأیید نشده‌اند، Global Search خاموش می‌ماند.
+- **مرحلهٔ ۲ — روشن‌کردنِ Global Search (بخش‌هایِ ۵ تا ۷):** **مجاز نیست** تا زمانی که سرویسِ مستقلِ محدودکنندهٔ درخواست‌ها و پیش‌نیازهایِ **واقعیِ همان سرور** بررسی و **جداگانه تأیید** شوند: یکی از دو گزینهٔ بخشِ ۶ — (الف) `gs-redis` در Docker با کانتینرِ لینوکسی، یا (ب) Garnet به‌صورتِ سرویسِ ویندوز با .NET 8 Runtime — به‌همراهِ اجرایِ خودکار پس از Restart بدونِ ورودِ کاربر و آزمونِ اتصالِ برنامه. انجامِ مرحلهٔ ۱ به‌معنایِ اجازهٔ مرحلهٔ ۲ نیست؛ اگر این پیش‌نیازها تأیید نشده‌اند، Global Search خاموش می‌ماند.
 - بدونِ Redis، اگر قابلیت به اشتباه روشن شود، جست‌وجو با **503** متوقف می‌شود (fail-closed) و بقیهٔ سایت سالم می‌ماند.
 
 | جزء | محل | نکته |
@@ -20,11 +20,11 @@
 | کد | `app/Services/GlobalSearch`، `GlobalSearchController`، دو Middleware، `config/global_search.php`، `routes/web.php` | مسیرِ `POST /global-search` با CSRF؛ تغییری در Nginx لازم نیست |
 | UI | `resources/js/Components/GlobalSearch/*`، `Header.tsx`، `public/build` (در Git) | Build رویِ سرور لازم نیست؛ **Vite اجرا نشود** |
 | SQL — Global Search | اتصالِ `sqlsrv_search` (همان `DB_*`، بدونِ Connection Pooling) + پچ‌هایِ `085` و `086` | ۱ تابع و ۴ رویهٔ جدید؛ بدونِ تغییرِ جدول یا داده |
-| SQL — Workflow | پچ‌هایِ `064` تا `069` | تغییرِ رویه‌هایِ موجود (از جمله `sp_GetMessages`، `sp_Wf_CreateTaskMessage`، `sp_Wf_GetStepTaskDetail`) و ۱ رویهٔ جدید؛ **رفتارِ صندوقِ نامه و فرایندهایِ در حالِ اجرا تغییر می‌کند** |
+| SQL — Workflow | پچ‌هایِ `064` تا `069` و `088` | تغییرِ رویه‌هایِ موجود (از جمله `sp_GetMessages`، `sp_Wf_CreateTaskMessage`، `sp_Wf_GetStepTaskDetail`) و ۱ رویهٔ جدید؛ **رفتارِ صندوقِ نامه و فرایندهایِ در حالِ اجرا تغییر می‌کند**؛ `088` رونوشت (CC) را به نامهٔ فرایندی اضافه می‌کند (پارامترهایِ اختیاری؛ فراخوانی‌هایِ قبلی بدونِ تغییر) |
 | SQL — CRM و مرتب‌سازی | پچ‌هایِ `080` تا `084` | **۳ جدولِ جدید** (`CrmPartyRoles`، `CrmPartyPositions`، `CrmPartyPersonRelationPositions`)، رویه‌هایِ جدید و تغییرِ ۱۹ رویهٔ فهرست‌ها (`081`)؛ پچِ `083` دسترسیِ `CRM_DELETE` را می‌سازد و **به نقشِ ۱ (ادمین) می‌دهد** — حذفِ دائمیِ رکوردهایِ CRM (فقط وقتی جایی استفاده نشده باشند) |
 | Composer | `predis/predis` 2.4.1 | کلاینتِ Redis |
 | SQL — دادهٔ نمایشی | پچِ `087` (DMLِ دستی، Idempotent) | عنوانِ پوشهٔ منویِ CRM → «مخاطبین و ارتباطات» و «فهرست‌های CRM» → «فهرست‌های مخاطبین و ارتباطات»؛ `SortOrder = 0` در ۱۶ جدولِ فهرست‌هایِ پایهٔ CRM — **ترتیبِ دلخواهِ فعلیِ مشتری در این فهرست‌ها بازنویسی می‌شود** (`CrmPartyImages` شامل نیست). نامِ مجوزها (مثلِ «حذفِ اطلاعاتِ CRM») تغییر نمی‌کند. |
-| Rate Limit | سرویسِ `gs-redis` (Docker) | فقط هنگامِ روشن‌کردن |
+| Rate Limit | سرویسِ مستقل: `gs-redis` (Docker) **یا** Garnet (سرویسِ ویندوز) — بخشِ ۶ | فقط هنگامِ روشن‌کردن؛ تا آن زمان برنامه به آن وصل نمی‌شود |
 
 ## ۲. شناختِ سرور (پیش از روزِ انتشار؛ همه [فقط‌خواندنی])
 
@@ -44,7 +44,7 @@
 | `APP_VERSION` در `.env` | `Get-Content C:\Project\Dashboard_New\.env \| Where-Object { $_ -match '^\s*APP_VERSION\s*=' }` (فقط همین کلید؛ محرمانه نیست) | **فقط خروجیِ خالی (کلید تعریف نشده)** پذیرفته است. هر خطِ پیداشده = **توقف** پیش از روزِ انتشار؛ تغییرِ آن تصمیمِ جداگانه است. دلیل: نسخه از `env('APP_VERSION', <پیش‌فرضِ کد>)` خوانده می‌شود و هر تعریفی پیش‌فرضِ کد را کنار می‌گذارد — مقدارِ قدیمی آزمونِ ۴-۷ را خراب می‌کند، `APP_VERSION=1.0.5` باعث می‌شود پس از Rollback هم 1.0.5 نمایش داده شود (گامِ ۶ بخشِ ۸)، و `APP_VERSION=` با مقدارِ خالی نسخه را رشتهٔ خالی نشان می‌دهد |
 | دسترسیِ حسابِ برنامه در SQL | بلوکِ «دسترسیِ SQL» در زیر (با همان اتصالِ `.env` برنامه که `db:patch` استفاده می‌کند) | همهٔ مقادیر مطابقِ انتظارِ زیرِ بلوک **و** تأییدِ دستیِ صریحِ مسئولِ دیتابیس بر پایهٔ همین خروجی؛ هر انحراف یا نبودِ تأیید = **توقف** (این بررسی شرطِ لازم است، نه تضمینِ کافی) |
 | Config/Route Cache | `Test-Path C:\Project\Dashboard_New\bootstrap\cache\config.php`؛ `Get-ChildItem C:\Project\Dashboard_New\bootstrap\cache -Filter 'routes-*.php'` | ثبت کنید که سرور از `config:cache`/`route:cache` استفاده می‌کند یا نه (بخشِ ۴-۶) |
-| Docker (فقط برایِ روشن‌کردنِ Global Search) | `docker version` و `docker info --format '{{.OSType}}'` | باید `linux` باشد. نبودِ Docker یا `windows` = Global Search خاموش می‌ماند (بخشِ ۶) |
+| سرویسِ محدودکننده (فقط برایِ روشن‌کردنِ Global Search) | `docker version`، `docker info --format '{{.OSType}}'` و `dotnet --list-runtimes` | گزینهٔ الف: Docker با `linux`؛ گزینهٔ ب: `Microsoft.NETCore.App 8.x` (یا نصبِ .NET 8 Runtime با تأیید). هیچ‌کدام = Global Search خاموش می‌ماند (بخشِ ۶) |
 | فضایِ دیسک | `Get-PSDrive C, D` | فضایِ کافی برایِ بکاپِ دیتابیس و کپیِ پوشه |
 
 همان دستورها برایِ کپی (در جدول، نویسهٔ `|` برایِ Markdown به‌صورتِ `\|` آمده است) — همه **[فقط‌خواندنی]**:
@@ -91,7 +91,7 @@ $need | ForEach-Object { '{0,-11} CLI={1,-5} CGI={2}' -f $_, ($cli -contains $_)
 ```
 اگر سرویس `PHP_INI_SCAN_DIR` دارد، فقط برایِ دستورهایِ CGI همان مقدار را در همین پنجره تنظیم کنید (`$env:PHP_INI_SCAN_DIR = '<مقدار>'` پیش از آن‌ها و `$env:PHP_INI_SCAN_DIR = $null` پس از آن‌ها؛ تنظیمِ سیستم تغییر نمی‌کند). فهرستِ `$need` همان نیازهایِ `composer.lock` (بخشِ ۴-۲) به‌علاوهٔ `pdo_sqlsrv` است.
 
-**دسترسیِ SQL حسابِ برنامه برایِ پچ‌هایِ این نسخه (064–069، 080–087)** — **[فقط‌خواندنی]**؛ با همان اتصالی که `db:patch` استفاده می‌کند، بدونِ نمایشِ نامِ کاربری یا رمز. هیچ DDL اجرا نمی‌کند و هیچ مجوزی را تغییر نمی‌دهد. بلوک را **بدونِ تغییر** کپی کنید:
+**دسترسیِ SQL حسابِ برنامه برایِ پچ‌هایِ این نسخه (064–069، 080–088)** — **[فقط‌خواندنی]**؛ با همان اتصالی که `db:patch` استفاده می‌کند، بدونِ نمایشِ نامِ کاربری یا رمز. هیچ DDL اجرا نمی‌کند و هیچ مجوزی را تغییر نمی‌دهد. بلوک را **بدونِ تغییر** کپی کنید:
 ```powershell
 Set-Location C:\Project\Dashboard_New
 $code = @'
@@ -136,6 +136,7 @@ foreach ((array) Illuminate\Support\Facades\DB::selectOne($sql) as $k => $v) { e
 - `080`، `082`: `CREATE TABLE` (۳ جدول)، `CREATE INDEX` و `CREATE PROCEDURE` (بدونِ `OR ALTER` — اگر شیء از قبل باشد پچ خطا می‌دهد)، و `ALTER PROCEDURE` رویِ دو رویهٔ موجود.
 - `081`: `ALTER PROCEDURE` رویِ ۱۹ رویهٔ موجود.
 - `083`، `084`: `CREATE`/`ALTER PROCEDURE dbo.sp_Crm_DeleteRecord` (بدنه از `sp_executesql` با پارامتر استفاده می‌کند) و **درجِ داده**: ردیفِ `CRM_DELETE` در `dbo.Permissions` و اعطایِ آن به `RoleID = 1` در `dbo.RolePermissions` (هر دو با `IF NOT EXISTS`).
+- `088`: `CREATE OR ALTER PROCEDURE dbo.sp_Wf_CreateTaskMessage` با دو پارامترِ اختیاریِ `@CopyUserIDs`/`@CopyDescription` (پیش‌فرض `NULL`)؛ بدنه هنگامِ ثبتِ نامهٔ فرایندی در `MessageCopies`/`UserNotifications` درج می‌کند؛ خودِ پچ داده‌ای تغییر نمی‌دهد و تکرارپذیر است.
 - `087`: فقط **`UPDATE`ِ داده** (Idempotent): `MenuTitle` در `dbo.Menu` (۲ ردیف) و `SortOrder = 0` در ۱۶ جدولِ فهرست‌هایِ پایهٔ CRM. هیچ ردیفی حذف یا اضافه نمی‌شود.
 - همه در `dbo`، بدونِ `GRANT`، `EXECUTE AS` یا ارجاعِ بین‌دیتابیسی. در مجموع ۲۲ رویهٔ موجود با `ALTER PROCEDURE` تغییر می‌کنند. `db:patch` علاوه بر آن از `SysPatches` می‌خواند و در آن درج می‌کند. (sqlsrv ممکن است اعداد را به‌صورتِ `'1'` نشان دهد.)
 
@@ -181,13 +182,13 @@ foreach ((array) Illuminate\Support\Facades\DB::selectOne($sql) as $k => $v) { e
 ### ۴-۱. بررسی‌هایِ پیش از هر تغییر و دریافتِ نسخهٔ مشخص
 
 **`<RELEASE_COMMIT>`** هشِ کاملِ ۴۰ نویسه‌ایِ commitی است که برایِ انتشار **بررسی و تأیید** شده است. برایِ 1.0.5 در زمانِ نگارشِ این راهنما:
-`790c0f3b019bd4bbd40b182bef3ab732bd0190ba` — نسخهٔ **1.0.5** (Global Search `2b417fb` + آماده‌سازیِ استقرار `cca17f9` + Workflow `b3a388c` + CRM `05a551f` + مرتب‌سازی `278c889` + Build `2ee3602` + merge یِ `workflow-letter-condition-stage` در `50d42fe` + اصلاحِ تست‌ها `8dba9fa` + پچِ داده‌ایِ `087` در `790c0f3`). این مقصدِ **ثابتِ کد** است و همهٔ دستورهایِ این بخش و بخش‌هایِ ۴-۲، ۴-۳ و ۸ با همین مقدار اجرا می‌شوند. **هرگز `origin/main` یا «آخرین نسخه» را به‌جایِ آن به کار نبرید**؛ هیچ commitِ بررسی‌نشده‌ای منتشر نمی‌شود.
+`6fa60de38d001adc01bb8321bd4e74e35f459b3d` — نسخهٔ **1.0.5** (Global Search `2b417fb` + آماده‌سازیِ استقرار `cca17f9` + Workflow `b3a388c` + CRM `05a551f` + مرتب‌سازی `278c889` + Build `2ee3602` + merge یِ `workflow-letter-condition-stage` در `50d42fe` + اصلاحِ تست‌ها `8dba9fa` و `6a470b4` + پچِ داده‌ایِ `087` در `790c0f3` + رفعِ رونوشتِ نامهٔ فرایندی، پچِ `088`، در `6fa60de`). این مقصدِ **ثابتِ کد** است و همهٔ دستورهایِ این بخش و بخش‌هایِ ۴-۲، ۴-۳ و ۸ با همین مقدار اجرا می‌شوند. **هرگز `origin/main` یا «آخرین نسخه» را به‌جایِ آن به کار نبرید**؛ هیچ commitِ بررسی‌نشده‌ای منتشر نمی‌شود.
 
-**نسخهٔ راهنما جدا از مقصدِ کد است.** نسخهٔ نهاییِ همین راهنما ممکن است در commitِ مستنداتیِ جدیدتری در `main` باشد (`<GUIDE_COMMIT>`؛ برایِ 1.0.5 commitِ مستنداتِ بعد از `790c0f3`) و از GitHub خوانده شود. این موضوع مقصدِ انتشار را تغییر نمی‌دهد: هشِ راهنما هرگز جایِ `<RELEASE_COMMIT>` نمی‌نشیند، و نسخهٔ راهنمایی که پس از merge در پوشهٔ سرور قرار می‌گیرد (نسخهٔ داخلِ `<RELEASE_COMMIT>`) ممکن است قدیمی‌تر باشد و نباید دنبال شود. **[فقط‌خواندنی]** پس از گامِ ۲ (`fetch`) تأیید کنید که commitهایِ مستندات کدی را تغییر نمی‌دهند:
+**نسخهٔ راهنما جدا از مقصدِ کد است.** نسخهٔ نهاییِ همین راهنما ممکن است در commitِ مستنداتیِ جدیدتری در `main` باشد (`<GUIDE_COMMIT>`؛ برایِ 1.0.5 commitِ مستنداتِ بعد از `6fa60de`) و از GitHub خوانده شود. این موضوع مقصدِ انتشار را تغییر نمی‌دهد: هشِ راهنما هرگز جایِ `<RELEASE_COMMIT>` نمی‌نشیند، و نسخهٔ راهنمایی که پس از merge در پوشهٔ سرور قرار می‌گیرد (نسخهٔ داخلِ `<RELEASE_COMMIT>`) ممکن است قدیمی‌تر باشد و نباید دنبال شود. **[فقط‌خواندنی]** پس از گامِ ۲ (`fetch`) تأیید کنید که commitهایِ مستندات کدی را تغییر نمی‌دهند:
 ```powershell
 git -C C:\Project\Dashboard_New diff --name-only <RELEASE_COMMIT> <GUIDE_COMMIT>
 ```
-انتظار: فقط `docs/global-search-deployment.md`. هر فایلِ دیگر = **توقف** (یعنی راهنما با کدِ دیگری نوشته شده و باید دوباره بررسی شود).
+انتظار: فقط فایل‌هایی که رویِ سرور اجرا نمی‌شوند — `docs/`، `tests/` و `phpunit*.xml`. هر فایلِ دیگر (کد، `sql/`، `public/build`، `composer.*`، `config/`، `routes/`…) = **توقف** (یعنی راهنما با کدِ دیگری نوشته شده و باید دوباره بررسی شود).
 
 1. **[فقط‌خواندنی]** `git -C C:\Project\Dashboard_New status --porcelain` باید خالی باشد (تغییرِ محلیِ سرور را بدونِ بررسی Overwrite نکنید)، و `git -C C:\Project\Dashboard_New rev-parse HEAD` باید دقیقاً `<PREVIOUS_COMMIT>` باشد. در غیرِ این صورت **توقف**.
 2. **[تغییردهنده — فقط refهایِ remote]** `git -C C:\Project\Dashboard_New fetch origin`
@@ -200,12 +201,12 @@ git -C C:\Project\Dashboard_New diff --name-only <RELEASE_COMMIT> <GUIDE_COMMIT>
    git log --oneline <PREVIOUS_COMMIT>..<RELEASE_COMMIT>
    git diff --stat <PREVIOUS_COMMIT> <RELEASE_COMMIT>
    ```
-   انتظار: `commit` و دو بار `0`. اگر سرور رویِ `3179c37` است، `git log` دقیقاً این ۱۶ commit را نشان می‌دهد: `790c0f3`، `8dba9fa`، `ccef39d`، `50d42fe`، `2ee3602`، `d890b27`، `278c889`، `05a551f`، `b3a388c`، `9295992`، `2126e4b`، `cca17f9`، `2b417fb`، `c3340f6`، `302ae35`، `3662a5c` (commitهایِ مستنداتِ بعدیِ راهنما در این بازه نمی‌آیند). اگر سرور عقب‌تر است، هر commitِ اضافه باید جزوِ انتشارهایِ قبلاً بررسی‌شده باشد. هر commitِ ناشناخته یا تأییدنشده، یا خروجیِ غیرِ `0` = **توقف**.
+   انتظار: `commit` و دو بار `0`. اگر سرور رویِ `3179c37` است، `git log` دقیقاً این ۱۹ commit را نشان می‌دهد: `6fa60de`، `6a470b4`، `39a8b68`، `790c0f3`، `8dba9fa`، `ccef39d`، `50d42fe`، `2ee3602`، `d890b27`، `278c889`، `05a551f`، `b3a388c`، `9295992`، `2126e4b`، `cca17f9`، `2b417fb`، `c3340f6`، `302ae35`، `3662a5c` (commitهایِ مستنداتِ بعدیِ راهنما در این بازه نمی‌آیند). اگر سرور عقب‌تر است، هر commitِ اضافه باید جزوِ انتشارهایِ قبلاً بررسی‌شده باشد. هر commitِ ناشناخته یا تأییدنشده، یا خروجیِ غیرِ `0` = **توقف**.
 4. **[فقط‌خواندنی]** تغییرِ وابستگی‌ها در همین بازه (این فهرست «عملیاتِ مجازِ Composer» در بخشِ ۴-۲ است):
    ```powershell
    git diff <PREVIOUS_COMMIT> <RELEASE_COMMIT> -- composer.json composer.lock | Select-String '^[+-] {8}"[a-z0-9-]+/[a-z0-9.-]+": "|^[+-] {12}"(name|version)": '
    ```
-   انتظار برایِ بازهٔ `3179c37` تا `790c0f3`: در `composer.json` خطِ `laravel/tinker` فقط به‌خاطرِ ویرگول یک‌بار با `-` و یک‌بار با `+` می‌آید و `+ "predis/predis": "2.4.1"` اضافه می‌شود؛ در `composer.lock` فقط `+ "name": "predis/predis"` و `+ "version": "v2.4.1"`. هر بستهٔ دیگر یا هر خطِ `-` در `composer.lock` = **توقف** (مگر جزوِ انتشارِ قبلاً بررسی‌شده‌ای در همین بازه باشد).
+   انتظار برایِ بازهٔ `3179c37` تا `6fa60de`: در `composer.json` خطِ `laravel/tinker` فقط به‌خاطرِ ویرگول یک‌بار با `-` و یک‌بار با `+` می‌آید و `+ "predis/predis": "2.4.1"` اضافه می‌شود؛ در `composer.lock` فقط `+ "name": "predis/predis"` و `+ "version": "v2.4.1"`. هر بستهٔ دیگر یا هر خطِ `-` در `composer.lock` = **توقف** (مگر جزوِ انتشارِ قبلاً بررسی‌شده‌ای در همین بازه باشد).
 5. **[فقط‌خواندنی]** تطبیقِ وضعیتِ واقعیِ `SysPatches` با پچ‌هایِ دو نسخه. با همان اتصالی که `db:patch` استفاده می‌کند (`.env` برنامه) و بدونِ نمایشِ هیچ تنظیمی؛ اگر `SysPatches` نباشد چیزی نمی‌سازد. بلوک را **بدونِ تغییر** کپی کنید (کدِ PHP نباید نویسهٔ `"` داشته باشد):
 ```powershell
 Set-Location C:\Project\Dashboard_New
@@ -237,7 +238,7 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
 ```
    انتظار — هر انحراف = **توقف** و بررسیِ جداگانه:
    - `php exit: 0` و `0.` برابرِ `DB=Dashboard_DB` (همان دیتابیسِ بکاپِ بخشِ ۳). `NO_SYSPATCHES` یعنی روندِ پچ رویِ این سرور با انتظار هم‌خوان نیست.
-   - `1.` برایِ بازهٔ `3179c37` تا `790c0f3` دقیقاً این ۱۴ پچ به همین ترتیب: `064_workflow_clone_fix_and_auto_code.sql`، `065_workflow_auto_code_gap_fill.sql`، `066_workflow_instance_acted_assignees.sql`، `067_workflow_one_message_per_instance.sql`، `068_workflow_sent_status_tiebreak.sql`، `069_workflow_letter_condition_deferred.sql`، `080_crm_party_roles_positions.sql`، `081_sp_sort_order_code_rule.sql`، `082_crm_relation_multi_positions.sql`، `083_crm_delete_record.sql`، `084_crm_delete_record_party_brand_link.sql`، `085_global_search_procedures.sql`، `086_global_search_crm_address_location.sql`، `087_crm_display_and_sortorder_alignment.sql`. اگر سرور عقب‌تر است، هر پچِ اضافه باید متعلق به commitهایِ بررسی‌شدهٔ گامِ ۳ باشد.
+   - `1.` برایِ بازهٔ `3179c37` تا `6fa60de` دقیقاً این ۱۵ پچ به همین ترتیب: `064_workflow_clone_fix_and_auto_code.sql`، `065_workflow_auto_code_gap_fill.sql`، `066_workflow_instance_acted_assignees.sql`، `067_workflow_one_message_per_instance.sql`، `068_workflow_sent_status_tiebreak.sql`، `069_workflow_letter_condition_deferred.sql`، `080_crm_party_roles_positions.sql`، `081_sp_sort_order_code_rule.sql`، `082_crm_relation_multi_positions.sql`، `083_crm_delete_record.sql`، `084_crm_delete_record_party_brand_link.sql`، `085_global_search_procedures.sql`، `086_global_search_crm_address_location.sql`، `087_crm_display_and_sortorder_alignment.sql`، `088_workflow_task_message_cc.sql`. اگر سرور عقب‌تر است، هر پچِ اضافه باید متعلق به commitهایِ بررسی‌شدهٔ گامِ ۳ باشد.
    - `2.` تا `6.` خالی. (`3.` یعنی پچی که در نسخهٔ فعلی هست ولی `SUCCESS` ندارد؛ `db:patch` آن را **دوباره اجرا می‌کند** — ممکن است قبلاً دستی اجرا شده باشد. رویِ دیتابیسِ توسعه چنین وضعیتی برایِ 005، 031، 033، 034، 035، 045 و 079 دیده شده است. `2.` یعنی پچِ قبلاً اجراشده تغییر کرده و `db:patch` تغییرش را اجرا نمی‌کند.)
    - `7.` برابرِ `False / in release: 0` (اگر پوشهٔ `sql\patches` باشد، `db:patch` فقط همان را می‌خواند).
    - ردیف‌هایِ `SysPatches` را با دست اضافه، ویرایش یا حذف نکنید مگر با تأییدِ صریح و جداگانه.
@@ -266,7 +267,7 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
    ```
-   انتظار: هیچ هشدارِ «lock file is not up to date»؛ عملیات دقیقاً همان فهرستِ گامِ ۴-۱-۴. برایِ بازهٔ `3179c37` تا `790c0f3`: **`Package operations: 1 install, 0 updates, 0 removals`** و فقط `Installing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**.
+   انتظار: هیچ هشدارِ «lock file is not up to date»؛ عملیات دقیقاً همان فهرستِ گامِ ۴-۱-۴. برایِ بازهٔ `3179c37` تا `6fa60de`: **`Package operations: 1 install, 0 updates, 0 removals`** و فقط `Installing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**.
 4. **[تغییردهنده]** همان دستور بدونِ `--dry-run`:
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --working-dir=C:\Project\Dashboard_New
@@ -282,7 +283,7 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
    Set-Location C:\Project\Dashboard_New
    & "<PHP_DIR>\php.exe" artisan db:patch --status
    ```
-   فهرستِ «در انتظار اجرا (Pending)» باید **دقیقاً** همان ردیفِ `1.` در ۴-۱-۵ باشد (برایِ این انتشار همان ۱۴ پچِ `064` تا `069` و `080` تا `087`). هر تفاوت = **توقف**.
+   فهرستِ «در انتظار اجرا (Pending)» باید **دقیقاً** همان ردیفِ `1.` در ۴-۱-۵ باشد (برایِ این انتشار همان ۱۵ پچِ `064` تا `069` و `080` تا `088`). هر تفاوت = **توقف**.
 2. **[فقط‌خواندنی]** این اشیا نباید از قبل وجود داشته باشند (اگر وجود دارند، **توقف** و بررسی):
    ```powershell
    sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name FROM sys.objects WHERE name IN ('fn_Gs_Normalize','sp_Gs_Search','sp_Gs_SearchMessages','sp_Gs_SearchProjects','sp_Gs_SearchProcesses','sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord');"
@@ -295,15 +296,16 @@ $newPatches  = @($relPatches | Where-Object { $prevPatches -notcontains $_ })
    اگر خطا داد: **توقف**؛ دوباره اجرا نکنید. ردیفِ `FAILED` ثبت می‌شود و بخش‌هایِ (batchهایِ) پیش از خطا ممکن است اعمال شده باشند؛ وضعیت گزارش و جداگانه تصمیم‌گیری شود.
 4. **[فقط‌خواندنی]** بررسی:
    ```powershell
-   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name, type_desc FROM sys.objects WHERE name LIKE 'sp[_]Gs[_]%' OR name LIKE 'fn[_]Gs[_]%' OR name IN ('sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord'); SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '06[4-9]%' OR PatchName LIKE '08[0-7]%'; SELECT PermissionCode FROM dbo.Permissions WHERE PermissionCode = 'CRM_DELETE'; SELECT MenuTitle FROM dbo.Menu WHERE Url = '/crm/directory' OR MenuID IN (SELECT ParentID FROM dbo.Menu WHERE Url = '/crm/parties');"
+   sqlcmd -S <SQL_SERVER> <AUTH> -C -d Dashboard_DB -Q "SELECT name, type_desc FROM sys.objects WHERE name LIKE 'sp[_]Gs[_]%' OR name LIKE 'fn[_]Gs[_]%' OR name IN ('sp_Wf_AddTaskMessageRecipients','CrmPartyRoles','CrmPartyPositions','CrmPartyPersonRelationPositions','sp_Crm_GetPartyRoles','sp_Crm_GetPartyPositions','sp_Crm_SavePartyRoles','sp_Crm_SavePartyPositions','sp_Crm_GetRelationPositionIds','sp_Crm_SaveRelationPositions','sp_Crm_DeleteRecord'); SELECT PatchName, Status FROM dbo.SysPatches WHERE PatchName LIKE '06[4-9]%' OR PatchName LIKE '08[0-8]%'; SELECT PermissionCode FROM dbo.Permissions WHERE PermissionCode = 'CRM_DELETE'; SELECT MenuTitle FROM dbo.Menu WHERE Url = '/crm/directory' OR MenuID IN (SELECT ParentID FROM dbo.Menu WHERE Url = '/crm/parties');"
    ```
-   انتظار: ۱۶ شیء (۵ شیءِ Global Search + `sp_Wf_AddTaskMessageRecipients` + ۳ جدول و ۷ رویهٔ CRM)، ۱۴ ردیفِ `SUCCESS`، یک ردیفِ `CRM_DELETE`، و عنوان‌هایِ منو «مخاطبین و ارتباطات» و «فهرست‌های مخاطبین و ارتباطات» (اگر سرورِ مشتری عنوانِ پوشه را قبلاً دستی عوض کرده باشد، `087` به آن دست نمی‌زند).
+   انتظار: ۱۶ شیء (۵ شیءِ Global Search + `sp_Wf_AddTaskMessageRecipients` + ۳ جدول و ۷ رویهٔ CRM)، ۱۵ ردیفِ `SUCCESS`، یک ردیفِ `CRM_DELETE`، و عنوان‌هایِ منو «مخاطبین و ارتباطات» و «فهرست‌های مخاطبین و ارتباطات» (اگر سرورِ مشتری عنوانِ پوشه را قبلاً دستی عوض کرده باشد، `087` به آن دست نمی‌زند).
 
 نکته‌هایِ ایمنی:
 - پچ‌هایِ Global Search (`085`، `086`) هر دو `CREATE OR ALTER` هستند؛ اجرایِ مجددِ «085 سپس 086» بدونِ خطا و با همان نتیجه است (در محیطِ ایزوله آزموده شد).
 - **هرگز 085 را به‌تنهایی پس از 086 اجرا نکنید** (اصلاحِ جست‌وجویِ آدرس برمی‌گردد). اجرایِ دستی فقط به ترتیبِ 085 سپس 086.
 - پچ‌هایِ `067`، `068` و `069` رفتارِ نامه‌هایِ فرایندی و فهرستِ صندوقِ نامه (`sp_GetMessages`) را برایِ همهٔ کاربران تغییر می‌دهند؛ پس از انتشار، صندوقِ نامه و یک فرایندِ نمونه را با یک حسابِ واقعی بررسی کنید.
 - پچِ `083` دسترسیِ `CRM_DELETE` (حذفِ دائمیِ رکوردهایِ CRM که جایی استفاده نشده‌اند) را به **نقشِ ۱** می‌دهد؛ اگر نقشِ ۱ رویِ سرورِ مشتری کاربرانِ زیادی دارد، پیش از انتشار تصمیم بگیرید و پس از انتشار دسترسی‌ها را بررسی کنید.
+- **اثرهایِ داده‌ایِ پچ‌ها (خلاصه):** `082` سمتِ فعلیِ هر رابطهٔ «شخص ↔ طرف‌حساب» (`CrmPartyPersonRelations.PositionID`) را در جدولِ جدیدِ `CrmPartyPersonRelationPositions` **کپی** می‌کند (ستونِ قدیمی حذف نمی‌شود؛ Idempotent با `NOT EXISTS`). `083` ردیفِ مجوزِ `CRM_DELETE` را می‌سازد و به نقشِ ۱ می‌دهد (حذفِ دائمیِ رکوردهایِ CRMِ استفاده‌نشده). `087` عنوانِ منو و `SortOrder` را تغییر می‌دهد (پایین). بقیهٔ پچ‌ها (از جمله `088`) فقط جدولِ خالی، ایندکس یا رویه می‌سازند/تغییر می‌دهند.
 - پچِ `087` عنوانِ منویِ CRM را عوض می‌کند و `SortOrder`ِ فهرست‌هایِ پایهٔ CRM را صفر می‌کند؛ اگر مشتری ترتیبِ دلخواهی تعریف کرده، پس از انتشار ترتیب بر اساسِ Code (قاعدهٔ `081`) می‌شود. مقادیرِ قبلی فقط از بکاپِ بخشِ ۳ برمی‌گردند.
 - پچ‌هایِ `080`/`082`/`083` با `CREATE` (بدونِ `OR ALTER`) شیء می‌سازند؛ اجرایِ دوباره‌شان پس از موفقیت خطا می‌دهد — `db:patch` به‌خاطرِ `SysPatches` آن‌ها را دوباره اجرا نمی‌کند؛ دستی اجرا نکنید.
 - اگر سرور تریگرِ DDLِ `trg_DevTrackSchemaChanges` دارد، این پچ‌ها در `DevChangeLog` هم ثبت می‌شوند؛ این ثبت بی‌اثر است، ولی حسابِ برنامه باید اجازهٔ درج در `DevChangeLog` را داشته باشد (بررسیِ «دسترسیِ SQL» در بخشِ ۲).
@@ -337,49 +339,110 @@ $r.StatusCode                                                   # 200
 ```
 سپس با یک حسابِ واقعی: ورود/خروج، داشبورد، CRM، نامه‌ها، پروژه‌ها و فرایندها عادی؛ Ctrl+K فقط منوها را نشان می‌دهد؛ `storage\logs\laravel.log` خطایِ جدید ندارد. **انتشارِ کد در این نقطه کامل است.**
 
-## ۵. پیش از روشن‌کردن: چه چیزی لازم است
+
+## ۵. مرحلهٔ ۲ — پیش از روشن‌کردنِ Global Search
+این مرحله از آپدیتِ پایه (بخش‌هایِ ۲ تا ۴) **جداست** و در پنجرهٔ تغییرِ جداگانه انجام می‌شود. تا پایانِ آن، Global Search خاموش می‌ماند: همهٔ پرچم‌ها پیش‌فرض خاموش‌اند (فقط مقدارِ دقیقِ `true` روشن می‌کند)، مسیرِ جست‌وجو 404 می‌دهد و برنامه **هیچ اتصالی به Redis/Garnet برقرار نمی‌کند** (محدودکننده فقط هنگامِ یک جست‌وجوی واقعی ساخته می‌شود)؛ پس نبودِ سرویسِ محدودکننده هیچ بخشِ دیگری را مختل نمی‌کند.
+
 همهٔ موارد زیر باید **پیش از** بخشِ ۷ تأیید شده باشند؛ نبودِ هرکدام = **توقف** و Global Search خاموش می‌ماند:
-1. Redisِ مستقلِ آماده و سالم (بخشِ ۶).
-2. **اجرایِ خودکارِ Docker پس از Restartِ سرور تأیید شده باشد:** پس از یک Restartِ برنامه‌ریزی‌شدهٔ سرور (که خودش تغییردهنده است و پنجره و تأییدِ جداگانه می‌خواهد)، **بدونِ ورودِ هیچ کاربری به ویندوز**، `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}}"` باید `healthy` بدهد. تنظیمِ «شروع پس از ورودِ کاربر» در Docker Desktop یا `Automatic` بودنِ سرویسِ Docker به‌تنهایی کافی نیست؛ اگر این آزمون انجام نشده یا موفق نبوده، **توقف**.
-3. در بررسیِ «دسترسیِ SQL» بخشِ ۲، `execute_schema_dbo` برابرِ `1` باشد (یا دسترسیِ اجرایِ چهار رویهٔ `dbo.sp_Gs_*` توسطِ مسئولِ دیتابیس تأیید شده باشد).
+1. سرویسِ محدودکنندهٔ درخواست‌ها طبقِ یکی از گزینه‌هایِ بخشِ ۶ (الف: Docker، ب: Garnet) نصب و سالم باشد و آزمونِ اتصالِ PHP (بخشِ ۶-ج) `bool(true)` بدهد.
+2. **آزمونِ Restart بدونِ ورودِ کاربر موفق باشد:** پس از یک Restartِ برنامه‌ریزی‌شدهٔ سرور (تغییردهنده؛ پنجره و تأییدِ جداگانه)، **بدونِ ورودِ هیچ کاربری به ویندوز**:
+   - گزینهٔ الف: `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}}"` → `healthy`. تنظیمِ «شروع پس از ورودِ کاربر» در Docker Desktop به‌تنهایی کافی نیست.
+   - گزینهٔ ب: `Get-Service GarnetGlobalSearch` → `Running`، پورتِ 6392 فقط رویِ `127.0.0.1` در حالِ شنود، و آزمونِ ۶-ج `bool(true)`.
+   اگر این آزمون انجام نشده یا موفق نبوده، **توقف**.
+3. در بررسیِ «دسترسیِ SQL» بخشِ ۲، `execute_schema_dbo` برابرِ `1` باشد (یا دسترسیِ اجرایِ چهار رویهٔ `dbo.sp_Gs_*` توسطِ مسئولِ دیتابیس تأیید شده باشد). پچ‌هایِ `085` و `086` در مرحلهٔ ۱ اجرا شده‌اند.
 4. پنجرهٔ تغییرِ جداگانه و یک حسابِ دارایِ `CRM_VIEW`/`WORKFLOW_VIEW` و یک حسابِ بدونِ آن‌ها برایِ آزمون.
 
-## ۶. Redisِ اختصاصیِ Global Search
+## ۶. سرویسِ محدودکنندهٔ درخواست‌ها (Rate Limit) — جدا از Redisِ اصلی
+کاربرد فقط شمارشِ کوتاه‌مدتِ درخواست‌هایِ جست‌وجو است (۲۰ درخواست در ۱۰ ثانیه برایِ هر کاربر). برنامه با `predis/predis` 2.4.1 وصل می‌شود و برایِ هر جست‌وجو یک اسکریپتِ Lua (`EVAL`: INCR + PTTL + PEXPIRE) اجرا می‌کند؛ مهلتِ اتصال و هر فرمان ۰٫۵ ثانیه است و **هر خطا = 503 (fail-closed)** فقط برایِ جست‌وجو. نیازمندی‌ها: پروتکلِ Redis با `EVAL` که **اتمیک** اجرا شود، احرازِ هویت با رمز، گوش‌دادن **فقط رویِ `127.0.0.1`**، بدونِ نیاز به ذخیرهٔ دائمی. Redisِ اصلیِ برنامه (اگر هست) نقشی ندارد و دست نمی‌خورد.
 
-**وابستگیِ صریح:** راهِ آزموده‌شده سرویسِ `gs-redis` در `docker-compose.yml` است (ایمیج `redis:7.4.11-alpine`، پروفایلِ `globalsearch`). این یعنی رویِ سرورِ شرکت باید **Docker با قابلیتِ اجرایِ کانتینرِ لینوکسی** (`docker info --format '{{.OSType}}'` → `linux`) نصب باشد.
-- اگر Docker نیست یا فقط کانتینرِ ویندوزی اجرا می‌کند: **Global Search خاموش بماند.** در این پروژه هیچ جایگزینِ دیگری برایِ تولید آزموده و تأیید نشده است؛ هر گزینهٔ دیگر (از جمله اجرایِ Redis-compatible به‌صورتِ سرویسِ ویندوز) پیش از استفاده باید جداگانه ارزیابی، آزموده و تأیید شود.
-- **پایداری پس از Restartِ سرور:** کانتینر `restart: unless-stopped` دارد، ولی فقط وقتی دوباره بالا می‌آید که **خودِ Docker** پس از Restart اجرا شود. Docker Desktop به‌طورِ معمول پس از ورودِ کاربر شروع می‌شود؛ اجرایِ خودکارِ Docker رویِ این سرور باید طبقِ بخشِ ۵ (موردِ ۲) **آزموده و تأیید** شود؛ تا آن زمان Global Search روشن نمی‌شود. اگر پس از روشن‌شدن Docker بالا نیاید، جست‌وجو با 503 متوقف می‌شود و بقیهٔ سایت سالم است.
-- اتصالِ برنامه: PHPِ این سرور خارج از Docker اجرا می‌شود، پس از طریقِ loopbackِ منتشرشده وصل می‌شود: `127.0.0.1:6392`. این پورت فقط رویِ `127.0.0.1` منتشر است و از شبکه در دسترس نیست. اگر پورتِ 6392 رویِ سرور اشغال است، در `.env` مقدارِ `GS_REDIS_HOST_PORT` را عوض کنید و همان را در `GS_RATELIMIT_REDIS_PORT` بگذارید.
-- Redisِ اصلیِ برنامه (اگر وجود دارد) هیچ نقشی ندارد و دست نمی‌خورد.
-- **هشدار — Docker Compose رویِ سرورِ شرکت:** اجرایِ عمومیِ `docker compose up -d` (یا هر `up` بدونِ نامِ سرویس)، `docker compose down` و `--remove-orphans` **مجاز نیست**. `docker-compose.yml` سرویس‌هایِ `app` (PHP-FPM) و `nginx` (پورت‌هایِ 8080 و 443) را هم دارد که با Nginx و PHPِ ویندوزی تداخل می‌کنند. فقط پس از تأییدِ پیش‌نیازهایِ همین بخش، و فقط با هدف‌گرفتنِ صریحِ سرویسِ `gs-redis` (گامِ ۴ زیر).
+| | الف — `gs-redis` در Docker | ب — Garnet به‌صورتِ سرویسِ ویندوز |
+|---|---|---|
+| پیش‌نیاز | Docker با کانتینرِ لینوکسی (`docker info --format '{{.OSType}}'` → `linux`) و اجرایِ خودکارِ Docker بدونِ ورودِ کاربر | **.NET 8 Runtime** (`Microsoft.NETCore.App 8.x`) و بستهٔ رسمیِ Garnet **2.1.8** (Microsoft) |
+| وضعیتِ آزمون | روشِ مستقرِ همین پروژه (کانتینرِ `dashboard_gs_redis` با ACLِ حداقلی) | Garnet 2.1.8 با همین تنظیمات (`127.0.0.1`، رمز، Lua + `LuaTransactionMode`) در محیطِ توسعه به‌صورتِ **پروسه** آزموده شد: اتمیک‌بودن، درخواستِ هم‌زمان از چند پروسه، رمزِ اشتباه و قطعِ سرویس → 503. **اجرا به‌صورتِ سرویسِ ویندوز (`Garnet.worker.exe`) در این پروژه آزموده نشده** و باید رویِ همان سرور آزمونِ بخشِ ۵ (موردِ ۲) را بگذراند |
+| امنیت | ACL: فقط فرمان‌هایِ لازم و کلیدهایِ `gs:rl:*` | فقط رمز (بدونِ ACLِ فرمان‌ها)؛ محدودشدن به `127.0.0.1` الزامی است |
+| پیشنهاد | اگر Docker لینوکسی و اجرایِ خودکارش موجود است | اگر Docker لینوکسی نیست (سرورِ ویندوزیِ بدونِ Docker) |
 
-گام‌ها:
-1. **[فقط‌خواندنی]** `Get-NetTCPConnection -State Listen -LocalPort 6392 -ErrorAction SilentlyContinue` — باید خالی باشد.
-2. **[فقط‌خواندنی]** ساختِ رمزِ قوی (فقط `A-Z a-z 0-9 _ -`، حداقل ۳۲ نویسه؛ خروجی را جایی جز `.env` ذخیره نکنید):
+اگر هیچ‌کدام ممکن نیست، Global Search خاموش بماند؛ هر گزینهٔ دیگر (Memurai و…) آزموده نشده و پیش از استفاده ارزیابیِ جداگانه می‌خواهد.
+
+**گام‌هایِ مشترک:**
+1. **[فقط‌خواندنی]** `Get-NetTCPConnection -State Listen -LocalPort 6392 -ErrorAction SilentlyContinue` — باید خالی باشد (اگر اشغال است، پورتِ آزادِ دیگری انتخاب و در همهٔ گام‌ها جایگزین کنید).
+2. **[فقط‌خواندنی]** ساختِ رمزِ قوی (فقط `A-Z a-z 0-9 _ -`، حداقل ۳۲ نویسه؛ خروجی را جایی جز `.env` و فایلِ پیکربندیِ محافظت‌شدهٔ همان سرویس ذخیره نکنید):
    ```powershell
    $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
    [Convert]::ToBase64String($b).TrimEnd('=').Replace('+','-').Replace('/','_')
    ```
-3. **[تغییردهنده]** افزودن به `.env` سرور (نه Git):
+3. **[تغییردهنده]** افزودن به `.env` سرور (نه Git) — برایِ هر دو گزینه یکسان است، چون PHPِ این سرور خارج از Docker اجرا می‌شود:
    ```
    GS_RATELIMIT_REDIS_HOST=127.0.0.1
    GS_RATELIMIT_REDIS_PORT=6392
    GS_RATELIMIT_REDIS_PASSWORD=<رمزِ ساخته‌شده>
    ```
-   پیش از افزودن بررسی کنید این کلیدها تکراری نشوند (در `.env` اولین تعریف معتبر است).
-4. **[تغییردهنده]** راه‌اندازیِ فقط همین سرویس (نامِ `gs-redis` و `--no-deps` الزامی است؛ سرویس‌هایِ دیگرِ compose اجرا نمی‌شوند):
+   پیش از افزودن بررسی کنید این کلیدها تکراری نشوند (در `.env` اولین تعریف معتبر است). مقدارِ `gs-redis`/`6379` در `.env.example` فقط برایِ اجرایِ PHP داخلِ Docker است. `GLOBAL_SEARCH_RATE_LIMIT_DRIVER` را تعریف نکنید (پیش‌فرض `redis` است؛ `cache` فقط برایِ آزمون‌هایِ خودکار است).
+
+### ۶-الف. گزینهٔ Docker (`gs-redis`)
+- **هشدار — Docker Compose رویِ سرورِ شرکت:** اجرایِ عمومیِ `docker compose up -d` (یا هر `up` بدونِ نامِ سرویس)، `docker compose down` و `--remove-orphans` **مجاز نیست**. `docker-compose.yml` سرویس‌هایِ `app` (PHP-FPM) و `nginx` (پورت‌هایِ 8080 و 443) را هم دارد که با Nginx و PHPِ ویندوزی تداخل می‌کنند.
+- کانتینر `restart: unless-stopped` دارد، ولی فقط وقتی دوباره بالا می‌آید که **خودِ Docker** پس از Restart اجرا شود (بخشِ ۵، موردِ ۲). پورت فقط رویِ `127.0.0.1` منتشر می‌شود؛ اگر 6392 اشغال است، `GS_REDIS_HOST_PORT` را در `.env` عوض کنید و همان را در `GS_RATELIMIT_REDIS_PORT` بگذارید.
+
+1. **[تغییردهنده]** راه‌اندازیِ فقط همین سرویس (نامِ `gs-redis` و `--no-deps` الزامی است):
    ```powershell
    Set-Location C:\Project\Dashboard_New
    docker compose --profile globalsearch up -d --no-deps gs-redis
    ```
    اگر سرور به Docker Hub دسترسی ندارد، بخشِ ۹.
-5. **[فقط‌خواندنی]** `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}} {{.HostConfig.RestartPolicy.Name}}"` → `healthy unless-stopped`.
-6. **[فقط‌خواندنی]** اتصالِ برنامه (بدونِ چاپِ رمز؛ فقط یک شمارندهٔ کوتاه‌عمر در خودِ gs-redis ثبت می‌شود):
+2. **[فقط‌خواندنی]** `docker inspect dashboard_gs_redis --format "{{.State.Health.Status}} {{.HostConfig.RestartPolicy.Name}}"` → `healthy unless-stopped`.
+3. آزمونِ ۶-ج.
+- خاموش‌کردن: `docker stop dashboard_gs_redis` (کانتینر حذف نمی‌شود).
+
+### ۶-ب. گزینهٔ Garnet به‌صورتِ سرویسِ ویندوز
+`Garnet.worker.exe` (میزبانِ سرویسِ ویندوزِ Garnet، داخلِ بستهٔ رسمیِ انتشار، پوشهٔ `net8.0\Service`) **framework-dependent** است و به **.NET 8 Runtime** نیاز دارد. حتماً `LuaTransactionMode` روشن باشد: بدونِ آن اسکریپت‌هایِ Lua در Garnet (برخلافِ Redis) اتمیک نیستند و سقفِ درخواست زیرِ بارِ هم‌زمان ممکن است رد شود.
+
+1. **[فقط‌خواندنی]** `dotnet --list-runtimes` → باید `Microsoft.NETCore.App 8.` داشته باشد. اگر ندارد: نصبِ **.NET 8 Runtime** از Microsoft (تغییردهنده؛ تأییدِ جداگانه)، سپس دوباره بررسی.
+2. **[تغییردهنده — فقط فایل]** بستهٔ رسمیِ ویندوزیِ **Garnet v2.1.8** را از صفحهٔ Releaseهایِ `github.com/microsoft/garnet` دریافت و در `C:\Garnet\` (خارج از پوشهٔ برنامه و مسیرِ وب) باز کنید. **[فقط‌خواندنی]** امضا:
    ```powershell
-   Set-Location C:\Project\Dashboard_New
-   & "<PHP_DIR>\php.exe" -r "require 'vendor/autoload.php'; `$a = require 'bootstrap/app.php'; `$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); var_dump(`$a->make(App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class)->attempt('deploy-check', 20, 10)->allowed);"
+   Get-AuthenticodeSignature C:\Garnet\net8.0\Service\Garnet.worker.exe | Select-Object Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
    ```
-   انتظار: `bool(true)`. خطا = Global Search روشن نشود.
+   انتظار: `Valid` و `CN=Microsoft Corporation`. در غیرِ این صورت **توقف**.
+3. **[تغییردهنده]** فایلِ پیکربندیِ `C:\Garnet\garnet-gs.conf` (رمز همان مقدارِ `.env`):
+   ```json
+   {
+     "Address": "127.0.0.1",
+     "Port": 6392,
+     "AuthenticationMode": "Password",
+     "Password": "<رمزِ ساخته‌شده>",
+     "EnableLua": true,
+     "LuaTransactionMode": true,
+     "EnableAOF": false,
+     "Recover": false
+   }
+   ```
+   سپس دسترسیِ فایل را فقط به SYSTEM و Administrators محدود کنید (رمز در آن است):
+   ```powershell
+   icacls C:\Garnet\garnet-gs.conf /inheritance:r /grant:r "SYSTEM:R" "Administrators:F"
+   ```
+   مقادیرِ حافظه (`LogMemorySize`/`IndexMemorySize`) در آزمون‌ها پیش‌فرض بودند؛ پس از راه‌اندازی مصرفِ حافظهٔ پروسه را بررسی کنید و بدونِ آزمون تغییرشان ندهید.
+4. **[تغییردهنده]** ساختِ سرویسِ خودکار (حسابِ پیش‌فرض LocalSystem؛ `New-Service` نقل‌قول‌ها را درست منتقل می‌کند):
+   ```powershell
+   New-Service -Name GarnetGlobalSearch -DisplayName 'Garnet (Raga 360 Global Search rate limit)' -StartupType Automatic -BinaryPathName '"C:\Garnet\net8.0\Service\Garnet.worker.exe" --config-import-path "C:\Garnet\garnet-gs.conf"'
+   sc.exe config GarnetGlobalSearch start= delayed-auto
+   sc.exe failure GarnetGlobalSearch reset= 86400 actions= restart/5000/restart/5000/restart/5000
+   Start-Service GarnetGlobalSearch
+   ```
+5. **[فقط‌خواندنی]** بررسی:
+   ```powershell
+   Get-Service GarnetGlobalSearch | Select-Object Status, StartType
+   Get-NetTCPConnection -State Listen -LocalPort 6392 | Select-Object LocalAddress, OwningProcess
+   ```
+   انتظار: `Running`/`Automatic` و **فقط** `127.0.0.1`. اگر رویِ `0.0.0.0`/`::` یا هیچ آدرسی گوش نمی‌دهد (یعنی پیکربندی خوانده نشده)، **توقف** و سرویس را متوقف کنید.
+6. آزمونِ ۶-ج، سپس آزمونِ Restartِ بخشِ ۵ (موردِ ۲).
+- خاموش‌کردن بدونِ حذف: `Stop-Service GarnetGlobalSearch; Set-Service GarnetGlobalSearch -StartupType Disabled`.
+
+### ۶-ج. آزمونِ اتصالِ برنامه (هر دو گزینه)
+**[فقط‌خواندنی]** بدونِ چاپِ رمز؛ فقط یک شمارندهٔ کوتاه‌عمر در همان سرویس ثبت می‌شود:
+```powershell
+Set-Location C:\Project\Dashboard_New
+& "<PHP_DIR>\php.exe" -r "require 'vendor/autoload.php'; `$a = require 'bootstrap/app.php'; `$a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); var_dump(`$a->make(App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class)->attempt('deploy-check', 20, 10)->allowed);"
+```
+انتظار: `bool(true)`. خطا = Global Search روشن نشود.
 
 ## ۷. روشن‌کردنِ Global Search
 1. **[تغییردهنده]** در `.env`:
@@ -390,14 +453,23 @@ $r.StatusCode                                                   # 200
    GLOBAL_SEARCH_PROJECTS_ENABLED=true
    GLOBAL_SEARCH_PROCESSES_ENABLED=true
    ```
-   فقط مقدارِ دقیقِ `true` روشن می‌کند.
+   فقط مقدارِ دقیقِ `true` روشن می‌کند؛ هر گروه را می‌توان جداگانه خاموش نگه داشت.
 2. اگر سرور Config Cache دارد: **[تغییردهنده]** `artisan config:cache`؛ وگرنه تغییر از درخواستِ بعدی اعمال می‌شود.
-3. آزمون — همه [فقط‌خواندنی]:
+
+**رفتارِ مورد انتظار (مرجعِ آزمون):**
+- **دسترسی:** هر رویهٔ `sp_Gs_*` دسترسی را خودش در سرورِ SQL دوباره بررسی می‌کند (فقط کاربرِ فعال). CRM فقط با `CRM_VIEW`؛ نامه‌ها فقط برایِ فرستنده/گیرنده/رونوشت؛ پروژه‌ها فقط برایِ سازنده/عضوِ فعال؛ فرایندها فقط با `WORKFLOW_VIEW` — نتیجهٔ غیرمجاز هرگز برگردانده نمی‌شود.
+- **محدودیت:** بیش از ۲۰ جست‌وجو در ۱۰ ثانیه برایِ یک کاربر → **429** («تعداد درخواست‌ها زیاد است»).
+- **خطایِ سرویس:** سرویسِ محدودکننده در دسترس نباشد، رمز اشتباه باشد یا Lua خطا بدهد → **503** فقط برایِ جست‌وجو؛ بقیهٔ سایت سالم.
+- **حریمِ خصوصی:** متنِ جست‌وجو در `laravel.log` ثبت نمی‌شود (هشدارهایِ `global_search.*` فقط نامِ کلاسِ خطا دارند) و در Plan Cache/Query Store نگه داشته نمی‌شود.
+- **کارایی:** جست‌وجو بدونِ ایندکسِ جداگانه و مستقیم رویِ SQL اجرا می‌شود (سقفِ زمان ۱٫۵ ثانیه، `LOCK_TIMEOUT` دو ثانیه)؛ رویِ حجمِ دادهٔ مشتری اندازه‌گیری نشده است.
+
+3. آزمون — همه [فقط‌خواندنی] مگر خلافش ذکر شده:
    - صفحهٔ ورود: `"globalSearch":true`.
-   - حسابِ دارایِ `CRM_VIEW` و `WORKFLOW_VIEW`: Ctrl+K → نامِ یک طرف‌حساب یا یک شهر (مثلاً «تهران») → گروه‌هایِ CRM، نامه‌ها، پروژه‌ها، فرایندها.
-   - حسابِ بدونِ `CRM_VIEW`: گروهِ CRM **نمایش داده نمی‌شود**؛ نامه‌ها فقط برایِ فرستنده/گیرنده/رونوشت؛ پروژه‌ها فقط برایِ سازنده/عضوِ فعال؛ فرایندها فقط با `WORKFLOW_VIEW`.
-   - بیش از ۲۰ جست‌وجو در ۱۰ ثانیه: پیامِ «تعداد درخواست‌ها زیاد است» (429).
-   - `laravel.log` متنِ جست‌وجو را ثبت نمی‌کند؛ هشدارهایِ `global_search.*` فقط نامِ کلاسِ خطا دارند.
+   - حسابِ دارایِ `CRM_VIEW` و `WORKFLOW_VIEW`: Ctrl+K → نامِ یک طرف‌حساب یا یک شهر (مثلاً «تهران») → گروه‌هایِ CRM، نامه‌ها، پروژه‌ها، فرایندها؛ زمانِ پاسخ را ثبت کنید.
+   - حسابِ بدونِ `CRM_VIEW`: گروهِ CRM **نمایش داده نمی‌شود**؛ نامه‌ها/پروژه‌ها/فرایندها فقط طبقِ قواعدِ بالا.
+   - بیش از ۲۰ جست‌وجو در ۱۰ ثانیه: 429.
+   - **[تغییردهندهٔ کوتاه]** توقفِ موقتِ سرویسِ محدودکننده (`docker stop dashboard_gs_redis` یا `Stop-Service GarnetGlobalSearch`) → جست‌وجو 503 و بقیهٔ سایت سالم؛ سپس دوباره راه‌اندازی و تکرارِ آزمونِ ۶-ج.
+   - `laravel.log` متنِ جست‌وجو را ندارد.
 
 ## ۸. خاموش‌کردنِ فوری و بازگشت
 
@@ -409,7 +481,7 @@ $r.StatusCode                                                   # 200
 ### بازگشت به نسخهٔ قبل (فقط کد و vendor)
 
 > **مهم: بازگشتِ کد، دیتابیس را به حالتِ پیش از انتشار برنمی‌گرداند و بازگشتِ کامل یا بدونِ اثر نیست.**
-> - همهٔ تغییراتِ پچ‌هایِ `064`–`069` و `080`–`087` در `Dashboard_DB` **باقی می‌مانند**: ۳ جدولِ جدیدِ CRM (و هر داده‌ای که پس از انتشار در آن‌ها ثبت شده)، رویه‌هایِ جدید، ردیفِ `CRM_DELETE` و اعطایِ آن به نقشِ ۱، عنوان‌هایِ جدیدِ منو و `SortOrder`هایِ صفرشده (`087`؛ مقادیرِ قبلی فقط از بکاپ برمی‌گردند)، و **نسخهٔ جدیدِ ۲۲ رویهٔ موجود** (از جمله `sp_GetMessages` و رویه‌هایِ Workflow). کدِ قبلی با نسخهٔ جدیدِ این رویه‌ها آزموده نشده است؛ بازگشتِ کد ممکن است در Workflow و صندوقِ نامه رفتارِ ناسازگار داشته باشد و تنها راهِ بازگرداندنِ کاملِ آن‌ها Restore از بکاپ است.
+> - همهٔ تغییراتِ پچ‌هایِ `064`–`069` و `080`–`088` در `Dashboard_DB` **باقی می‌مانند**: ۳ جدولِ جدیدِ CRM (و هر داده‌ای که پس از انتشار در آن‌ها ثبت شده)، رویه‌هایِ جدید، ردیفِ `CRM_DELETE` و اعطایِ آن به نقشِ ۱، عنوان‌هایِ جدیدِ منو و `SortOrder`هایِ صفرشده (`087`؛ مقادیرِ قبلی فقط از بکاپ برمی‌گردند)، و **نسخهٔ جدیدِ ۲۲ رویهٔ موجود** (از جمله `sp_GetMessages` و رویه‌هایِ Workflow). کدِ قبلی با نسخهٔ جدیدِ این رویه‌ها آزموده نشده است؛ بازگشتِ کد ممکن است در Workflow و صندوقِ نامه رفتارِ ناسازگار داشته باشد و تنها راهِ بازگرداندنِ کاملِ آن‌ها Restore از بکاپ است.
 > - ردیف‌هایِ `SUCCESS` این پچ‌ها در `SysPatches` **باقی می‌مانند**؛ در انتشارِ دوباره `db:patch` آن‌ها را اجرا نمی‌کند. در آن انتشار ردیفِ `4.` بررسیِ ۴-۱-۵ همین پچ‌ها را نشان می‌دهد، `db:patch --status` (۴-۳، گامِ ۱) آن‌ها را Pending نشان نمی‌دهد و گامِ ۲ بخشِ ۴-۳ اشیایِ آن‌ها را موجود می‌یابد؛ این انحرافِ شناخته‌شده باید پیش از ادامه صریحاً بررسی و تأیید شود.
 > - اشیا یا ردیف‌هایِ `SysPatches` را با دست حذف یا ویرایش نکنید.
 > - برگرداندنِ کاملِ دیتابیس فقط با Restore از بکاپِ بخشِ ۳ ممکن است: آخرین راه‌حل است، همهٔ داده‌هایِ ثبت‌شده پس از بکاپ را از بین می‌برد، به تأییدِ صریح و جداگانه نیاز دارد و جزوِ این روند نیست.
@@ -425,18 +497,20 @@ $r.StatusCode                                                   # 200
    ```powershell
    & "<PHP_DIR>\php.exe" <COMPOSER_PHAR> install --no-dev --no-scripts --no-interaction --no-progress --prefer-dist --optimize-autoloader --dry-run --working-dir=C:\Project\Dashboard_New
    ```
-   انتظار: دقیقاً عکسِ فهرستِ ۴-۱-۴؛ برایِ بازهٔ `3179c37` تا `790c0f3`: `Package operations: 0 installs, 0 updates, 1 removal` و فقط `Removing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**. سپس همان دستور بدونِ `--dry-run`.
+   انتظار: دقیقاً عکسِ فهرستِ ۴-۱-۴؛ برایِ بازهٔ `3179c37` تا `6fa60de`: `Package operations: 0 installs, 0 updates, 1 removal` و فقط `Removing predis/predis (v2.4.1)`. هر عملیاتِ دیگر = **توقف**. سپس همان دستور بدونِ `--dry-run`.
 4. **[تغییردهنده]** کش: `artisan config:clear`، `route:clear`، `view:clear` (و اگر سرور از قبل استفاده می‌کرد، `config:cache`/`route:cache`)؛ اگر OPcache بدونِ validate_timestamps است، `Restart-Service <PHP_SERVICE>`.
-5. Redis (فقط اگر در بخشِ ۶ راه‌اندازی شده بود): **[تغییردهنده]** `docker stop dashboard_gs_redis` (داده‌ای ندارد؛ کانتینر حذف نمی‌شود). از `docker compose down` استفاده نکنید.
+5. سرویسِ محدودکننده (فقط اگر در بخشِ ۶ راه‌اندازی شده بود): **[تغییردهنده]** گزینهٔ الف: `docker stop dashboard_gs_redis` (کانتینر حذف نمی‌شود؛ از `docker compose down` استفاده نکنید). گزینهٔ ب: `Stop-Service GarnetGlobalSearch; Set-Service GarnetGlobalSearch -StartupType Disabled` (سرویس حذف نمی‌شود). هیچ‌کدام داده‌ای ندارند.
 6. **[فقط‌خواندنی]** آزمونِ سلامتِ بخشِ ۴-۷: کدِ `200` و `appVersion` نسخهٔ قبلی (نه `1.0.5`).
 
 ## ۹. سرورِ بدونِ دسترسیِ اینترنت
 - **Composer:** بدونِ دسترسی به Packagist/GitHub نصبِ predis ممکن نیست. یا دسترسیِ موقت فراهم شود، یا انتقالِ `vendor` از محیطی با همان `composer.lock` و همان نسخهٔ PHP — این روش رویِ سرورِ شرکت آزموده نشده و پیش از استفاده باید تأیید شود. تا آن زمان انتشار را متوقف کنید.
 - **ایمیجِ Redis:** رویِ ماشینی که ایمیج را دارد `docker save redis:7.4.11-alpine -o redis-7.4.11-alpine.tar` و رویِ سرور `docker load -i redis-7.4.11-alpine.tar` (فقط اگر Docker رویِ سرور وجود دارد).
+- **Garnet (گزینهٔ ب):** بستهٔ رسمیِ Garnet v2.1.8 و نصب‌کنندهٔ .NET 8 Runtime را رویِ ماشینی با اینترنت دریافت، امضایِ Microsoft را بررسی و رویِ سرور کپی کنید.
 
 ## ۱۰. نکته‌هایِ امنیتی
 - `.env`، رمزِ Redis، بکاپ‌ها و لاگ‌ها هرگز وارد Git نشوند و در خروجیِ دستورها نمایش داده نشوند.
 - رمزِ Redis در متغیرِ محیطیِ کانتینر قرار می‌گیرد و با `docker inspect` قابلِ مشاهده است؛ دسترسیِ Docker رویِ سرور را محدود نگه دارید.
+- گزینهٔ ب: رمزِ Garnet در `C:\Garnet\garnet-gs.conf` است؛ دسترسیِ فایل فقط SYSTEM و Administrators. Garnet در حالتِ Password فرمان‌ها را محدود نمی‌کند، پس گوش‌دادنِ فقط رویِ `127.0.0.1` الزامی است (بخشِ ۶-ب، گامِ ۵).
 - آزمون‌هایِ خودکار (`phpunit -c phpunit.globalsearch.xml`) فقط برایِ LocalDBِ ایزولهٔ توسعه هستند و **رویِ سرورِ شرکت اجرا نشوند**.
 - IIS در این روند نقشی ندارد و نباید تغییر کند.
 - رویِ سرورِ شرکت `docker compose up -d`ِ عمومی، `docker compose down` و `--remove-orphans` مجاز نیست؛ فقط `gs-redis` با نامِ صریح (بخشِ ۶).
@@ -452,9 +526,9 @@ $r.StatusCode                                                   # 200
 | 5 | تطبیقِ `SysPatches` با پچ‌هایِ دو نسخه (۴-۱-۵) | فقط‌خواندنی | دیتابیسِ دیگر؛ نبودِ جدول؛ هر مقدار در ردیف‌هایِ ۲ تا ۶؛ پچِ جدیدِ توضیح‌داده‌نشده؛ پوشهٔ `sql\patches` |
 | 6 | `merge --ff-only <RELEASE_COMMIT>` | تغییردهنده | HEAD برابرِ `<RELEASE_COMMIT>` نشود؛ `public\hot` وجود داشته باشد |
 | 7 | Composer: نوعِ vendor، `check-platform-reqs`، dry-run سپس `install --no-dev` | تغییردهنده | vendorِ `dev`؛ نیازمندیِ ناموفق؛ عملیاتی جز فهرستِ گامِ ۴ |
-| 8 | `db:patch --status`، نبودِ اشیایِ جدید، `db:patch`، بررسی | تغییردهنده (دیتابیس) | نبودِ تأییدِ دستیِ مسئولِ دیتابیس برایِ دسترسیِ SQL؛ Pending ≠ فهرستِ ۴-۱-۵؛ هر یک از اشیایِ جدید از قبل موجود؛ خطا، کمتر از ۱۶ شیء یا ۱۴ ردیفِ `SUCCESS` |
+| 8 | `db:patch --status`، نبودِ اشیایِ جدید، `db:patch`، بررسی | تغییردهنده (دیتابیس) | نبودِ تأییدِ دستیِ مسئولِ دیتابیس برایِ دسترسیِ SQL؛ Pending ≠ فهرستِ ۴-۱-۵؛ هر یک از اشیایِ جدید از قبل موجود؛ خطا، کمتر از ۱۶ شیء یا ۱۵ ردیفِ `SUCCESS` |
 | 9 | پاک‌سازیِ کش (+ Restartِ PHP در صورتِ نیاز) | تغییردهنده | — |
 | 10 | آزمونِ سلامت با قابلیتِ خاموش | فقط‌خواندنی | هر خطا → بازگشت (بخشِ ۸؛ دیتابیس برنمی‌گردد) |
-| 11 | Redisِ مستقل (فقط اگر Docker لینوکسی هست؛ فقط سرویسِ `gs-redis`) | تغییردهنده | Docker نیست یا `healthy` نشود یا آزمونِ اتصال `true` ندهد |
-| 12 | تأییدِ اجرایِ خودکارِ Docker پس از Restart (بخشِ ۵، موردِ ۲) و `execute_schema_dbo` | Restart: تغییردهنده با تأییدِ جداگانه | پس از Restart و بدونِ ورودِ کاربر `healthy` نشود، یا آزمون انجام نشده باشد؛ نبودِ دسترسیِ اجرایِ رویه‌ها |
+| 11 | سرویسِ محدودکننده: گزینهٔ الف (`gs-redis`، فقط اگر Docker لینوکسی هست) یا گزینهٔ ب (Garnet، سرویسِ ویندوز) | تغییردهنده | پیش‌نیاز نیست؛ `healthy`/`Running` نشود؛ رویِ آدرسی جز `127.0.0.1` گوش دهد؛ آزمونِ ۶-ج `true` ندهد |
+| 12 | آزمونِ Restart بدونِ ورودِ کاربر (بخشِ ۵، موردِ ۲) و `execute_schema_dbo` | Restart: تغییردهنده با تأییدِ جداگانه | پس از Restart سرویسِ محدودکننده بالا نیاید یا آزمونِ ۶-ج `true` ندهد؛ آزمون انجام نشده باشد؛ نبودِ دسترسیِ اجرایِ رویه‌ها |
 | 13 | روشن‌کردن و آزمون با حساب‌هایِ مجاز/غیرمجاز | تغییردهنده | هر یک از ردیف‌هایِ ۱۱ و ۱۲ تأیید نشده؛ هر نشتِ اطلاعات → خاموش‌کردنِ فوری |

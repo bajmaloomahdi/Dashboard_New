@@ -93,6 +93,37 @@ class ConditionContextBuilder
         return $result;
     }
 
+    /**
+     * فیلترِ Additive برایِ مسیرِ نامهٔ فرایندی (Deferred/CONDITION): از یک آرایهٔ خامِ
+     * دلخواه (مثلاً formValuesِ نامه، که ممکن است کلیدهایِ کاملاً بی‌ربط هم داشته باشد —
+     * تاریخ، توضیحِ آزاد، ...) فقط همان کلیدهایی را نگه می‌دارد که واقعاً به یک
+     * WorkflowConditionField با SourceType=START_CONTEXTِ ارجاع‌شده در همین Version
+     * تعلق دارند؛ نتیجه مستقیماً آمادهٔ عبور به build() است و هرگز باعثِ خطایِ
+     * «کلیدِ ناشناخته» در build() نمی‌شود. build() خودش هیچ تغییری نکرده و مصرف‌کنندگانِ
+     * فعلیِ آن (Contextِ صریحِ کاربر در POST /workflow/instances) دقیقاً همان رفتارِ
+     * سخت‌گیرانه را دارند.
+     *
+     * @param  array<string,mixed>  $rawValues
+     * @return array<string,mixed>
+     */
+    public function extractRelevantContext(int $versionId, array $rawValues): array
+    {
+        $referencedCodes = $this->referencedFieldCodes($versionId);
+        if ($referencedCodes === []) {
+            return [];
+        }
+
+        $sourceKeys = array_map(
+            fn ($f) => $f->SourceKey,
+            array_filter(
+                $this->store->getConditionFields(includeInactive: true),
+                fn ($f) => $f->SourceType === 'START_CONTEXT' && in_array($f->Code, $referencedCodes, true)
+            )
+        );
+
+        return array_intersect_key($rawValues, array_flip($sourceKeys));
+    }
+
     /** @return string[] Codeهایِ فیلدِ ارجاع‌شده در RuleJsonِ Transitionهایِ این Version (بدونِ نیاز به وجودِ Instance). */
     private function referencedFieldCodes(int $versionId): array
     {

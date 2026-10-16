@@ -208,23 +208,33 @@ class WorkflowPreCreatedTaskMessageTest extends TestCase
         $this->assertSame(1, $countFinal - $countBefore, 'در کلِ عملیات (تا تکمیلِ تسک) نباید بیش از یک Message ساخته شود.');
     }
 
-    public function test_condition_between_start_and_task_rejects_precreate_and_creates_no_message(): void
+    /**
+     * قبلاً (پیش از پشتیبانیِ مسیرِ Deferred برایِ CONDITION) این سناریو با WorkflowValidationException
+     * رد می‌شد. از این پس CONDITION بینِ START و اولین Task دیگر مانع نیست: Messageِ اصلی بدونِ
+     * گیرنده ساخته می‌شود، Engine خودش CONDITION را طی می‌کند و در TASK_1 با AssignmentResolverِ
+     * واقعی (DIRECT_MANAGER) به‌همان یک Message Adopt می‌شود — دقیقاً یک Message برایِ کلِ Instance.
+     */
+    public function test_condition_between_start_and_task_now_succeeds_via_deferred_adopt(): void
     {
         $definitionId = $this->publishConditionBeforeTaskDefinition();
         $countBefore = DB::selectOne('SELECT COUNT(*) AS C FROM Messages')->C;
 
-        $this->expectException(WorkflowValidationException::class);
+        $result = $this->engine->startWithNewTaskMessage(
+            definitionId: $definitionId,
+            startedByUserId: self::USER_A,
+            subject: 'باید ساخته شود',
+        );
 
-        try {
-            $this->engine->startWithNewTaskMessage(
-                definitionId: $definitionId,
-                startedByUserId: self::USER_A,
-                subject: 'نباید ساخته شود',
-            );
-        } finally {
-            $countAfter = DB::selectOne('SELECT COUNT(*) AS C FROM Messages')->C;
-            $this->assertSame(0, $countAfter - $countBefore, 'وقتی مسیر مستقیم نیست، هیچ Messageای نباید ساخته شود.');
-        }
+        $countAfter = DB::selectOne('SELECT COUNT(*) AS C FROM Messages')->C;
+        $this->assertSame(1, $countAfter - $countBefore, 'دقیقاً یک Message — حتی با CONDITIONِ میانی.');
+        $this->assertSame('RUNNING', $result->instanceStatus);
+
+        $messageId = $result->createdMessageIds[0];
+        $msg = DB::selectOne('SELECT mt.MessageTypeName FROM Messages m JOIN MessageTypes mt ON mt.MessageTypeID = m.MessageTypeID WHERE m.MessageID = ?', [$messageId]);
+        $this->assertSame('وظیفه', $msg->MessageTypeName);
+
+        $to = array_map(fn ($r) => (int) $r->ToUserID, DB::select('SELECT ToUserID FROM MessageDetails WHERE MessageID = ?', [$messageId]));
+        $this->assertSame([self::USER_MGR7], $to, 'گیرندهٔ TASK_1 (بعدِ CONDITION) باید همان DIRECT_MANAGERِ واقعی باشد.');
     }
 
     public function test_already_attached_message_cannot_be_adopted_twice(): void

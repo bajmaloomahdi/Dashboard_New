@@ -57,13 +57,13 @@ class ProcessDefinitionController extends Controller
      * GET process/definitions/{definitionId}/open — تصمیم‌گیری و Redirectِ خودکار به
      * Canvasِ نسخهٔ مناسب (بدونِ صفحهٔ واسطِ اجباری). این Route فقط Read/Redirect است؛
      * **هیچ نوشتنی رویِ Database انجام نمی‌دهد** (یک درخواستِ GET هرگز نباید عارضهٔ
-     * نوشتاری داشته باشد — طبقِ بررسیِ امنیتیِ تأییدشده):
-     *   ۱) اگر نسخهٔ DRAFT دارد → همان (ادامهٔ ویرایش).
-     *   ۲) وگرنه اگر نسخهٔ ACTIVE دارد → همان (نمایشِ Read-only).
-     *   ۳) در غیرِ این صورت (بدونِ هیچ نسخه‌ای، یا فقط نسخه‌هایِ Archived) → Redirect به
-     *      همان صفحهٔ میانیِ تاریخچه (Definitions/Show)؛ ساختِ Draft از آنجا فقط با یک
-     *      اقدامِ صریحِ POST (دکمهٔ موجودِ «نسخهٔ پیش‌نویسِ جدید») ممکن است، که خودش
-     *      WORKFLOW_DESIGN را چک می‌کند — نه از داخلِ این GET.
+     * نوشتاری داشته باشد — طبقِ بررسیِ امنیتیِ تأییدشده).
+     *
+     * «آخرین نسخه» یعنی نسخه‌ای با بیشترین VersionNo — بدونِ توجه به وضعیتِ آن (DRAFT/
+     * ACTIVE/ARCHIVED)؛ همان همیشه باز می‌شود. وضعیتِ همان نسخه تعیین می‌کند Canvas
+     * قابلِ‌ویرایش است (DRAFT) یا فقط‌خواندنی (ACTIVE/ARCHIVED — که در آن‌جا دکمهٔ
+     * صریحِ Clone برایِ ساختِ Draftِ جدید در دسترس است، نه این GET). فقط وقتی اصلاً
+     * هیچ نسخه‌ای وجود ندارد، به صفحهٔ میانیِ تاریخچه (Definitions/Show) می‌رویم.
      */
     public function open(int $definitionId)
     {
@@ -74,14 +74,9 @@ class ProcessDefinitionController extends Controller
 
         $versions = collect($data['versions']); // از قبل ORDER BY VersionNo DESC
 
-        $draft = $versions->firstWhere('Status', 'DRAFT');
-        if ($draft) {
-            return redirect("/process/versions/{$draft->VersionID}");
-        }
-
-        $active = $versions->firstWhere('Status', 'ACTIVE');
-        if ($active) {
-            return redirect("/process/versions/{$active->VersionID}");
+        $latest = $versions->sortByDesc('VersionNo')->first();
+        if ($latest) {
+            return redirect("/process/versions/{$latest->VersionID}");
         }
 
         return redirect("/process/definitions/{$definitionId}");

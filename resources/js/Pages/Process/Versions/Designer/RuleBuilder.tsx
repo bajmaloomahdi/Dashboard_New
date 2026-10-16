@@ -2,7 +2,7 @@ import { Button, Select, Input, InputNumber, Space, Typography, Tag, Radio, Aler
 import { PlusOutlined, DeleteOutlined, ApartmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import PersianDateInput from '../../../../Components/PersianDateInput';
-import { THEME } from '../../../../theme';
+import { THEME, columnHelpers } from '../../../../theme';
 import type { RuleCondition, RuleGroup, RuleNode, RuleOperator } from '../versionEditor';
 import {
     type ConditionField,
@@ -334,26 +334,33 @@ function ValueEditor({ field, listMode, readOnly, value, onChange }: ValueEditor
                     disabled={readOnly}
                     value={typeof value === 'number' ? value : undefined}
                     onChange={(v) => onChange(v ?? 0)}
+                    formatter={(v) => columnHelpers.formatNumberInput(v)}
+                    parser={(v) => Number(columnHelpers.parseNumberInput(v))}
                 />
             );
         case 'DECIMAL': {
             const str = typeof value === 'string' ? value : value != null ? String(value) : '';
             const invalid = str !== '' && !DECIMAL_PATTERN.test(str);
 
+            // stringMode: مقدارِ خام همیشه رشته می‌ماند (هیچ‌گاه از float عبور نمی‌کند، نه در
+            // value/onChange و نه در parser) — دقتِ اعشار/اعدادِ بزرگ دست‌نخورده می‌ماند؛ فقط
+            // formatter/parserِ مشترک برایِ نمایشِ/حذفِ جداکنندهٔ هزارگان به کار می‌رود.
             return (
                 <div>
-                    <Input
+                    <InputNumber
+                        stringMode
                         size="small"
-                        dir="ltr"
-                        style={{ fontFamily: 'monospace', textAlign: 'left', borderColor: invalid ? THEME.error : undefined }}
-                        placeholder="مثلاً 1500.25"
+                        style={{ width: '100%', fontFamily: 'monospace', borderColor: invalid ? THEME.error : undefined }}
+                        placeholder="مثلاً 1,500.25"
                         disabled={readOnly}
-                        value={str}
-                        onChange={(e) => onChange(e.target.value)}
+                        value={str === '' ? undefined : str}
+                        formatter={(v) => columnHelpers.formatNumberInput(v)}
+                        parser={(v) => columnHelpers.parseNumberInput(v)}
+                        onChange={(v) => onChange(v == null ? '' : String(v))}
                     />
                     {invalid && (
                         <Text type="danger" style={{ fontSize: 11 }}>
-                            فقط رقمِ لاتین و نقطهٔ اعشار مجاز است (بدونِ جداکنندهٔ هزارگان/رقمِ فارسی).
+                            فقط رقمِ لاتین و نقطهٔ اعشار مجاز است (بدونِ رقمِ فارسی).
                         </Text>
                     )}
                 </div>

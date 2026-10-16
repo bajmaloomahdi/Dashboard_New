@@ -3,6 +3,7 @@ import { Modal, Radio, Space, Typography, Empty, Spin, Alert, Button, Input, Inp
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { wfApi } from './workflowApi';
 import PersianDateInput from '../PersianDateInput';
+import { columnHelpers } from '../../theme';
 
 const { Text } = Typography;
 
@@ -204,6 +205,8 @@ export default function StartWorkflowModal({ open, onClose, entityType, entityId
                                         style={{ width: '100%' }}
                                         value={value === '' ? undefined : Number(value)}
                                         onChange={(v) => setFieldValue(f.SourceKey, v == null ? '' : String(v))}
+                                        formatter={(v) => columnHelpers.formatNumberInput(v)}
+                                        parser={(v) => Number(columnHelpers.parseNumberInput(v))}
                                     />
                                 );
                             } else if (f.DataType === 'DATE') {

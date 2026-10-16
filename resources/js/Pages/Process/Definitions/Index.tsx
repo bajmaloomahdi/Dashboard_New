@@ -23,7 +23,7 @@ import NotificationModal, { NotificationType } from '../../../Components/Notific
 import DefinitionFormModal from './DefinitionFormModal';
 import CategoryManagerModal, { type WorkflowCategory } from './CategoryManagerModal';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
-import { THEME, STYLES } from '../../../theme';
+import { THEME, STYLES, columnHelpers } from '../../../theme';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import { toBool } from '../../../Utils/bool';
 
@@ -192,9 +192,9 @@ export default function ProcessDefinitionsIndex() {
                 title="اتوماسیونِ فرایند"
                 subtitle="مدیریتِ تعریف‌هایِ Workflow"
                 stats={[
-                    { icon: <ApartmentOutlined />, label: 'کلِ فرایندها', value: `${totalCount} فرایند` },
-                    { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} فرایند` },
-                    { icon: <PlayCircleOutlined />, label: 'نمونه‌هایِ ساخته‌شده', value: `${runningInstances} نمونه` },
+                    { icon: <ApartmentOutlined />, label: 'کلِ فرایندها', value: `${columnHelpers.formatNumber(totalCount)} فرایند` },
+                    { icon: <CheckCircleOutlined />, label: 'فعال', value: `${columnHelpers.formatNumber(activeCount)} فرایند` },
+                    { icon: <PlayCircleOutlined />, label: 'نمونه‌هایِ ساخته‌شده', value: `${columnHelpers.formatNumber(runningInstances)} نمونه` },
                 ]}
                 actions={
                     <Space>
@@ -318,11 +318,11 @@ export default function ProcessDefinitionsIndex() {
                                     <div className="definition-card-meta">
                                         <Space size={6}>
                                             <BranchesOutlined style={{ color: '#2563EB' }} />
-                                            <Text style={{ fontSize: 12 }}>{def.VersionCount} نسخه</Text>
+                                            <Text style={{ fontSize: 12 }}>{columnHelpers.formatNumber(def.VersionCount)} نسخه</Text>
                                         </Space>
                                         <Space size={6}>
                                             <PlayCircleOutlined style={{ color: def.InstanceCount > 0 ? '#16A34A' : THEME.textLight }} />
-                                            <Text style={{ fontSize: 12 }}>{def.InstanceCount} نمونه</Text>
+                                            <Text style={{ fontSize: 12 }}>{columnHelpers.formatNumber(def.InstanceCount)} نمونه</Text>
                                         </Space>
                                     </div>
 

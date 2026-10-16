@@ -7,6 +7,8 @@ import {
     MiniMap,
     useNodesState,
     useEdgesState,
+    useReactFlow,
+    useNodesInitialized,
     addEdge,
     MarkerType,
     type Node,
@@ -16,14 +18,28 @@ import {
     type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider, Checkbox, Tag } from 'antd';
+import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider, Checkbox, Tag, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { THEME, STYLES } from '../../../../theme';
+import { THEME, STYLES, columnHelpers } from '../../../../theme';
 import { designerNodeTypes, NODE_TYPE_META, type DesignerNodeData } from './nodeTypes';
 import RuleBuilder from './RuleBuilder';
+import StepActionsEditor from './StepActionsEditor';
 import type { ConditionField } from './ruleTypes';
 import {
     ASSIGNEE_TYPES,
+    actionsOfStep,
+    addAction,
+    changeActionKind,
+    createStepDraft,
+    isActionableStep,
+    moveAction,
+    removeAction,
+    renameActionCode,
+    setTransitionTrigger,
+    suggestTrigger,
+    transitionsTriggeredBy,
+    updateActionFields,
+    type ActionKind,
     type AssigneeType,
     type AssignmentDraft,
     type GraphDraft,
@@ -92,24 +108,6 @@ function transitionToEdge(t: TransitionDraft): Edge {
     };
 }
 
-function newStepDraft(code: string, name: string, stepType: StepType, position: { x: number; y: number }): StepDraft {
-    return {
-        code,
-        name,
-        stepType,
-        assignPolicy: 'ANY',
-        requiredApprovals: null,
-        allowForward: false,
-        forwardMax: null,
-        allowDelegation: true,
-        sortOrder: 0,
-        positionX: Math.round(position.x),
-        positionY: Math.round(position.y),
-        description: null,
-        dueDurationHours: null,
-    };
-}
-
 function newTransitionDraft(code: string, fromStepCode: string, toStepCode: string): TransitionDraft {
     return {
         code,
@@ -151,8 +149,33 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const propsPanelRef = useRef<HTMLDivElement>(null);
-    // در عرضِ موبایل اجازهٔ zoom-outِ بیشتر تا fitView کلِ فرایند را در Canvasِ باریک نشان دهد (دسکتاپ همان پیش‌فرضِ 0.5)
-    const [narrowViewport] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+    const { fitView } = useReactFlow();
+    // تا کاربر خودش zoom/pan نکرده، هر تغییرِ اندازهٔ Canvas (باز شدن در حالتِ مخفی/صفر، جابه‌جاییِ Layout بعد از
+    // بارگذاری، تغییرِ اندازهٔ پنجره) دوباره fitView می‌زند تا کلِ فرایند دیده شود؛ fitViewِ اولیهٔ React Flow فقط یک‌بار اجرا می‌شود.
+    const userMovedRef = useRef(false);
+    useEffect(() => {
+        const el = wrapperRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        let raf = 0;
+        const ro = new ResizeObserver((entries) => {
+            const box = entries[0]?.contentRect;
+            if (!box || box.width === 0 || box.height === 0 || userMovedRef.current) return;
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => fitView({ padding: 0.1 }));
+        });
+        ro.observe(el);
+        return () => {
+            cancelAnimationFrame(raf);
+            ro.disconnect();
+        };
+    }, [fitView]);
+    // اولین fitView بعد از اندازه‌گیریِ واقعیِ Nodeها (fitViewِ اولیه ممکن است قبل از اندازه‌گیری اجرا شود و بی‌اثر بماند)
+    const nodesInitialized = useNodesInitialized();
+    useEffect(() => {
+        if (!nodesInitialized || userMovedRef.current) return;
+        const raf = requestAnimationFrame(() => fitView({ padding: 0.1 }));
+        return () => cancelAnimationFrame(raf);
+    }, [nodesInitialized, fitView]);
     const lookupLists = useMemo(() => ({ users, roles, positions, units }), [users, roles, positions, units]);
 
     // منبعِ حقیقت GraphDraft است؛ nodes/edges فقط بازتابِ بصریِ آن هستند.
@@ -164,7 +187,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
 
             const steps: StepDraft[] = nextNodes.map((n) => {
                 const prev = stepByCode.get(n.id);
-                const base = prev ?? newStepDraft(n.id, (n.data as DesignerNodeData).label, stepTypeFromNodeType(n.type), n.position);
+                const base = prev ?? createStepDraft(n.id, (n.data as DesignerNodeData).label, stepTypeFromNodeType(n.type), n.position);
                 return {
                     ...base,
                     name: (n.data as DesignerNodeData).label,
@@ -174,15 +197,20 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                     positionY: Math.round(n.position.y),
                 };
             });
-            const transitions: TransitionDraft[] = nextEdges.map((e) => {
-                const prev = transitionByCode.get(e.id) ?? newTransitionDraft(e.id, e.source, e.target);
-                return {
+            const transitions: TransitionDraft[] = [];
+            nextEdges.forEach((e) => {
+                const existing = transitionByCode.get(e.id);
+                const prev = existing ?? newTransitionDraft(e.id, e.source, e.target);
+                transitions.push({
                     ...prev,
                     code: e.id,
                     fromStepCode: e.source,
                     toStepCode: e.target,
                     label: (e.label as string) || null,
-                };
+                    // گذارِ تازه‌کشیده‌شده از یک Stepِ دارایِ Action: اولین Actionِ بدونِ گذارِ Triggerشده پیشنهاد می‌شود
+                    // (فقط پیش‌فرضِ اولیه؛ در پنل قابلِ تغییر/پاک‌شدن است و «بدونِ Trigger» به‌معنیِ Default نیست).
+                    ...(existing ? {} : { triggerActionCode: suggestTrigger(graph.actions, transitions, e.source) }),
+                });
             });
             const validCodes = new Set(steps.map((s) => s.code));
             onChange({
@@ -359,8 +387,20 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
         setStepAssignments(stepAssignments.filter((_, i) => i !== idx));
     };
 
+    // Step (نه Node) منبعِ حقیقتِ تنظیماتِ Step و Actionهاست؛ فقط Stepِ «قابلِ‌اقدام» Action دارد.
+    const selectedStep = selectedNode ? graph.steps.find((s) => s.code === selectedNode.id) ?? null : null;
+    const selectedStepIsActionable = !!selectedStep && isActionableStep(selectedStep.stepType);
+    const stepActions = selectedStepIsActionable ? actionsOfStep(graph, selectedStep!.code) : [];
+    const updateSelectedStep = (patch: Partial<StepDraft>) => {
+        if (!selectedStep) return;
+        onChange({ ...graph, steps: graph.steps.map((s) => (s.code === selectedStep.code ? { ...s, ...patch } : s)) });
+    };
+
     const selectedTransition = selectedEdge ? graph.transitions.find((t) => t.code === selectedEdge.id) : null;
     const fromStepTypeOfSelectedEdge = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source)?.type : null;
+    const edgeFromStep = selectedEdge ? graph.steps.find((s) => s.code === selectedEdge.source) ?? null : null;
+    const edgeFromStepIsActionable = !!edgeFromStep && isActionableStep(edgeFromStep.stepType);
+    const edgeSourceActions = edgeFromStepIsActionable ? actionsOfStep(graph, edgeFromStep!.code) : [];
 
     // موبایل: پنلِ تنظیمات زیرِ Canvas است؛ با انتخابِ آیتم به آن اسکرول می‌شود تا کاربر تغییر را ببیند.
     useEffect(() => {
@@ -415,7 +455,11 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                     elementsSelectable
                     deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
                     fitView
-                    minZoom={narrowViewport ? 0.2 : 0.5}
+                    // Canvas بینِ ابزارها و تنظیمات باریک است (حتی در دسکتاپ)؛ با minZoomِ پیش‌فرضِ 0.5 فرایندِ
+                    // چندمرحله‌ای جا نمی‌شد و دو سرِ آن بریده می‌شد — fitView باید کلِ فرایند را نشان دهد
+                    minZoom={0.2}
+                    // zoom/panِ کاربر (event دارد) fitViewِ خودکار را متوقف می‌کند؛ fitViewِ برنامه‌ای event ندارد
+                    onMoveStart={(event) => { if (event) userMovedRef.current = true; }}
                     proOptions={{ hideAttribution: true }}
                 >
                     <Background />
@@ -425,7 +469,7 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
             </div>
 
             {/* Properties — سمتِ راست */}
-            <div ref={propsPanelRef} className="wf-designer-props" style={{ width: 320, ...STYLES.card, padding: 16, overflowY: 'auto', order: 1 }}>
+            <div ref={propsPanelRef} className="wf-designer-props" style={{ width: 360, ...STYLES.card, padding: 16, overflowY: 'auto', order: 1 }}>
                 <Title level={5} style={{ marginTop: 0 }}>تنظیماتِ آیتم</Title>
                 {selectedNode ? (
                     <Space direction="vertical" style={{ width: '100%' }} size={14}>
@@ -466,6 +510,8 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                                         disabled={readOnly}
                                         value={(selectedNode.data as DesignerNodeData).dueDurationHours ?? undefined}
                                         onChange={(v) => updateNodeData(selectedNode.id, { dueDurationHours: v ?? null })}
+                                        formatter={(v) => columnHelpers.formatNumberInput(v)}
+                                        parser={(v) => Number(columnHelpers.parseNumberInput(v))}
                                     />
                                 </div>
                                 <div>
@@ -525,6 +571,43 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                                         </Button>
                                     )}
                                 </div>
+                                {selectedStepIsActionable && selectedStep && (
+                                    <>
+                                        <Divider style={{ margin: '4px 0' }} />
+                                        <StepActionsEditor
+                                            actions={stepActions}
+                                            readOnly={readOnly}
+                                            triggeredCount={(code) => transitionsTriggeredBy(graph, selectedStep.code, code).length}
+                                            onAdd={() => onChange(addAction(graph, selectedStep.code))}
+                                            onChangeFields={(code, patch) => onChange(updateActionFields(graph, selectedStep.code, code, patch))}
+                                            onChangeKind={(code, kind: ActionKind) => onChange(changeActionKind(graph, selectedStep.code, code, kind))}
+                                            onRename={(oldCode, newCode) => {
+                                                const res = renameActionCode(graph, selectedStep.code, oldCode, newCode);
+                                                if (!res.error) onChange(res.graph);
+                                                return res.error;
+                                            }}
+                                            onRemove={(code) => onChange(removeAction(graph, selectedStep.code, code))}
+                                            onMove={(code, delta) => onChange(moveAction(graph, selectedStep.code, code, delta))}
+                                        />
+                                        <Divider style={{ margin: '4px 0' }} />
+                                        <div>
+                                            <Space size={8} align="start">
+                                                <Switch
+                                                    size="small"
+                                                    checked={selectedStep.allowDelegation}
+                                                    disabled={readOnly}
+                                                    onChange={(v) => updateSelectedStep({ allowDelegation: v })}
+                                                />
+                                                <div>
+                                                    <Text style={{ fontSize: 12, display: 'block' }}>اجازهٔ تفویض (Delegation) در این مرحله</Text>
+                                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                                        پیش‌فرض خاموش است؛ اقدامِ اصلیِ مرحله همان Actionهاست، نه تفویض.
+                                                    </Text>
+                                                </div>
+                                            </Space>
+                                        </div>
+                                    </>
+                                )}
                                 <Divider style={{ margin: '4px 0' }} />
                             </>
                         )}
@@ -590,6 +673,32 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                         </div>
 
                         <Divider style={{ margin: '4px 0' }} />
+
+                        {edgeFromStepIsActionable && edgeFromStep && (
+                            <div>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                                    اقدامِ فعال‌کنندهٔ این مسیر (Trigger Action)
+                                </Text>
+                                {edgeSourceActions.length === 0 ? (
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        ابتدا در مرحلهٔ مبدأ («{edgeFromStep.name}») حداقل یک Action تعریف کنید.
+                                    </Text>
+                                ) : (
+                                    <Select
+                                        style={{ width: '100%' }}
+                                        allowClear
+                                        disabled={readOnly}
+                                        placeholder="بدونِ Trigger"
+                                        value={selectedTransition?.triggerActionCode ?? undefined}
+                                        options={edgeSourceActions.map((a) => ({ value: a.code, label: `${a.label || a.code} (${a.code})` }))}
+                                        onChange={(v) => onChange(setTransitionTrigger(graph, selectedEdge.id, v ?? null))}
+                                    />
+                                )}
+                                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                                    «بدونِ Trigger» به‌معنیِ پیش‌فرض نیست؛ مسیرِ پیش‌فرض فقط با تیکِ «گذارِ پیش‌فرض» تعیین می‌شود.
+                                </Text>
+                            </div>
+                        )}
 
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اولویتِ بررسی (Priority)</Text>

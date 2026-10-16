@@ -95,8 +95,7 @@ class MessageWorkflowStartTest extends TestCase
     /** انتشارِ ساده‌ترین فرایندِ EntityType=MESSAGE با REVIEW سپرده‌شده به DIRECT_MANAGER. */
     private function publishSimpleFlowWithDirectManager(): string
     {
-        $code = 'MSGSTART_' . strtoupper(bin2hex(random_bytes(4)));
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'شروع از پیام', 'entityType' => 'MESSAGE'], self::USER_FULL);
+        $def = $this->defs->save(['name' => 'شروع از پیام', 'entityType' => 'MESSAGE'], self::USER_FULL);
         $ver = $this->defs->createDraft((int) $def->DefinitionID, self::USER_FULL);
         $this->defs->saveGraph((int) $ver->VersionID, [
             'steps' => [
@@ -113,7 +112,7 @@ class MessageWorkflowStartTest extends TestCase
         ], self::USER_FULL);
         $this->defs->publish((int) $ver->VersionID, self::USER_FULL);
 
-        return $code;
+        return $def->Code;
     }
 
     /* ==================================================================== */

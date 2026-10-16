@@ -222,7 +222,64 @@ export function graphFromServer(raw: { steps: any[]; actions: any[]; assignments
         ruleJson: parseRuleJson(t.RuleJson),
     }));
 
-    return { steps, actions, assignments, transitions };
+    return { steps: layoutMissingPositions(steps, transitions), actions, assignments, transitions };
+}
+
+const LAYOUT_COL_W = 230;
+const LAYOUT_ROW_H = 110;
+const LAYOUT_X0 = 80;
+const LAYOUT_Y0 = 80;
+
+/**
+ * چیدمانِ خودکار فقط برایِ Stepهایی که موقعیتِ ذخیره‌شده ندارند (نسخه‌هایِ قدیمی/Clone‌شده یا گرافِ ساخته‌شده
+ * بدونِ Designer). جریانِ Designer راست‌به‌چپ است (ورودی سمتِ راست، خروجی سمتِ چپ): ستونِ هر Step = کوتاه‌ترین
+ * فاصله از «شروع»، «شروع» راست‌ترین ستون و «پایان» آخرین ستون؛ Stepهایِ هم‌ستون زیرِ هم.
+ * موقعیت‌هایِ ذخیره‌شده دست نمی‌خورند. چون در graphFromServer اعمال می‌شود، با اولین «ذخیره» ماندگار می‌شود.
+ */
+export function layoutMissingPositions(steps: StepDraft[], transitions: TransitionDraft[]): StepDraft[] {
+    if (steps.every((s) => s.positionX != null && s.positionY != null)) return steps;
+
+    const next = new Map<string, string[]>();
+    transitions.forEach((t) => {
+        if (!next.has(t.fromStepCode)) next.set(t.fromStepCode, []);
+        next.get(t.fromStepCode)!.push(t.toStepCode);
+    });
+
+    // BFS از «شروع»
+    const level = new Map<string, number>();
+    const queue = steps.filter((s) => s.stepType === 'START').map((s) => s.code);
+    queue.forEach((c) => level.set(c, 0));
+    while (queue.length) {
+        const cur = queue.shift()!;
+        for (const to of next.get(cur) || []) {
+            if (!level.has(to)) {
+                level.set(to, level.get(cur)! + 1);
+                queue.push(to);
+            }
+        }
+    }
+
+    const isEnd = (s: StepDraft) => s.stepType === 'END';
+    let maxMid = 0;
+    steps.forEach((s) => { if (!isEnd(s) && level.has(s.code)) maxMid = Math.max(maxMid, level.get(s.code)!); });
+    // Stepِ دست‌نیافتنی ⇒ یک ستون بعد از آخرین ستونِ میانی؛ «پایان» همیشه آخرین ستون
+    steps.forEach((s) => { if (!isEnd(s) && !level.has(s.code)) level.set(s.code, maxMid + 1); });
+    steps.forEach((s) => { if (!isEnd(s)) maxMid = Math.max(maxMid, level.get(s.code)!); });
+    steps.forEach((s) => { if (isEnd(s)) level.set(s.code, maxMid + 1); });
+    const maxLevel = Math.max(0, ...steps.map((s) => level.get(s.code) ?? 0));
+
+    const rowInLevel = new Map<number, number>();
+    const pos = new Map<string, { x: number; y: number }>();
+    steps.forEach((s) => {
+        const l = level.get(s.code) ?? 0;
+        const row = rowInLevel.get(l) ?? 0;
+        rowInLevel.set(l, row + 1);
+        pos.set(s.code, { x: LAYOUT_X0 + (maxLevel - l) * LAYOUT_COL_W, y: LAYOUT_Y0 + row * LAYOUT_ROW_H });
+    });
+
+    return steps.map((s) =>
+        s.positionX != null && s.positionY != null ? s : { ...s, positionX: pos.get(s.code)!.x, positionY: pos.get(s.code)!.y }
+    );
 }
 
 /** GraphDraft → بدنهٔ دقیقِ PUT /workflow/versions/{id}/graph (Full Replacement) */
@@ -271,15 +328,196 @@ export function removeStep(g: GraphDraft, code: string): GraphDraft {
     };
 }
 
-/** حذفِ یک Action — Transitionِ Triggerشده با آن حذف نمی‌شود، فقط triggerActionCode آن null می‌شود (تصمیمِ درخواست) */
-export function removeAction(g: GraphDraft, stepCode: string, code: string): GraphDraft {
+/* ============================ Actionهایِ یک Step ============================ */
+
+/** Stepهایِ «قابلِ‌اقدام» — هم‌ارزِ WorkflowDefinitionService::ACTIONABLE_STEP_TYPES در Backend. */
+export const ACTIONABLE_STEP_TYPES: StepType[] = ['USER_TASK', 'APPROVAL'];
+export const isActionableStep = (stepType: string): boolean => (ACTIONABLE_STEP_TYPES as string[]).includes(stepType);
+
+/** فقط پیشنهادِ اولیهٔ برچسب بر اساسِ Kind (قابلِ ویرایش)؛ هیچ ارتباطی با Workflowِ خاص ندارد. */
+export const ACTION_KIND_DEFAULT_LABEL: Record<ActionKind, string> = {
+    APPROVE: 'تأیید',
+    REJECT: 'رد',
+    RETURN: 'عودت',
+    COMPLETE: 'انجام شد',
+    CUSTOM: '',
+};
+const defaultLabelFor = (kind: string): string => (ACTION_KIND_DEFAULT_LABEL as Record<string, string>)[kind] ?? '';
+
+/** حداکثرِ طولِ Code/Label برابرِ آنچه واقعاً persist می‌شود (Validationِ Backend/SP). */
+export const ACTION_CODE_MAX = 64;
+export const ACTION_LABEL_MAX = 100;
+export const ACTION_CONFIRM_MAX = 300;
+
+/** مقایسهٔ Code هم‌ارزِ Collationِ Case-Insensitiveِ DB (UQ_WorkflowStepActions_Step_Code). */
+const sameCode = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Stepِ جدید — تفویض (Delegation) به‌صورتِ پیش‌فرض خاموش است و باید صریحاً روشن شود. */
+export function createStepDraft(code: string, name: string, stepType: StepType, position: { x: number; y: number }): StepDraft {
+    return {
+        code,
+        name,
+        stepType,
+        assignPolicy: 'ANY',
+        requiredApprovals: null,
+        allowForward: false,
+        forwardMax: null,
+        allowDelegation: false,
+        sortOrder: 0,
+        positionX: Math.round(position.x),
+        positionY: Math.round(position.y),
+        description: null,
+        dueDurationHours: null,
+    };
+}
+
+export function actionsOfStep(g: GraphDraft, stepCode: string): ActionDraft[] {
+    return g.actions.filter((a) => a.stepCode === stepCode);
+}
+
+/** گذارهایِ خروجیِ آن Step که با همین Action Trigger می‌شوند. */
+export function transitionsTriggeredBy(g: GraphDraft, stepCode: string, code: string): TransitionDraft[] {
+    return g.transitions.filter((t) => t.fromStepCode === stepCode && t.triggerActionCode === code);
+}
+
+export function isActionCodeTaken(g: GraphDraft, stepCode: string, code: string, exceptCode?: string): boolean {
+    return actionsOfStep(g, stepCode).some((a) => a.code !== exceptCode && sameCode(a.code, code));
+}
+
+/** Codeِ یکتا بر اساسِ Kind: APPROVE، APPROVE_2، ... */
+export function suggestActionCode(g: GraphDraft, stepCode: string, kind: string): string {
+    const base = kind || 'ACTION';
+    if (!isActionCodeTaken(g, stepCode, base)) return base;
+    let n = 2;
+    while (isActionCodeTaken(g, stepCode, `${base}_${n}`)) n++;
+    return `${base}_${n}`;
+}
+
+/** ترتیبِ Actionهایِ یک Step را به SortOrderِ پیوسته (۰..n-۱) تبدیل می‌کند. */
+function renumberStepActions(g: GraphDraft, stepCode: string): GraphDraft {
+    let i = 0;
     return {
         ...g,
-        actions: g.actions.filter((a) => !(a.stepCode === stepCode && a.code === code)),
-        transitions: g.transitions.map((t) =>
-            t.fromStepCode === stepCode && t.triggerActionCode === code ? { ...t, triggerActionCode: null } : t
-        ),
+        actions: g.actions.map((a) => (a.stepCode === stepCode ? { ...a, sortOrder: i++ } : a)),
     };
+}
+
+export function addAction(g: GraphDraft, stepCode: string): GraphDraft {
+    const kind: ActionKind = 'APPROVE';
+    const action: ActionDraft = {
+        stepCode,
+        code: suggestActionCode(g, stepCode, kind),
+        kind,
+        label: defaultLabelFor(kind),
+        icon: null,
+        style: null,
+        requiresComment: false,
+        requiresConfirm: false,
+        confirmMessage: null,
+        permissionCode: null,
+        sortOrder: actionsOfStep(g, stepCode).length,
+    };
+    return renumberStepActions({ ...g, actions: [...g.actions, action] }, stepCode);
+}
+
+export function updateActionFields(
+    g: GraphDraft,
+    stepCode: string,
+    code: string,
+    patch: Partial<Omit<ActionDraft, 'stepCode' | 'code'>>
+): GraphDraft {
+    return {
+        ...g,
+        actions: g.actions.map((a) => (a.stepCode === stepCode && a.code === code ? { ...a, ...patch } : a)),
+    };
+}
+
+/** تغییرِ Kind — برچسب فقط وقتی همراه می‌شود که خالی یا همان پیش‌فرضِ Kindِ قبلی مانده باشد. */
+export function changeActionKind(g: GraphDraft, stepCode: string, code: string, kind: ActionKind): GraphDraft {
+    const cur = g.actions.find((a) => a.stepCode === stepCode && a.code === code);
+    if (!cur) return g;
+    const untouched = cur.label.trim() === '' || cur.label === defaultLabelFor(cur.kind);
+    return updateActionFields(g, stepCode, code, { kind, ...(untouched ? { label: defaultLabelFor(kind) } : {}) });
+}
+
+/**
+ * تغییرِ نامِ Code — همهٔ Triggerهایِ وابسته (گذارهایِ خروجیِ همین Step) Atomic اصلاح می‌شوند.
+ * اگر Code نامعتبر/تکراری باشد گراف دست‌نخورده می‌ماند و پیامِ خطا برمی‌گردد.
+ */
+export function renameActionCode(
+    g: GraphDraft,
+    stepCode: string,
+    oldCode: string,
+    newCodeRaw: string
+): { graph: GraphDraft; error: string | null } {
+    const newCode = newCodeRaw.trim();
+    if (newCode === oldCode) return { graph: g, error: null };
+    if (!newCode) return { graph: g, error: 'کدِ Action الزامی است.' };
+    if (newCode.length > ACTION_CODE_MAX) return { graph: g, error: `کدِ Action حداکثر ${ACTION_CODE_MAX} کاراکتر است.` };
+    if (/\s/.test(newCode)) return { graph: g, error: 'کدِ Action نباید فاصله داشته باشد.' };
+    if (isActionCodeTaken(g, stepCode, newCode, oldCode)) return { graph: g, error: `کدِ «${newCode}» در همین Step قبلاً استفاده شده است.` };
+
+    return {
+        graph: {
+            ...g,
+            actions: g.actions.map((a) => (a.stepCode === stepCode && a.code === oldCode ? { ...a, code: newCode } : a)),
+            transitions: g.transitions.map((t) =>
+                t.fromStepCode === stepCode && t.triggerActionCode === oldCode ? { ...t, triggerActionCode: newCode } : t
+            ),
+        },
+        error: null,
+    };
+}
+
+/** حذفِ یک Action — Transitionِ Triggerشده با آن حذف نمی‌شود، فقط triggerActionCode آن null می‌شود (تصمیمِ درخواست) */
+export function removeAction(g: GraphDraft, stepCode: string, code: string): GraphDraft {
+    return renumberStepActions(
+        {
+            ...g,
+            actions: g.actions.filter((a) => !(a.stepCode === stepCode && a.code === code)),
+            transitions: g.transitions.map((t) =>
+                t.fromStepCode === stepCode && t.triggerActionCode === code ? { ...t, triggerActionCode: null } : t
+            ),
+        },
+        stepCode
+    );
+}
+
+/** جابه‌جاییِ یک Action در ترتیبِ نمایشِ دکمه‌هایِ Task (delta = -1 بالا، +1 پایین). */
+export function moveAction(g: GraphDraft, stepCode: string, code: string, delta: -1 | 1): GraphDraft {
+    const own = actionsOfStep(g, stepCode);
+    const from = own.findIndex((a) => a.code === code);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= own.length) return g;
+    const reordered = [...own];
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+
+    let i = 0;
+    return {
+        ...g,
+        // جایگاهِ Actionهایِ این Step در آرایه حفظ می‌شود؛ فقط ترتیبِ خودشان عوض می‌شود.
+        actions: g.actions.map((a) => (a.stepCode === stepCode ? { ...reordered[i], sortOrder: i++ } : a)),
+    };
+}
+
+/** اتصالِ Trigger فقط به Actionِ همان Stepِ مبدأ مجاز است؛ null = بدونِ Trigger (نه Default). */
+export function setTransitionTrigger(g: GraphDraft, transitionCode: string, actionCode: string | null): GraphDraft {
+    const t = g.transitions.find((x) => x.code === transitionCode);
+    if (!t) return g;
+    if (actionCode !== null && !actionsOfStep(g, t.fromStepCode).some((a) => a.code === actionCode)) return g;
+    return {
+        ...g,
+        transitions: g.transitions.map((x) => (x.code === transitionCode ? { ...x, triggerActionCode: actionCode } : x)),
+    };
+}
+
+/** برایِ گذارِ تازه‌کشیده‌شده: اولین Actionِ (به ترتیبِ نمایش) که هنوز گذارِ Triggerشده ندارد. */
+export function suggestTrigger(actions: ActionDraft[], transitions: TransitionDraft[], fromStepCode: string): string | null {
+    const used = new Set(transitions.filter((t) => t.fromStepCode === fromStepCode && t.triggerActionCode).map((t) => t.triggerActionCode));
+    const free = actions
+        .filter((a) => a.stepCode === fromStepCode && !used.has(a.code))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    return free[0]?.code ?? null;
 }
 
 /* ============================ Linter ============================ */
@@ -366,29 +604,56 @@ export function lintGraph(g: GraphDraft): LintResult {
         if (s.stepType !== 'START' && !inByStep.get(s.code)) advisory.push({ message: `مرحلهٔ «${label}» از هیچ مسیری قابلِ دسترسی نیست.` });
         if (s.stepType === 'START' && inByStep.get(s.code)) advisory.push({ message: 'مرحلهٔ شروع نباید گذارِ ورودی داشته باشد.' });
         if (s.stepType === 'END' && outByStep.get(s.code)) advisory.push({ message: `مرحلهٔ پایانِ «${label}» نباید گذارِ خروجی داشته باشد.` });
-        if ((s.stepType === 'USER_TASK' || s.stepType === 'APPROVAL') && !g.assignments.some((a) => a.stepCode === s.code)) {
+        if (isActionableStep(s.stepType) && !g.assignments.some((a) => a.stepCode === s.code)) {
             advisory.push({ message: `مرحلهٔ «${label}» هیچ انجام‌دهنده‌ای ندارد.` });
+        }
+        if (
+            isActionableStep(s.stepType) &&
+            !g.actions.some((a) => a.stepCode === s.code)
+        ) {
+            // Advisory (نه Blocking): این قاعده تازه‌اضافه‌شده فقط هنگامِ Validate/Publish
+            // (سمتِ Backend) اجرا می‌شود؛ نباید Saveِ یک Draftِ درحال‌تکمیل را قفل کند.
+            advisory.push({ message: `مرحلهٔ «${label}» هیچ Actionی ندارد.` });
         }
         if (s.assignPolicy === 'N_OF_M' && !(s.requiredApprovals && s.requiredApprovals >= 1)) {
             advisory.push({ message: `مرحلهٔ «${label}» با سیاستِ N_OF_M نیازمندِ «تعدادِ تأییدِ لازم» است.` });
         }
 
+        const outgoing = g.transitions.filter((t) => t.fromStepCode === s.code);
+        const defaults = outgoing.filter((t) => t.isDefault);
+
         // Condition Engine — هم‌ارزِ چکِ Default در WorkflowDefinitionService::validate()
         if (s.stepType === 'CONDITION') {
-            const outgoing = g.transitions.filter((t) => t.fromStepCode === s.code);
-            const defaults = outgoing.filter((t) => t.isDefault);
             if (defaults.length === 0) {
                 advisory.push({ message: `مرحلهٔ «${label}» (CONDITION) هیچ گذارِ پیش‌فرض (Else) ندارد.` });
             } else if (defaults.length > 1) {
                 advisory.push({ message: `مرحلهٔ «${label}» (CONDITION) بیش از یک گذارِ پیش‌فرض دارد.` });
             }
+        } else if (defaults.length > 1) {
+            // تعمیمِ قاعدهٔ «حداکثر یک Default» به همهٔ انواعِ Step (نه فقط CONDITION) — Advisory،
+            // به همان دلیلِ بالا.
+            advisory.push({ message: `مرحلهٔ «${label}» بیش از یک گذارِ پیش‌فرض (Default) دارد.` });
+        }
+
+        // برایِ Stepهایِ غیرِ-Actionable و غیرِ-CONDITION (فعلاً یعنی START): موتور
+        // (TransitionResolver::resolve()) با actionCode=null فقط وقتی می‌تواند تصمیم
+        // بگیرد که یا یک گذارِ Default باشد یا دقیقاً یک گذارِ بدونِ Trigger — هم‌ارزِ
+        // دقیقِ همین قاعده در WorkflowDefinitionService::validate(). Stepهایِ Actionable
+        // مستثنی‌اند چون هر Actionِ واقعی از قبل (قاعدهٔ Action↔Transition پایینِ همین
+        // تابع) در قدمِ اولِ resolve() حل می‌شود.
+        if (s.stepType !== 'CONDITION' && !isActionableStep(s.stepType) && outgoing.length > 0) {
+            const untriggeredCount = outgoing.filter((t) => !t.triggerActionCode).length;
+            if (defaults.length === 0 && untriggeredCount !== 1) {
+                advisory.push({ message: `مرحلهٔ «${label}» (نوعِ خودکار) نه گذارِ پیش‌فرض دارد و نه دقیقاً یک گذارِ بدونِ Trigger؛ Runtime نمی‌تواند مسیرِ بعدی را تعیین کند.` });
+            }
         }
     });
 
-    // Action↔Transition (تصمیمِ ۱۵) — Advisory
+    // Action↔Transition — هر Action باید حداقل یک گذارِ Triggerشده با همان Code داشته باشد؛
+    // در غیرِاین‌صورت آن Action هرگز از Runtime قابلِ‌اجرا نیست (Publish را می‌بندد).
     g.actions.forEach((a) => {
         const hasTrigger = g.transitions.some((t) => t.fromStepCode === a.stepCode && t.triggerActionCode === a.code);
-        if (!hasTrigger) advisory.push({ message: `Actionِ «${a.label || a.code}» در Stepِ «${a.stepCode}» هیچ گذارِ Triggerشده‌ای ندارد.` });
+        if (!hasTrigger) blocking.push({ message: `Actionِ «${a.label || a.code}» در Stepِ «${a.stepCode}» هیچ گذارِ Triggerشده‌ای ندارد.` });
     });
 
     // Condition Engine — هم‌ارزِ اعتبارسنجیِ RuleJson در WorkflowDefinitionService::validate()

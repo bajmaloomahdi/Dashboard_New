@@ -52,18 +52,12 @@ class WorkflowStore
         return ['definition' => $def[0] ?? null, 'versions' => $versions];
     }
 
-    /** لوکاپِ سبک برایِ چکِ Uniquenessِ Code در سمتِ PHP، قبل از فراخوانیِ SP (هم‌الگو با getEntityTypeByCode). */
-    public function getDefinitionByCode(string $code): ?object
-    {
-        return DB::selectOne('SELECT TOP 1 * FROM dbo.WorkflowDefinitions WHERE Code = ?', [$code]);
-    }
-
     public function saveDefinition(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Wf_SaveDefinition @DefinitionID = ?, @Code = ?, @Name = ?, @Description = ?, @EntityType = ?, @IsActive = ?, @CategoryID = ?, @UserID = ?',
+            'EXEC dbo.sp_Wf_SaveDefinition @DefinitionID = ?, @Name = ?, @Description = ?, @EntityType = ?, @IsActive = ?, @CategoryID = ?, @UserID = ?',
             [
-                $p['definitionId'] ?? null, $p['code'], $p['name'], $p['description'] ?? null, $p['entityType'],
+                $p['definitionId'] ?? null, $p['name'], $p['description'] ?? null, $p['entityType'],
                 $p['isActive'] ?? 1, $p['categoryId'] ?? null, $p['userId'],
             ]
         );
@@ -398,21 +392,108 @@ class WorkflowStore
      */
     public function createTaskMessage(array $p): object
     {
+        $bindings = [
+            $p['subject'],
+            $p['messageText'] ?? null,
+            $p['priorityId'] ?? null,
+            $p['dueDate'] ?? null,
+            $p['senderUserId'],
+            json_encode(
+                array_map(fn ($uid) => ['userId' => (int) $uid], $p['assigneeUserIds']),
+                JSON_UNESCAPED_UNICODE
+            ),
+            $p['createUser'] ?? $p['senderUserId'],
+        ];
+
+        // رونوشت (اختیاری): پارامترهایِ @CopyUserIDs/@CopyDescription فقط وقتی ارسال می‌شوند که
+        // رونوشتی وجود داشته باشد، تا فراخوانی‌هایِ بدونِ CC دقیقاً مثلِ قبل بمانند.
+        $copyIds = array_values(array_unique(array_map('intval', $p['copyUserIds'] ?? [])));
+        $copySql = '';
+        if ($copyIds !== []) {
+            $copySql = ', @CopyUserIDs = ?, @CopyDescription = ?';
+            $bindings[] = implode(',', $copyIds);
+            $bindings[] = $p['copyDescription'] ?? null;
+        }
+
+        // مسیرِ Deferred (CONDITION قبلِ اولین Task): @RequireAssignees=0 فقط وقتی صراحتاً
+        // خواسته شود ارسال می‌شود — بدونِ آن، رفتار برایِ همهٔ فراخوانی‌هایِ دیگر دقیقاً مثلِ قبل است.
+        $requireSql = '';
+        if (($p['requireAssignees'] ?? true) === false) {
+            $requireSql = ', @RequireAssignees = 0';
+        }
+
         return $this->write(
-            'EXEC dbo.sp_Wf_CreateTaskMessage @Subject = ?, @MessageText = ?, @msgPriorityID = ?, @DueDate = ?, @SenderUserID = ?, @AssigneesJson = ?, @CreateUser = ?',
+            'EXEC dbo.sp_Wf_CreateTaskMessage @Subject = ?, @MessageText = ?, @msgPriorityID = ?, @DueDate = ?, @SenderUserID = ?, @AssigneesJson = ?, @CreateUser = ?' . $copySql . $requireSql,
+            $bindings
+        );
+    }
+
+    /**
+     * MessageIDِ اصلیِ یک Instance — قانونِ «یک Instance = یک Message»: همیشه اولین
+     * StepInstanceِ دارایِ MessageID (بر اساسِ StepInstanceID، که IDENTITYِ صعودی است).
+     * StepInstanceهایِ بعدی (START/CONDITION/END) این ستون را NULL دارند و نادیده گرفته
+     * می‌شوند. اگر Instance هنوز هیچ Task‌ای نساخته، null برمی‌گردد.
+     */
+    public function getInstanceMainMessageId(int $instanceId): ?int
+    {
+        $row = DB::selectOne(
+            'SELECT TOP 1 MessageID FROM dbo.WorkflowStepInstances
+             WHERE InstanceID = ? AND MessageID IS NOT NULL
+             ORDER BY StepInstanceID ASC',
+            [$instanceId]
+        );
+
+        return $row ? (int) $row->MessageID : null;
+    }
+
+    /**
+     * افزودنِ گیرندگانِ یک Stepِ بعدی به همان Messageِ اصلیِ Workflow — بدونِ ساختِ
+     * Messageِ تازه (sp_Wf_AddTaskMessageRecipients). فقط MessageDetails/UserNotifications
+     * را برایِ Assigneeهایِ همین Step درج می‌کند.
+     *
+     * @param  int[]  $assigneeUserIds
+     */
+    public function addTaskMessageRecipients(int $messageId, int $fromUserId, array $assigneeUserIds, int $createUserId): void
+    {
+        $this->write(
+            'EXEC dbo.sp_Wf_AddTaskMessageRecipients @MessageID = ?, @FromUserID = ?, @AssigneesJson = ?, @CreateUser = ?',
             [
-                $p['subject'],
-                $p['messageText'] ?? null,
-                $p['priorityId'] ?? null,
-                $p['dueDate'] ?? null,
-                $p['senderUserId'],
+                $messageId,
+                $fromUserId,
                 json_encode(
-                    array_map(fn ($uid) => ['userId' => (int) $uid], $p['assigneeUserIds']),
+                    array_map(fn ($uid) => ['userId' => (int) $uid], $assigneeUserIds),
                     JSON_UNESCAPED_UNICODE
                 ),
-                $p['createUser'] ?? $p['senderUserId'],
+                $createUserId,
             ]
         );
+    }
+
+    /**
+     * مشخصاتِ نمایشیِ کاربر برایِ Workflow Start Context (Read-Only): نام + آخرین سمت/واحدِ فعال.
+     *
+     * @return array{userId:int, fullName:?string, positionName:?string, unitName:?string, unitId:?int}
+     */
+    public function getStarterProfile(int $userId): array
+    {
+        $user = DB::selectOne('SELECT FullName FROM dbo.Users WHERE UserID = ?', [$userId]);
+        $pos = DB::selectOne(
+            'SELECT TOP 1 p.PositionName, u.UnitName, up.UnitID
+             FROM dbo.UserPositions up
+             JOIN dbo.Positions p ON p.PositionID = up.PositionID
+             JOIN dbo.OrganizationalUnits u ON u.UnitID = up.UnitID
+             WHERE up.UserID = ? AND up.IsActive = 1
+             ORDER BY up.CreateDate DESC, up.UserPositionID DESC',
+            [$userId]
+        );
+
+        return [
+            'userId'       => $userId,
+            'fullName'     => $user->FullName ?? null,
+            'positionName' => $pos->PositionName ?? null,
+            'unitName'     => $pos->UnitName ?? null,
+            'unitId'       => $pos ? (int) $pos->UnitID : null,
+        ];
     }
 
     /**

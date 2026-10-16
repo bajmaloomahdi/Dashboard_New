@@ -60,7 +60,7 @@ class WorkflowConcurrencyTest extends TestCase
     {
         $code ??= 'CONC_' . strtoupper(bin2hex(random_bytes(4)));
 
-        $def = $this->defs->save(['latinName' => $code, 'name' => 'همزمانی ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
+        $def = $this->defs->save(['name' => 'همزمانی ' . $code, 'entityType' => 'TEST_ENTITY'], self::USER_A);
         $definitionId = (int) $def->DefinitionID;
         $ver = $this->defs->createDraft($definitionId, self::USER_A);
         $versionId = (int) $ver->VersionID;
@@ -85,7 +85,7 @@ class WorkflowConcurrencyTest extends TestCase
 
         $this->defs->publish($versionId, self::USER_A);
 
-        return [$definitionId, $versionId, $code];
+        return [$definitionId, $versionId, $def->Code];
     }
 
     /** درجِ مستقیمِ یک ردیفِ WorkflowInstances — بدونِ عبورِ از Engine (شبیه‌سازیِ «بردِ رقیب»). */

@@ -14,10 +14,8 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowDefinitionService
 {
-    private const CODE_PATTERN = '/^[A-Z][A-Z0-9_]{1,49}$/';
-
-    /** سقفِ تلاش برایِ یافتنِ یک Codeِ یکتا با پسوندِ عددی، قبل از خطایِ صریح. */
-    private const MAX_UNIQUE_SUFFIX_ATTEMPTS = 50;
+    /** انواعِ Stepِ «وظیفهٔ قابلِ‌اقدام» — همان دوتایی که پیش‌ازاین فقط در چکِ انجام‌دهنده استفاده می‌شد. */
+    private const ACTIONABLE_STEP_TYPES = ['USER_TASK', 'APPROVAL'];
 
     public function __construct(
         private WorkflowStore $store,
@@ -38,13 +36,12 @@ class WorkflowDefinitionService
     }
 
     /**
-     * تولیدِ خودکارِ Code — کاربر هرگز Code را مستقیماً وارد نمی‌کند (UI فیلدِ Code را
-     * Read-only نگه می‌دارد). این متد تنها منبعِ حقیقتِ Code است؛ هر مقداری که کلاینت
-     * برایِ «code» بفرستد نادیده گرفته می‌شود — دقیقاً هم‌الگو با TemplateParameterService/
-     * ConditionFieldService::save().
+     * Codeِ فرایند کاملاً در Backend (dbo.sp_Wf_SaveDefinition) و فقط در شاخهٔ ایجاد
+     * تولید می‌شود (فرمِ `WF101`, `WF102`, ...، با قفلِ UPDLOCK/HOLDLOCK برایِ ایمنی
+     * زیرِ همزمانی) — کاربر هرگز آن را وارد نمی‌کند و ویرایش هرگز آن را تغییر نمی‌دهد؛
+     * این متد فقط ورودی را اعتبارسنجی و پاس می‌کند، هیچ Codeای اینجا ساخته نمی‌شود.
      *
-     * @throws WorkflowValidationException اگر نام/نامِ لاتین برایِ ساختِ یک Codeِ معتبر کافی نباشد،
-     *         یا EntityType نامعتبر باشد، یا فرایند در ویرایش یافت نشود
+     * @throws WorkflowValidationException اگر EntityType نامعتبر باشد
      */
     public function save(array $input, int $userId): object
     {
@@ -53,84 +50,15 @@ class WorkflowDefinitionService
             throw new WorkflowValidationException("نوعِ موجودیتِ «{$entityType}» در Registry فعال/شناخته‌شده نیست.");
         }
 
-        $name = trim($input['name'] ?? '');
-        $definitionId = isset($input['definitionId']) && $input['definitionId'] !== null ? (int) $input['definitionId'] : null;
-
-        if ($definitionId !== null) {
-            // ویرایش: Code هرگز تغییر نمی‌کند — حتی اگر نام عوض شود یا کلاینت مقدارِ
-            // دیگری برایِ code بفرستد؛ تنها منبعِ حقیقت همان ردیفِ موجود در DB است.
-            $existing = $this->store->getDefinition($definitionId)['definition'];
-            if ($existing === null) {
-                throw new WorkflowValidationException('فرایند یافت نشد.');
-            }
-            $code = $existing->Code;
-        } else {
-            $code = $this->generateUniqueCode($name, isset($input['latinName']) ? trim((string) $input['latinName']) : '');
-        }
-
-        $result = $this->store->saveDefinition([
-            'definitionId' => $definitionId,
-            'code'         => $code,
-            'name'         => $name,
+        return $this->store->saveDefinition([
+            'definitionId' => isset($input['definitionId']) && $input['definitionId'] !== null ? (int) $input['definitionId'] : null,
+            'name'         => trim($input['name'] ?? ''),
             'description'  => $input['description'] ?? null,
             'entityType'   => $entityType,
             'isActive'     => (int) ($input['isActive'] ?? 1),
             'categoryId'   => $input['categoryId'] ?? null,
             'userId'       => $userId,
         ]);
-        $result->Code = $code;
-
-        return $result;
-    }
-
-    /**
-     * Codeِ پایه را ابتدا از نام می‌سازد؛ اگر نام حرفِ لاتینِ کافی نداشت، از
-     * latinName استفاده می‌کند. سپس با retry عددی (LEAVE_REQUEST_2, ...) یکتا می‌شود.
-     *
-     * @throws WorkflowValidationException
-     */
-    private function generateUniqueCode(string $name, string $latinName): string
-    {
-        if ($name === '') {
-            throw new WorkflowValidationException('نام الزامی است.');
-        }
-
-        $base = $this->baseCodeFromText($name);
-        if (! preg_match(self::CODE_PATTERN, $base)) {
-            if ($latinName === '') {
-                throw new WorkflowValidationException('نام شامل حروفِ لاتینِ کافی نیست — یک «نامِ لاتین» کوتاه وارد کنید.');
-            }
-            $base = $this->baseCodeFromText($latinName);
-            if (! preg_match(self::CODE_PATTERN, $base)) {
-                throw new WorkflowValidationException('نامِ لاتین نامعتبر است — باید با یک حرفِ لاتین شروع شود و فقط شاملِ حروفِ لاتین/عدد/آندرلاین باشد.');
-            }
-        }
-
-        $code = $base;
-        $suffix = 2;
-        while ($this->store->getDefinitionByCode($code) !== null) {
-            if ($suffix > self::MAX_UNIQUE_SUFFIX_ATTEMPTS) {
-                throw new WorkflowValidationException('امکانِ ساختِ یک Codeِ یکتا از این نام/نامِ لاتین وجود ندارد — لطفاً مقدارِ دیگری انتخاب کنید.');
-            }
-            $stem = mb_substr($base, 0, 50 - mb_strlen('_' . $suffix));
-            $code = $stem . '_' . $suffix;
-            $suffix++;
-        }
-
-        return $code;
-    }
-
-    /** حروفِ بزرگِ لاتین/عدد/آندرلاین را نگه می‌دارد؛ بقیه (فارسی/علائم) حذف می‌شود — هم‌ارزِ suggestCode() در Frontend. */
-    private function baseCodeFromText(string $text): string
-    {
-        $upper = mb_strtoupper($text, 'UTF-8');
-        $stripped = preg_replace('/[^A-Z0-9_\s]/u', '', $upper) ?? '';
-        $trimmed = trim($stripped);
-        $underscored = preg_replace('/\s+/', '_', $trimmed) ?? '';
-        $collapsed = preg_replace('/_+/', '_', $underscored) ?? '';
-        $noLeadingDigits = preg_replace('/^[^A-Z]+/', '', $collapsed) ?? '';
-
-        return mb_substr($noLeadingDigits, 0, 50);
     }
 
     /* ---------- دسته‌بندیِ فرایندها ---------- */
@@ -233,7 +161,68 @@ class WorkflowDefinitionService
 
     public function saveGraph(int $versionId, array $graph, int $userId): object
     {
-        return $this->store->saveVersionGraph($versionId, $graph, $userId);
+        $graph = $this->normalizeGraphForSave($graph);
+        $this->assertActionsConsistent($graph);
+
+        // sp_Wf_SaveVersionGraph خودش Transaction ندارد (اول همه‌چیز را DELETE و بعد INSERT
+        // می‌کند)؛ بدونِ این Transaction، شکستِ یک INSERT گرافِ قبلی را ناقص/خالی رها می‌کرد.
+        return DB::transaction(fn () => $this->store->saveVersionGraph($versionId, $graph, $userId));
+    }
+
+    /** Stepِ جدیدی که allowDelegation را نفرستاده، تفویض ندارد (تفویض باید صریحاً روشن شود). */
+    private function normalizeGraphForSave(array $graph): array
+    {
+        foreach ($graph['steps'] ?? [] as $i => $step) {
+            if (! array_key_exists('allowDelegation', $step) || $step['allowDelegation'] === null) {
+                $graph['steps'][$i]['allowDelegation'] = false;
+            }
+        }
+
+        return $graph;
+    }
+
+    /**
+     * هم‌خوانیِ Action↔Step↔Transition پیش از هرگونه نوشتن: Action باید به Stepِ موجود اشاره کند،
+     * (Step, Code)ِ Action یکتا باشد (هم‌ارزِ UQ_WorkflowStepActions_Step_Code با Collationِ CI)،
+     * و هر triggerActionCodeِ گذار باید Actionِ همان Stepِ مبدأ باشد — وگرنه SP آن را بی‌صدا
+     * NULL می‌کرد و گذار بدونِ Trigger ذخیره می‌شد.
+     */
+    private function assertActionsConsistent(array $graph): void
+    {
+        $ci = fn ($v) => mb_strtolower(trim((string) $v));
+
+        $stepCodes = [];
+        foreach ($graph['steps'] ?? [] as $s) {
+            $stepCodes[$ci($s['code'] ?? '')] = true;
+        }
+
+        $errors = [];
+        $actionKeys = [];
+        foreach ($graph['actions'] ?? [] as $a) {
+            $stepKey = $ci($a['stepCode'] ?? '');
+            if (! isset($stepCodes[$stepKey])) {
+                $errors[] = "Actionِ «{$a['code']}» به Stepِ ناموجودِ «{$a['stepCode']}» اشاره می‌کند.";
+            }
+            $key = $stepKey . '::' . $ci($a['code'] ?? '');
+            if (isset($actionKeys[$key])) {
+                $errors[] = "کدِ Actionِ «{$a['code']}» در Stepِ «{$a['stepCode']}» تکراری است.";
+            }
+            $actionKeys[$key] = true;
+        }
+
+        foreach ($graph['transitions'] ?? [] as $t) {
+            $trigger = $t['triggerActionCode'] ?? null;
+            if ($trigger === null || trim((string) $trigger) === '') {
+                continue;
+            }
+            if (! isset($actionKeys[$ci($t['fromStepCode'] ?? '') . '::' . $ci($trigger)])) {
+                $errors[] = "Trigger Actionِ گذارِ «{$t['code']}» («{$trigger}») در Stepِ مبدأ «{$t['fromStepCode']}» تعریف نشده است.";
+            }
+        }
+
+        if ($errors !== []) {
+            throw new WorkflowValidationException('اقدام‌ها (Actions) با Stepها/گذارهایِ گراف هم‌خوان نیستند.', $errors);
+        }
     }
 
     /**
@@ -305,6 +294,14 @@ class WorkflowDefinitionService
             $assignByStep[(int) $a->StepID][] = $a;
         }
 
+        // Actionهایِ هر Step + نگاشتِ ActionID→Action، برایِ قواعدِ Action↔Transitionِ زیر.
+        $actionsByStep = [];
+        $actionsById = [];
+        foreach ($g['actions'] as $a) {
+            $actionsByStep[(int) $a->StepID][] = $a;
+            $actionsById[(int) $a->ActionID] = $a;
+        }
+
         foreach ($steps as $s) {
             $id = (int) $s->StepID;
             $type = $s->StepType;
@@ -321,8 +318,11 @@ class WorkflowDefinitionService
             if ($type === 'END' && ! empty($outByStep[$id])) {
                 $errors[] = "مرحلهٔ پایانِ «{$s->Name}» نباید گذارِ خروجی داشته باشد.";
             }
-            if (in_array($type, ['USER_TASK', 'APPROVAL'], true) && empty($assignByStep[$id])) {
+            if (in_array($type, self::ACTIONABLE_STEP_TYPES, true) && empty($assignByStep[$id])) {
                 $errors[] = "مرحلهٔ «{$s->Name}» هیچ انجام‌دهنده‌ای ندارد.";
+            }
+            if (in_array($type, self::ACTIONABLE_STEP_TYPES, true) && empty($actionsByStep[$id])) {
+                $errors[] = "مرحلهٔ «{$s->Name}» هیچ Actionی ندارد.";
             }
             if (($s->AssignPolicy ?? 'ANY') === 'N_OF_M' && (int) ($s->RequiredApprovals ?? 0) < 1) {
                 $errors[] = "مرحلهٔ «{$s->Name}» با سیاستِ N_OF_M نیازمندِ «تعداد تأییدِ لازم» است.";
@@ -331,14 +331,69 @@ class WorkflowDefinitionService
                 $warnings[] = "مرحلهٔ «{$s->Name}» از نوعِ «{$type}» است؛ اجرای این نوع در فاز ۱ پشتیبانی نمی‌شود.";
             }
 
+            $outgoing = $outByStep[$id] ?? [];
+            $defaults = array_values(array_filter($outgoing, fn ($t) => (int) $t->IsDefault === 1));
+
             if ($type === 'CONDITION') {
-                $outgoing = $outByStep[$id] ?? [];
-                $defaults = array_values(array_filter($outgoing, fn ($t) => (int) $t->IsDefault === 1));
                 if (count($defaults) === 0) {
                     $errors[] = "مرحلهٔ «{$s->Name}» (CONDITION) هیچ گذارِ پیش‌فرض (Else) ندارد؛ در نبودِ آن، Runtime ممکن است بن‌بست شود.";
                 } elseif (count($defaults) > 1) {
                     $errors[] = "مرحلهٔ «{$s->Name}» (CONDITION) بیش از یک گذارِ پیش‌فرض دارد.";
                 }
+            } elseif (count($defaults) > 1) {
+                // تعمیمِ قاعدهٔ «حداکثر یک Default» به همهٔ انواعِ Step (نه فقط CONDITION).
+                $errors[] = "مرحلهٔ «{$s->Name}» بیش از یک گذارِ پیش‌فرض (Default) دارد.";
+            }
+        }
+
+        // Action↔Transition — هر Action باید حداقل یک گذارِ Triggerشده با همان Code داشته
+        // باشد؛ در غیرِاین‌صورت آن Action هرگز از Runtime قابلِ‌اجرا نیست.
+        $triggeredActionIds = [];
+        foreach ($g['transitions'] as $t) {
+            if ($t->TriggerActionID !== null) {
+                $triggeredActionIds[(int) $t->TriggerActionID] = true;
+            }
+        }
+        foreach ($g['actions'] as $a) {
+            if (! isset($triggeredActionIds[(int) $a->ActionID])) {
+                $stepName = $byId[(int) $a->StepID]->Name ?? (string) $a->StepID;
+                $errors[] = "Actionِ «{$a->Label}» (کد «{$a->Code}») در مرحلهٔ «{$stepName}» هیچ گذارِ متناظری ندارد.";
+            }
+        }
+
+        // TriggerActionCodeِ هر گذار باید واقعاً به Actionِ همان Step مبدأ اشاره کند —
+        // مستقل از نوعِ Step، برایِ جلوگیری از ارجاعِ نامعتبر/بین‌Stepی.
+        foreach ($g['transitions'] as $t) {
+            if ($t->TriggerActionID === null) {
+                continue;
+            }
+            $from = (int) $t->FromStepID;
+            $action = $actionsById[(int) $t->TriggerActionID] ?? null;
+            if (! $action || (int) $action->StepID !== $from) {
+                $errors[] = "گذارِ «{$t->Code}»: TriggerActionCode به Actionی خارج از مرحلهٔ مبدأ اشاره می‌کند.";
+            }
+        }
+
+        // برایِ Stepهایِ غیرِ-Actionable و غیرِ-CONDITION (فعلاً یعنی START؛ در آینده هر
+        // نوعِ خودکارِ دیگر): TransitionResolver::resolve() با actionCode=null فقط وقتی
+        // می‌تواند تصمیم بگیرد که یا یک گذارِ Default وجود داشته باشد، یا دقیقاً یک گذارِ
+        // بدونِ Trigger باشد (تکِ گذارِ خروجی) — این دقیقاً همان الگوریتمِ واقعیِ Runtime
+        // است (نه یک قاعدهٔ جداگانه). Stepهایِ Actionable از این چک مستثنی‌اند چون قواعدِ
+        // بالا (هر Step ≥۱ Action + هر Action ≥۱ Transitionِ Triggerشده) از قبل تضمین
+        // می‌کنند هر Actionِ واقعی همیشه در همان قدمِ اولِ resolve() حل می‌شود.
+        foreach ($steps as $s) {
+            $type = $s->StepType;
+            if ($type === 'CONDITION' || in_array($type, self::ACTIONABLE_STEP_TYPES, true)) {
+                continue;
+            }
+            $outgoing = $outByStep[(int) $s->StepID] ?? [];
+            if ($outgoing === []) {
+                continue; // خطایِ «هیچ گذارِ خروجی ندارد» پیشِ‌ازاین ثبت شده است.
+            }
+            $hasDefault = count(array_filter($outgoing, fn ($t) => (int) $t->IsDefault === 1)) > 0;
+            $untriggeredCount = count(array_filter($outgoing, fn ($t) => $t->TriggerActionID === null));
+            if (! $hasDefault && $untriggeredCount !== 1) {
+                $errors[] = "مرحلهٔ «{$s->Name}» (نوعِ خودکار) نه گذارِ پیش‌فرض دارد و نه دقیقاً یک گذارِ بدونِ Trigger؛ Runtime نمی‌تواند مسیرِ بعدی را تعیین کند.";
             }
         }
 

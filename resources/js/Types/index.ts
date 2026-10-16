@@ -14,12 +14,15 @@ export interface Menu {
     ParentID: number | null;
     MenuCode: string;
     MenuTitle: string;
-    MenuKind: 'PAGE' | 'FOLDER' | 'REPORT';
+    // REPORT_ITEM: ردیف‌هایِ گزارشِ sp_GetUserMenus (از جدولِ Reports)؛ TAB: تبِ صفحهٔ اصلی
+    MenuKind: 'PAGE' | 'FOLDER' | 'REPORT' | 'REPORT_ITEM' | 'TAB';
     Url: string | null;
     Icon: string | null;
     Level: number;
     SortOrder: number;
     OpenInNewTab: boolean;
+    // BIT از SQL Server ممکن است به‌صورتِ رشتهٔ "0"/"1" برسد — با toBool خوانده شود
+    IsReport?: boolean | number | string;
 }
 
 // منو با ساختار درختی (شامل children)

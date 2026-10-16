@@ -27,6 +27,7 @@ class CrmProductCategoryController extends CrmApiController
         return Inertia::render('Crm/ProductCategories/Index', [
             'categories' => $this->masterData->listProductCategories(),
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 

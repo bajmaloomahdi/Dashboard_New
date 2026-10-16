@@ -6,6 +6,7 @@ import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import PersianDateInput from '../../../Components/PersianDateInput';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -30,12 +31,14 @@ interface RelationsPanelProps {
     contactRoles: { ContactRoleID: number; DisplayName: string }[];
     titles: { TitleID: number; DisplayName: string }[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
 }
 
 const emptyDraft = {
     relationId: null as number | null,
     personId: null as number | null,
-    positionId: null as number | null,
+    positionIds: [] as number[],
     roleIds: [] as number[],
     isPrimaryContact: false,
 };
@@ -50,10 +53,10 @@ const emptyNewPerson = {
 
 /**
  * مخاطبینِ یک طرف‌حساب — مدلِ Party ↔ Relationship ↔ Person: شخص مستقل است
- * (می‌تواند به چند طرف‌حساب دیگر هم مرتبط باشد)، سمت تک‌مقداری، نقش چندمقداری،
+ * (می‌تواند به چند طرف‌حساب دیگر هم مرتبط باشد)، سمت و نقش هر دو چندمقداری،
  * مخاطبِ اصلی و وضعیتِ رابطه ویژگیِ خودِ رابطه‌اند نه شخص.
  */
-export default function RelationsPanel({ partyId, items: initialItems, positions, contactRoles, titles, canManage }: RelationsPanelProps) {
+export default function RelationsPanel({ partyId, items: initialItems, positions, contactRoles, titles, canManage, canDelete = false }: RelationsPanelProps) {
     const [items, setItems] = useState<Relation[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
@@ -64,6 +67,9 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
     const [positionOptions, setPositionOptions] = useState(positions || []);
     const [creatingNewPosition, setCreatingNewPosition] = useState(false);
     const [newPositionName, setNewPositionName] = useState('');
+    const [roleOptions, setRoleOptions] = useState(contactRoles || []);
+    const [creatingNewRole, setCreatingNewRole] = useState(false);
+    const [newRoleName, setNewRoleName] = useState('');
     const [saving, setSaving] = useState(false);
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -88,6 +94,8 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         setNewPerson(emptyNewPerson);
         setCreatingNewPosition(false);
         setNewPositionName('');
+        setCreatingNewRole(false);
+        setNewRoleName('');
         setError(null);
         setFormOpen(true);
         searchPersons('');
@@ -98,14 +106,16 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         setDraft({
             relationId: row.RelationID,
             personId: row.PersonID,
-            positionId: row.PositionID,
-            roleIds: rolesRes.ok && rolesRes.success ? rolesRes.roleIds || [] : [],
+            positionIds: rolesRes.ok && rolesRes.success ? (rolesRes.positionIds || []).map(Number) : [],
+            roleIds: rolesRes.ok && rolesRes.success ? (rolesRes.roleIds || []).map(Number) : [],
             isPrimaryContact: toBool(row.IsPrimaryContact),
         });
         setPersonOptions([{ PersonID: row.PersonID, DisplayName: row.PersonName }]);
         setCreatingNewPerson(false);
         setCreatingNewPosition(false);
         setNewPositionName('');
+        setCreatingNewRole(false);
+        setNewRoleName('');
         setError(null);
         setFormOpen(true);
     };
@@ -122,11 +132,31 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             setError(res.message);
             return;
         }
-        const created = { PositionID: res.positionId, DisplayName: newPositionName.trim() };
+        const created = { PositionID: Number(res.positionId), DisplayName: newPositionName.trim() };
         setPositionOptions((opts) => [created, ...opts]);
-        setDraft((d) => ({ ...d, positionId: created.PositionID }));
+        setDraft((d) => ({ ...d, positionIds: [...d.positionIds, created.PositionID] }));
         setCreatingNewPosition(false);
         setNewPositionName('');
+        setError(null);
+    };
+
+    const handleCreateNewRole = async () => {
+        if (!newRoleName.trim()) {
+            setError('نامِ نقش الزامی است.');
+            return;
+        }
+        setSaving(true);
+        const res = await crmApi('/crm/directory/contact-roles', 'POST', { displayName: newRoleName.trim() });
+        setSaving(false);
+        if (!res.ok || !res.success) {
+            setError(res.message);
+            return;
+        }
+        const created = { ContactRoleID: Number(res.contactRoleId), DisplayName: newRoleName.trim() };
+        setRoleOptions((opts) => [created, ...opts]);
+        setDraft((d) => ({ ...d, roleIds: [...d.roleIds, created.ContactRoleID] }));
+        setCreatingNewRole(false);
+        setNewRoleName('');
         setError(null);
     };
 
@@ -167,7 +197,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             relationId: draft.relationId ?? undefined,
             partyId,
             personId: draft.personId,
-            positionId: draft.positionId ?? undefined,
+            positionIds: draft.positionIds,
             isPrimaryContact: draft.isPrimaryContact,
             roleIds: draft.roleIds,
         });
@@ -180,6 +210,14 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         setNotification({ open: true, type: 'success', message: res.message });
         reload();
     };
+
+    // گزینه‌هایِ Multi-Select؛ موردِ انتخاب‌شده‌ای که در فهرستِ فعال نیست (غیرفعال‌شده) هم با برچسب نمایش داده می‌شود
+    const withSelected = (opts: { value: number; label: string }[], selected: number[]) => [
+        ...opts,
+        ...selected.filter((id) => !opts.some((o) => o.value === id)).map((id) => ({ value: id, label: `(غیرفعال) #${id}` })),
+    ];
+    const positionSelectOptions = withSelected(positionOptions.map((p) => ({ value: Number(p.PositionID), label: p.DisplayName })), draft.positionIds);
+    const roleSelectOptions = withSelected(roleOptions.map((r) => ({ value: Number(r.ContactRoleID), label: r.DisplayName })), draft.roleIds);
 
     const handleToggle = async (row: Relation) => {
         setTogglingId(row.RelationID);
@@ -200,7 +238,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                 </Space>
             ),
         },
-        { title: 'سمت', dataIndex: 'PositionName', key: 'PositionName', render: (v) => v || <Text type="secondary">—</Text> },
+        { title: 'سمت‌ها', dataIndex: 'PositionName', key: 'PositionName', render: (v) => v || <Text type="secondary">—</Text> },
         { title: 'نقش‌ها', dataIndex: 'RoleNames', key: 'RoleNames', render: (v) => v || <Text type="secondary">—</Text> },
         {
             title: 'وضعیتِ رابطه',
@@ -219,10 +257,10 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         {
             title: 'عملیات',
             key: 'actions',
-            width: 100,
+            width: 130,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="مخاطب" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 return (
                     <Space>
@@ -230,6 +268,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                         <Popconfirm title={active ? 'غیرفعال‌کردنِ رابطه' : 'فعال‌کردنِ رابطه'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.RelationID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="مخاطب" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },
@@ -308,15 +347,18 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
 
                     <Space style={{ width: '100%' }} wrap align="start">
                         <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>سمت</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>سمت‌ها</Text>
                             <Space wrap>
                                 <Select
+                                    mode="multiple"
                                     allowClear
-                                    style={{ width: 200 }}
-                                    placeholder="سمت"
-                                    value={draft.positionId ?? undefined}
-                                    onChange={(v) => setDraft((d) => ({ ...d, positionId: v ?? null }))}
-                                    options={positionOptions.map((p) => ({ value: p.PositionID, label: p.DisplayName }))}
+                                    style={{ minWidth: 240, maxWidth: '100%' }}
+                                    placeholder="انتخابِ یک یا چند سمت"
+                                    value={draft.positionIds}
+                                    onChange={(v) => setDraft((d) => ({ ...d, positionIds: v }))}
+                                    options={positionSelectOptions}
+                                    optionFilterProp="label"
+                                    notFoundContent="سمتی تعریف نشده است"
                                 />
                                 <Button icon={<UserAddOutlined />} onClick={() => setCreatingNewPosition((v) => !v)}>
                                     سمتِ جدید
@@ -331,6 +373,37 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                                         style={{ width: 160 }}
                                     />
                                     <Button type="primary" size="small" loading={saving} onClick={handleCreateNewPosition}>ایجاد</Button>
+                                </Space>
+                            ) : null}
+                        </div>
+                        <div>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نقش‌ها</Text>
+                            <Space wrap>
+                                <Select
+                                    mode="multiple"
+                                    allowClear
+                                    style={{ minWidth: 240, maxWidth: '100%' }}
+                                    placeholder="انتخابِ یک یا چند نقش"
+                                    value={draft.roleIds}
+                                    onChange={(v) => setDraft((d) => ({ ...d, roleIds: v }))}
+                                    options={roleSelectOptions}
+                                    optionFilterProp="label"
+                                    notFoundContent="نقشی تعریف نشده است؛ «نقشِ جدید» را بزنید"
+                                />
+                                <Button icon={<PlusOutlined />} onClick={() => setCreatingNewRole((v) => !v)}>
+                                    نقشِ جدید
+                                </Button>
+                            </Space>
+                            {creatingNewRole ? (
+                                <Space style={{ marginTop: 8 }}>
+                                    <Input
+                                        placeholder="نامِ نقش"
+                                        value={newRoleName}
+                                        onChange={(e) => setNewRoleName(e.target.value)}
+                                        onPressEnter={handleCreateNewRole}
+                                        style={{ width: 160 }}
+                                    />
+                                    <Button type="primary" size="small" loading={saving} onClick={handleCreateNewRole}>ایجاد</Button>
                                 </Space>
                             ) : null}
                         </div>

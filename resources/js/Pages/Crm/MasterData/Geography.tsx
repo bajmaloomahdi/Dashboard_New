@@ -15,6 +15,7 @@ interface PageProps {
     neighborhoods: (MasterDataRow & { NeighborhoodID: number; CityID: number; CityName: string; CountyID: number; CountyName: string })[];
     municipalZones: MasterDataRow[];
     canManage: boolean;
+    canDelete?: boolean;
 }
 
 type TabKey = 'provinces' | 'counties' | 'cities' | 'neighborhoods' | 'municipalZones';
@@ -24,7 +25,7 @@ type TabKey = 'provinces' | 'counties' | 'cities' | 'neighborhoods' | 'municipal
  * فرمِ هر سطح فقط والدِ مستقیمِ خودش را می‌پرسد؛ سطحِ بالاتر فقط در نوارِ فیلترِ گرید است.
  */
 export default function CrmGeographyPage() {
-    const { provinces, counties, cities, neighborhoods, municipalZones, canManage } = usePage().props as unknown as PageProps;
+    const { provinces, counties, cities, neighborhoods, municipalZones, canManage, canDelete = false } = usePage().props as unknown as PageProps;
     const [activeTab, setActiveTab] = useState<TabKey>('provinces');
 
     const tabDefs = [
@@ -40,7 +41,7 @@ export default function CrmGeographyPage() {
             <PageHeader
                 icon={<EnvironmentOutlined />}
                 title="جغرافیایِ آدرس"
-                subtitle="استان → شهرستان → شهر → محله + منطقهٔ شهرداری — Master Dataهایِ CRM"
+                subtitle="استان → شهرستان → شهر → محله + منطقهٔ شهرداری — Master Dataهایِ «مخاطبین و ارتباطات»"
                 backHref="/crm/classification"
                 backLabel="بازگشت"
             />
@@ -54,6 +55,8 @@ export default function CrmGeographyPage() {
                         items={provinces || []}
                         apiBase="/crm/geography/provinces"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="province"
                         entityLabel="استان"
                         namePlaceholder="تهران"
                     />
@@ -67,6 +70,8 @@ export default function CrmGeographyPage() {
                         items={counties || []}
                         apiBase="/crm/geography/counties"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="county"
                         entityLabel="شهرستان"
                         namePlaceholder="شمیرانات"
                         parentSelect={{
@@ -87,6 +92,8 @@ export default function CrmGeographyPage() {
                         items={cities || []}
                         apiBase="/crm/geography/cities"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="city"
                         entityLabel="شهر"
                         namePlaceholder="تجریش"
                         parentSelect={{
@@ -114,6 +121,8 @@ export default function CrmGeographyPage() {
                         items={neighborhoods || []}
                         apiBase="/crm/geography/neighborhoods"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="neighborhood"
                         entityLabel="محله"
                         namePlaceholder="ونک"
                         parentSelect={{
@@ -141,6 +150,8 @@ export default function CrmGeographyPage() {
                         items={municipalZones || []}
                         apiBase="/crm/geography/municipal-zones"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="municipal-zone"
                         entityLabel="منطقهٔ شهرداری"
                         namePlaceholder="منطقهٔ ۱"
                     />

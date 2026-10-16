@@ -52,7 +52,7 @@ export default function RelatedPartiesPanel({ items }: RelatedPartiesPanelProps)
                 );
             },
         },
-        { title: 'سمت', dataIndex: 'PositionName', key: 'PositionName', render: (v) => v || <Text type="secondary">—</Text> },
+        { title: 'سمت‌ها', dataIndex: 'PositionName', key: 'PositionName', render: (v) => v || <Text type="secondary">—</Text> },
         { title: 'نقش‌ها', dataIndex: 'RoleNames', key: 'RoleNames', render: (v) => v || <Text type="secondary">—</Text> },
         {
             title: 'وضعیتِ رابطه',

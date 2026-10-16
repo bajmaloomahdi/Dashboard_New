@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Button, Descriptions, Table, Tag, Typography, Empty } from 'antd';
+import { Card, Button, Descriptions, Table, Tag, Typography, Empty, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
 import { TagsOutlined, EditOutlined, ApartmentOutlined, BankOutlined, UserOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -11,6 +11,7 @@ import { STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import BrandFormModal, { Brand } from './BrandFormModal';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Link, Text } = Typography;
 
@@ -35,10 +36,11 @@ interface BrandParty {
  * جزئیاتِ طرف‌حساب انجام می‌شود، نه از اینجا.
  */
 export default function CrmBrandShow() {
-    const { brand: currentBrand, parties, canManage } = usePage().props as unknown as {
+    const { brand: currentBrand, parties, canManage, canDelete = false } = usePage().props as unknown as {
         brand: BrandDetail;
         parties: BrandParty[];
         canManage: boolean;
+        canDelete?: boolean;
     };
 
     const [editOpen, setEditOpen] = useState(false);
@@ -119,10 +121,27 @@ export default function CrmBrandShow() {
                 backLabel="بازگشت به برندها"
                 tags={[{ label: isActive ? 'فعال' : 'غیرفعال' }]}
                 actions={
-                    canManage ? (
-                        <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-                            ویرایشِ برند
-                        </Button>
+                    canManage || canDelete ? (
+                        <Space wrap>
+                            {canManage ? (
+                                <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                                    ویرایشِ برند
+                                </Button>
+                            ) : null}
+                            {canDelete ? (
+                                <CrmDeleteButton
+                                    entity="brand"
+                                    id={currentBrand.BrandID}
+                                    label="برند"
+                                    text="حذف"
+                                    size="middle"
+                                    onDone={(ok, msg) => {
+                                        if (ok) router.visit('/crm/brands-page');
+                                        else setNotification({ open: true, type: 'error', message: msg });
+                                    }}
+                                />
+                            ) : null}
+                        </Space>
                     ) : undefined
                 }
             />

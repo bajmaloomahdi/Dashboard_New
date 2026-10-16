@@ -333,7 +333,7 @@ export default function ProjectShow() {
                         <div>
                             {rec.OfficialName || `طرف‌حسابِ #${rec.PartyID}`}
                             {!toBool(rec.PartyIsActive) ? (
-                                <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در CRM</Tag>
+                                <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در «مخاطبین و ارتباطات»</Tag>
                             ) : null}
                         </div>
                         {rec.IdentifierNumber ? (

@@ -325,6 +325,44 @@ class CrmStore
         return $this->write('EXEC dbo.sp_Crm_TogglePartyActive @PartyID = ?, @UserID = ?', [$partyId, $userId]);
     }
 
+    /* ---------- نقش‌ها و سمت‌هایِ خودِ طرف‌حساب (CrmPartyRoles / CrmPartyPositions) — جدا از رابطهٔ مخاطب ---------- */
+
+    public function getPartyRoles(int $partyId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyRoles @PartyID = ?', [$partyId]);
+    }
+
+    public function getPartyPositions(int $partyId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyPositions @PartyID = ?', [$partyId]);
+    }
+
+    /**
+     * جایگزینیِ کاملِ مجموعهٔ نقش‌هایِ طرف‌حساب (Sync) — هم‌الگو با saveRelationRoles.
+     *
+     * @param  int[]  $roleIds
+     */
+    public function savePartyRoles(int $partyId, array $roleIds, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SavePartyRoles @PartyID = ?, @RoleIDsCsv = ?, @UserID = ?',
+            [$partyId, implode(',', $roleIds), $userId]
+        );
+    }
+
+    /**
+     * جایگزینیِ کاملِ مجموعهٔ سمت‌هایِ طرف‌حساب (Sync).
+     *
+     * @param  int[]  $positionIds
+     */
+    public function savePartyPositions(int $partyId, array $positionIds, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SavePartyPositions @PartyID = ?, @PositionIDsCsv = ?, @UserID = ?',
+            [$partyId, implode(',', $positionIds), $userId]
+        );
+    }
+
     /* ---------- دسته‌بندیِ طرف‌حساب (CrmPartyClassifications) — چندگانه ---------- */
 
     public function getPartyClassifications(int $partyId): array
@@ -673,6 +711,13 @@ class CrmStore
             ->pluck('RoleID')->map(fn ($v) => (int) $v)->all();
     }
 
+    /** @return int[] */
+    public function getRelationPositionIds(int $relationId): array
+    {
+        return collect(DB::select('EXEC dbo.sp_Crm_GetRelationPositionIds @RelationID = ?', [$relationId]))
+            ->pluck('PositionID')->map(fn ($v) => (int) $v)->all();
+    }
+
     public function saveRelation(array $p): object
     {
         return $this->write(
@@ -698,6 +743,27 @@ class CrmStore
             'EXEC dbo.sp_Crm_SaveRelationRoles @RelationID = ?, @RoleIDsCsv = ?, @UserID = ?',
             [$relationId, implode(',', $roleIds), $userId]
         );
+    }
+
+    /**
+     * جایگزینیِ کاملِ مجموعهٔ سمت‌هایِ یک رابطه (Sync) — هم‌شکلِ saveRelationRoles.
+     *
+     * @param  int[]  $positionIds
+     */
+    public function saveRelationPositions(int $relationId, array $positionIds, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SaveRelationPositions @RelationID = ?, @PositionIDsCsv = ?, @UserID = ?',
+            [$relationId, implode(',', $positionIds), $userId]
+        );
+    }
+
+    /* ---------- حذفِ عمومی (CRM_DELETE) ---------- */
+
+    /** حذفِ یک رکورد؛ اگر جایی استفاده شده باشد SP با Success=0 و فهرستِ وابستگی‌ها رد می‌کند. */
+    public function deleteRecord(string $entityCode, int $recordId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_DeleteRecord @EntityCode = ?, @RecordID = ?, @UserID = ?', [$entityCode, $recordId, $userId]);
     }
 
     /* ================================================================== */

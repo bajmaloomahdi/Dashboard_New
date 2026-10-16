@@ -11,6 +11,7 @@ import { ProductCategoryRow, toTreeSelectData } from '../../../Components/Crm/pr
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import { THEME } from '../../../theme';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text, Link } = Typography;
 
@@ -34,6 +35,8 @@ interface BrandCategoriesPanelProps {
     partyId: number;
     items: BrandCategoryRow[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
     /** بعد از هر تغییر — ارتباطِ داخلیِ Party↔Brand هم ممکن است ساخته/فعال شده باشد */
     onChanged: () => void;
 }
@@ -60,7 +63,7 @@ const coversToday = (r: BrandCategoryRow, today: string) =>
  * برند اجباری؛ دسته و تاریخ‌ها اختیاری؛ درصد پیش‌فرض ۰. هر ردیفِ گرید کامل قابلِ ویرایش است.
  * یکتاییِ فعال (Party+Brand+Category) و سقفِ ۱۰۰٪ (فقط ردیف‌هایِ دارایِ دسته) مرجعشان SP است؛ پیامِ آن نمایش داده می‌شود.
  */
-export default function BrandCategoriesPanel({ partyId, items, canManage, onChanged }: BrandCategoriesPanelProps) {
+export default function BrandCategoriesPanel({ partyId, items, canManage, canDelete = false, onChanged }: BrandCategoriesPanelProps) {
     const [draft, setDraft] = useState<Draft>(emptyDraft());
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editDraft, setEditDraft] = useState<Draft>(emptyDraft());
@@ -306,10 +309,10 @@ export default function BrandCategoriesPanel({ partyId, items, canManage, onChan
         {
             title: 'عملیات',
             key: 'actions',
-            width: 110,
+            width: 140,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="party-brand-category" id={r.PartyBrandCategoryID} label="ردیفِ برند" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) onChanged(); }} /> : null;
                 if (isEditing(r)) {
                     return (
                         <Space size={0}>
@@ -338,6 +341,7 @@ export default function BrandCategoriesPanel({ partyId, items, canManage, onChan
                                 icon={active ? <StopOutlined /> : <CheckCircleOutlined />}
                             />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="party-brand-category" id={r.PartyBrandCategoryID} label="ردیفِ برند" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) onChanged(); }} /> : null}
                     </Space>
                 );
             },

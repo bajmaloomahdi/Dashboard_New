@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Typography, Button, Descriptions } from 'antd';
+import { Card, Typography, Button, Descriptions, Tag, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
 import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
@@ -9,7 +9,7 @@ import NotificationModal, { NotificationType } from '../../../Components/Notific
 import { STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
-import PartyFormModal, { Party } from './PartyFormModal';
+import PartyFormModal, { Party, PartyRoleRow, PartyPositionRow } from './PartyFormModal';
 import BrandCategoriesPanel, { BrandCategoryRow } from './BrandCategoriesPanel';
 import AddressesPanel from './AddressesPanel';
 import ContactsPanel from './ContactsPanel';
@@ -17,6 +17,7 @@ import RelationsPanel from './RelationsPanel';
 import ClassificationsPanel from './ClassificationsPanel';
 import InteractionsPanel from './InteractionsPanel';
 import PartyImagesPanel from './PartyImagesPanel';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PartySupplementaryInfoPanel, { PartySupplementaryInfo, OwnershipTypeOption } from './PartySupplementaryInfoPanel';
 
 const { Text } = Typography;
@@ -36,6 +37,8 @@ interface PartyDetail extends Party {
 export default function CrmPartyShow() {
     const props = usePage().props as unknown as {
         party: PartyDetail;
+        partyRoles: PartyRoleRow[];
+        partyPositions: PartyPositionRow[];
         brandCategories: BrandCategoryRow[];
         addresses: any[];
         contacts: any[];
@@ -57,13 +60,14 @@ export default function CrmPartyShow() {
         partyTypes: { PartyTypeID: number; DisplayName: string }[];
         activities: { ActivityID: number; DisplayName: string; PartyTypeID: number }[];
         canManage: boolean;
+        canDelete?: boolean;
         neshanMapKey: string | null;
         neshanSearchEnabled: boolean;
     };
 
     const {
-        party: currentParty, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
-        positions, contactRoles, titles, departments, partyTypes, activities, canManage, neshanMapKey, neshanSearchEnabled,
+        party: currentParty, partyRoles, partyPositions, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
+        positions, contactRoles, titles, departments, partyTypes, activities, canManage, canDelete = false, neshanMapKey, neshanSearchEnabled,
     } = props;
 
     const [editOpen, setEditOpen] = useState(false);
@@ -91,8 +95,19 @@ export default function CrmPartyShow() {
         setNotification({ open: true, type: 'success', message });
         // بازخوانیِ Propِ 'party' از همان اکشنِ show — بدونِ نیازِ به جست‌وجویِ
         // شکننده بر اساسِ شناسه (که اگر خودِ شناسه ویرایش شده بود پیدا نمی‌کرد).
-        router.reload({ only: ['party'] });
+        router.reload({ only: ['party', 'partyRoles', 'partyPositions'] });
     };
+
+    const renderTags = (rows: { DisplayName: string; IsActive: boolean | number | string }[]) =>
+        rows.length ? (
+            <Space size={[4, 4]} wrap>
+                {rows.map((r, i) => (
+                    <Tag key={i} color={toBool(r.IsActive) ? 'blue' : 'default'} style={{ marginInlineEnd: 0 }}>
+                        {r.DisplayName}{toBool(r.IsActive) ? '' : ' (غیرفعال)'}
+                    </Tag>
+                ))}
+            </Space>
+        ) : '—';
 
     const isLegal = currentParty.PartyNature === 'LEGAL';
     const dateLabel = isLegal ? 'تاریخِ ثبت' : 'تاریخِ افتتاح';
@@ -110,10 +125,27 @@ export default function CrmPartyShow() {
                     ...(Number(currentParty.ClassificationCount) > 0 ? [{ label: `${currentParty.ClassificationCount} دسته‌بندی` }] : []),
                 ]}
                 actions={
-                    canManage ? (
-                        <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-                            ویرایشِ طرف‌حساب
-                        </Button>
+                    canManage || canDelete ? (
+                        <Space wrap>
+                            {canManage ? (
+                                <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                                    ویرایشِ طرف‌حساب
+                                </Button>
+                            ) : null}
+                            {canDelete ? (
+                                <CrmDeleteButton
+                                    entity="party"
+                                    id={currentParty.PartyID}
+                                    label="طرف‌حساب"
+                                    text="حذف"
+                                    size="middle"
+                                    onDone={(ok, msg) => {
+                                        if (ok) router.visit('/crm/parties');
+                                        else setNotification({ open: true, type: 'error', message: msg });
+                                    }}
+                                />
+                            ) : null}
+                        </Space>
                     ) : undefined
                 }
             />
@@ -125,6 +157,9 @@ export default function CrmPartyShow() {
                             <Text dir="ltr">{currentParty.IdentifierNumber}</Text>
                         </Descriptions.Item>
                     ) : null}
+                    <Descriptions.Item label="تاریخِ ایجاد">
+                        {currentParty.Date_InsertFirst ? gregorianToJalaliDisplay(currentParty.Date_InsertFirst) : '—'}
+                    </Descriptions.Item>
                     <Descriptions.Item label={dateLabel}>
                         {currentParty.IdentifierDate ? gregorianToJalaliDisplay(currentParty.IdentifierDate) : '—'}
                     </Descriptions.Item>
@@ -135,6 +170,8 @@ export default function CrmPartyShow() {
                             <Descriptions.Item label="کدِ اقتصادی"><Text dir="ltr">{currentParty.EconomicCode || '—'}</Text></Descriptions.Item>
                         </>
                     ) : null}
+                    <Descriptions.Item label="نقش‌ها" span={3}>{renderTags(partyRoles || [])}</Descriptions.Item>
+                    <Descriptions.Item label="سمت‌ها" span={3}>{renderTags(partyPositions || [])}</Descriptions.Item>
                     <Descriptions.Item label="توضیحات" span={3}>{currentParty.Description || '—'}</Descriptions.Item>
                     <Descriptions.Item label="ایجادکننده">
                         {currentParty.CreatedByName || '—'} — {currentParty.Date_InsertFirst ? gregorianToJalaliDisplay(currentParty.Date_InsertFirst) : '—'}
@@ -156,13 +193,14 @@ export default function CrmPartyShow() {
                         partyTypes={partyTypes || []}
                         activities={activities || []}
                         canManage={canManage}
+                        canDelete={canDelete}
                     />
                 </Card>
             )}
 
             {activeTab === 'relations' && (
                 <Card style={STYLES.card}>
-                    <RelationsPanel partyId={currentParty.PartyID} items={relations || []} positions={positions || []} contactRoles={contactRoles || []} titles={titles || []} canManage={canManage} />
+                    <RelationsPanel partyId={currentParty.PartyID} items={relations || []} positions={positions || []} contactRoles={contactRoles || []} titles={titles || []} canManage={canManage} canDelete={canDelete} />
                 </Card>
             )}
 
@@ -175,6 +213,7 @@ export default function CrmPartyShow() {
                         users={users || []}
                         interactionTypes={interactionTypes || []}
                         canManage={canManage}
+                        canDelete={canDelete}
                     />
                 </Card>
             )}
@@ -187,6 +226,7 @@ export default function CrmPartyShow() {
                         contactTypes={contactTypes || []}
                         relatedPersons={relatedPersons}
                         canManage={canManage}
+                        canDelete={canDelete}
                     />
                 </Card>
             )}
@@ -199,6 +239,7 @@ export default function CrmPartyShow() {
                         addressTitles={addressTitles || []}
                         provinces={provinces || []}
                         canManage={canManage}
+                        canDelete={canDelete}
                         showMap
                         neshanMapKey={neshanMapKey}
                         neshanSearchEnabled={neshanSearchEnabled}
@@ -212,6 +253,7 @@ export default function CrmPartyShow() {
                         partyId={currentParty.PartyID}
                         items={brandCategories || []}
                         canManage={canManage}
+                        canDelete={canDelete}
                         onChanged={() => router.reload({ only: ['brandCategories'] })}
                     />
                 </Card>
@@ -243,6 +285,11 @@ export default function CrmPartyShow() {
                 onClose={() => setEditOpen(false)}
                 editingParty={currentParty}
                 onSuccess={handleEditSuccess}
+                contactRoles={contactRoles}
+                positions={positions}
+                // همان ارجاعِ Propها (پایدار بین رندرها) تا فرمِ باز با هر رندر ریست نشود
+                initialRoles={partyRoles}
+                initialPositions={partyPositions}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />

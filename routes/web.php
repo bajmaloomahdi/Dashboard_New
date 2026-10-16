@@ -23,6 +23,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\Crm\CrmAddressController;
 use App\Http\Controllers\Crm\CrmBrandController;
+use App\Http\Controllers\Crm\CrmDeleteController;
 use App\Http\Controllers\Crm\CrmClassificationController;
 use App\Http\Controllers\Crm\CrmContactController;
 use App\Http\Controllers\Crm\CrmDirectoryController;
@@ -390,6 +391,9 @@ Route::middleware('auth')->group(function () {
 
     // ───────────────────────── CRM — Master Data (فازِ ۱) ─────────────────────────
     Route::prefix('crm')->name('crm.')->group(function () {
+        // حذفِ عمومیِ اطلاعاتِ CRM — دسترسیِ واحدِ CRM_DELETE
+        Route::post('delete/{entity}/{id}', [CrmDeleteController::class, 'destroy'])
+            ->where('entity', '[a-z-]+')->whereNumber('id')->name('delete');
         Route::get('classification', [CrmClassificationController::class, 'page'])->name('classification.page');
         Route::get('classification/departments', [CrmClassificationController::class, 'departmentsIndex'])->name('classification.departments.index');
         Route::post('classification/departments', [CrmClassificationController::class, 'departmentsStore'])->name('classification.departments.store');
@@ -463,6 +467,8 @@ Route::middleware('auth')->group(function () {
         Route::post('parties', [CrmPartyController::class, 'store'])->name('parties.store');
         Route::post('parties/{partyId}/toggle', [CrmPartyController::class, 'toggleActive'])
             ->whereNumber('partyId')->name('parties.toggle');
+        Route::get('parties/{partyId}/roles-positions', [CrmPartyController::class, 'rolesPositions'])
+            ->whereNumber('partyId')->name('parties.roles-positions');
 
         Route::get('classifications', [CrmPartyClassificationController::class, 'index'])->name('classifications.index'); // ?partyId=
         Route::post('classifications', [CrmPartyClassificationController::class, 'store'])->name('classifications.store');

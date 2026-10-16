@@ -17,6 +17,7 @@ interface PageProps {
     interactionTypes: MasterDataRow[];
     ownershipTypes: MasterDataRow[];
     canManage: boolean;
+    canDelete?: boolean;
 }
 
 type TabKey = 'titles' | 'positions' | 'contactRoles' | 'contactTypes' | 'addressTitles' | 'interactionTypes' | 'ownershipTypes';
@@ -26,7 +27,7 @@ type TabKey = 'titles' | 'positions' | 'contactRoles' | 'contactTypes' | 'addres
  * همگی مستقل، بدونِ سلسله‌مراتب.
  */
 export default function CrmDirectoryPage() {
-    const { titles, positions, contactRoles, contactTypes, addressTitles, interactionTypes, ownershipTypes, canManage } = usePage().props as unknown as PageProps;
+    const { titles, positions, contactRoles, contactTypes, addressTitles, interactionTypes, ownershipTypes, canManage, canDelete = false } = usePage().props as unknown as PageProps;
     const [activeTab, setActiveTab] = useState<TabKey>('titles');
 
     const tabDefs = [
@@ -43,8 +44,8 @@ export default function CrmDirectoryPage() {
         <MainLayout>
             <PageHeader
                 icon={<IdcardOutlined />}
-                title="فهرست‌هایِ CRM"
-                subtitle="عنوانِ فرد، سمت، نقش، نوعِ تماس و عنوانِ آدرس — Master Dataهایِ CRM"
+                title="فهرست‌هایِ مخاطبین و ارتباطات"
+                subtitle="عنوانِ فرد، سمت، نقش، نوعِ تماس و عنوانِ آدرس — Master Dataهایِ «مخاطبین و ارتباطات»"
                 backHref="/crm/geography"
                 backLabel="بازگشت"
             />
@@ -58,6 +59,8 @@ export default function CrmDirectoryPage() {
                         items={titles || []}
                         apiBase="/crm/directory/titles"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="title"
                         entityLabel="عنوان"
                         namePlaceholder="آقای"
                     />
@@ -71,6 +74,8 @@ export default function CrmDirectoryPage() {
                         items={positions || []}
                         apiBase="/crm/directory/positions"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="position"
                         entityLabel="سمت"
                         namePlaceholder="مدیرعامل"
                     />
@@ -84,6 +89,8 @@ export default function CrmDirectoryPage() {
                         items={contactRoles || []}
                         apiBase="/crm/directory/contact-roles"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="contact-role"
                         entityLabel="نقش"
                         namePlaceholder="تصمیم‌گیرنده"
                     />
@@ -97,6 +104,8 @@ export default function CrmDirectoryPage() {
                         items={contactTypes || []}
                         apiBase="/crm/directory/contact-types"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="contact-type"
                         entityLabel="نوعِ تماس"
                         namePlaceholder="تلفن"
                     />
@@ -110,6 +119,8 @@ export default function CrmDirectoryPage() {
                         items={addressTitles || []}
                         apiBase="/crm/directory/address-titles"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="address-title"
                         entityLabel="عنوانِ آدرس"
                         namePlaceholder="دفتر مرکزی"
                     />
@@ -123,6 +134,8 @@ export default function CrmDirectoryPage() {
                         items={interactionTypes || []}
                         apiBase="/crm/directory/interaction-types"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="interaction-type"
                         entityLabel="نوعِ تعامل"
                         namePlaceholder="تماسِ تلفنی"
                     />
@@ -136,6 +149,8 @@ export default function CrmDirectoryPage() {
                         items={ownershipTypes || []}
                         apiBase="/crm/directory/ownership-types"
                         canManage={canManage}
+                        canDelete={canDelete}
+                        deleteEntity="ownership-type"
                         entityLabel="نوعِ مالکیت"
                         namePlaceholder="مالک"
                     />

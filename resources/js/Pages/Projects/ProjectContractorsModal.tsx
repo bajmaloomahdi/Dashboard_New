@@ -221,7 +221,7 @@ export default function ProjectContractorsModal({
                         <div>
                             {rec.OfficialName || `طرف‌حسابِ #${rec.PartyID}`}
                             {!toBool(rec.PartyIsActive) ? (
-                                <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در CRM</Tag>
+                                <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در «مخاطبین و ارتباطات»</Tag>
                             ) : null}
                         </div>
                         {rec.IdentifierNumber ? (
@@ -308,7 +308,7 @@ export default function ProjectContractorsModal({
                     </Button>
                 </Space.Compact>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    پیمانکار از بینِ طرف‌حساب‌هایِ فعالِ CRM انتخاب می‌شود؛ مشخصاتِ آن مستقیماً از CRM خوانده می‌شود.
+                    پیمانکار از بینِ طرف‌حساب‌هایِ فعالِ «مخاطبین و ارتباطات» انتخاب می‌شود؛ مشخصاتِ آن مستقیماً از «مخاطبین و ارتباطات» خوانده می‌شود.
                 </Typography.Text>
             </Space>
 

@@ -30,6 +30,7 @@ class CrmGeographyController extends CrmApiController
             'neighborhoods'  => $this->masterData->listNeighborhoods(),
             'municipalZones' => $this->masterData->listMunicipalZones(),
             'canManage'      => true,
+            'canDelete'      => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 

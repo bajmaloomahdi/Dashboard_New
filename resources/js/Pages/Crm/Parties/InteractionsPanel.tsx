@@ -11,6 +11,7 @@ import NotificationModal, { NotificationType } from '../../../Components/Notific
 import PersianDateInput from '../../../Components/PersianDateInput';
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -75,6 +76,8 @@ interface InteractionsPanelProps {
     users: { UserID: number; FullName: string }[];
     interactionTypes: InteractionTypeOption[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
 }
 
 /** پروژه‌ای که همین Party پیمانکارِ فعالِ آن است (GET crm/parties/{partyId}/projects — Stage B) */
@@ -154,7 +157,7 @@ const formatSize = (bytes: number | string) => {
  * می‌شود؛ اینجا فقط گزینه‌هایِ مجاز نشان داده می‌شود و تغییرِ وضعیت فقط از
  * دکمه‌هایِ «انجام شد/لغو» (فقط برایِ تعاملِ برنامه‌ریزی‌شده) انجام می‌شود.
  */
-export default function InteractionsPanel({ partyId, items: initialItems, relatedPersons, users, interactionTypes, canManage }: InteractionsPanelProps) {
+export default function InteractionsPanel({ partyId, items: initialItems, relatedPersons, users, interactionTypes, canManage, canDelete = false }: InteractionsPanelProps) {
     const [items, setItems] = useState<Interaction[]>(initialItems || []);
     const [typeFilter, setTypeFilter] = useState<number | null>(null);
     const [projectFilter, setProjectFilter] = useState<number | null>(null);
@@ -457,10 +460,10 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
         {
             title: 'عملیات',
             key: 'actions',
-            width: 190,
+            width: 220,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="interaction" id={r.InteractionID} label="تعامل" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 const planned = r.Status === 'PLANNED' && r.InteractionType !== 'NOTE';
                 return (
@@ -482,6 +485,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                         <Popconfirm title={active ? 'غیرفعال‌کردنِ تعامل' : 'فعال‌کردنِ تعامل'} onConfirm={() => toggleActive(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="interaction" id={r.InteractionID} label="تعامل" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },

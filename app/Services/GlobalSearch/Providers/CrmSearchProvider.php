@@ -49,7 +49,7 @@ class CrmSearchProvider implements SearchProvider
 
     public function label(): string
     {
-        return 'طرف‌حساب‌ها و CRM';
+        return 'مخاطبین و ارتباطات';
     }
 
     public function requiredPermission(): ?string

@@ -3,6 +3,7 @@ import { Table, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typo
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from './crmApi';
+import CrmDeleteButton, { type CrmDeleteEntity } from './CrmDeleteButton';
 import NotificationModal, { NotificationType } from '../NotificationModal';
 import { toBool } from '../../Utils/bool';
 
@@ -59,6 +60,9 @@ interface MasterDataManagerProps {
     /** مسیرِ پایهٔ API، مثلاً '/crm/classification/departments' — index این آدرس، save همین با POST، toggle با `${id}/toggle` */
     apiBase: string;
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE + slugِ موجودیت برایِ دکمهٔ حذف (بدونِ deleteEntity دکمه نمایش داده نمی‌شود) */
+    canDelete?: boolean;
+    deleteEntity?: CrmDeleteEntity;
     /** برایِ پیام‌ها/Placeholder، مثلاً 'دپارتمان' */
     entityLabel: string;
     parentSelect?: ParentSelectConfig;
@@ -89,6 +93,8 @@ export default function MasterDataManager({
     items: initialItems,
     apiBase,
     canManage,
+    canDelete = false,
+    deleteEntity,
     entityLabel,
     parentSelect,
     grandParentSelect,
@@ -269,15 +275,17 @@ export default function MasterDataManager({
         {
             title: 'عملیات',
             key: 'actions',
-            width: 110,
+            width: 140,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                const showDelete = canDelete && !!deleteEntity;
+                if (!canManage && !showDelete) return null;
                 const active = toBool(r.IsActive);
                 const id = r[idField];
                 return (
                     <Space>
-                        <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+                        {canManage ? <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /> : null}
+                        {canManage ? (
                         <Popconfirm
                             title={active ? `غیرفعال‌کردنِ ${entityLabel}` : `فعال‌کردنِ ${entityLabel}`}
                             description="آیا مطمئن هستید؟"
@@ -287,6 +295,18 @@ export default function MasterDataManager({
                         >
                             <Button type="text" size="small" danger={active} loading={togglingId === id} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
+                        ) : null}
+                        {showDelete ? (
+                            <CrmDeleteButton
+                                entity={deleteEntity!}
+                                id={id}
+                                label={entityLabel}
+                                onDone={(ok, msg) => {
+                                    notify(ok ? 'success' : 'error', msg);
+                                    if (ok) reload();
+                                }}
+                            />
+                        ) : null}
                     </Space>
                 );
             },

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Typography, Button, Descriptions } from 'antd';
+import { Card, Typography, Button, Descriptions, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
 import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
@@ -13,6 +13,7 @@ import PersonFormModal, { Person } from './PersonFormModal';
 import AddressesPanel from '../Parties/AddressesPanel';
 import ContactsPanel from '../Parties/ContactsPanel';
 import RelatedPartiesPanel from './RelatedPartiesPanel';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -36,9 +37,10 @@ export default function CrmPersonShow() {
         contactTypes: any[];
         titles: any[];
         canManage: boolean;
+        canDelete?: boolean;
     };
 
-    const { person: currentPerson, contacts, addresses, relations, addressTitles, provinces, contactTypes, titles, canManage } = props;
+    const { person: currentPerson, contacts, addresses, relations, addressTitles, provinces, contactTypes, titles, canManage, canDelete = false } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
@@ -68,10 +70,27 @@ export default function CrmPersonShow() {
                 backLabel="بازگشت به مخاطبین"
                 tags={[{ label: isActive ? 'فعال' : 'غیرفعال' }]}
                 actions={
-                    canManage ? (
-                        <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-                            ویرایشِ مخاطب
-                        </Button>
+                    canManage || canDelete ? (
+                        <Space wrap>
+                            {canManage ? (
+                                <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+                                    ویرایشِ مخاطب
+                                </Button>
+                            ) : null}
+                            {canDelete ? (
+                                <CrmDeleteButton
+                                    entity="person"
+                                    id={currentPerson.PersonID}
+                                    label="شخص"
+                                    text="حذف"
+                                    size="middle"
+                                    onDone={(ok, msg) => {
+                                        if (ok) router.visit('/crm/persons-page');
+                                        else setNotification({ open: true, type: 'error', message: msg });
+                                    }}
+                                />
+                            ) : null}
+                        </Space>
                     ) : undefined
                 }
             />
@@ -99,13 +118,13 @@ export default function CrmPersonShow() {
 
             {activeTab === 'contacts' && (
                 <Card style={STYLES.card}>
-                    <ContactsPanel personId={currentPerson.PersonID} items={contacts || []} contactTypes={contactTypes || []} canManage={canManage} />
+                    <ContactsPanel personId={currentPerson.PersonID} items={contacts || []} contactTypes={contactTypes || []} canManage={canManage} canDelete={canDelete} />
                 </Card>
             )}
 
             {activeTab === 'addresses' && (
                 <Card style={STYLES.card}>
-                    <AddressesPanel personId={currentPerson.PersonID} items={addresses || []} addressTitles={addressTitles || []} provinces={provinces || []} canManage={canManage} />
+                    <AddressesPanel personId={currentPerson.PersonID} items={addresses || []} addressTitles={addressTitles || []} provinces={provinces || []} canManage={canManage} canDelete={canDelete} />
                 </Card>
             )}
 

@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text, Title } = Typography;
 
@@ -27,6 +28,8 @@ interface ClassificationsPanelProps {
     partyTypes: { PartyTypeID: number; DisplayName: string }[];
     activities: { ActivityID: number; DisplayName: string; PartyTypeID: number }[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
 }
 
 /**
@@ -37,7 +40,7 @@ interface ClassificationsPanelProps {
  * هنگامِ ویرایش از یک بخش، بعدِ دیگرِ همان ردیف (اگر مقداری داشته باشد)
  * دست‌نخورده می‌ماند.
  */
-export default function ClassificationsPanel({ partyId, items: initialItems, departments, partyTypes, activities, canManage }: ClassificationsPanelProps) {
+export default function ClassificationsPanel({ partyId, items: initialItems, departments, partyTypes, activities, canManage, canDelete = false }: ClassificationsPanelProps) {
     const [items, setItems] = useState<Classification[]>(initialItems || []);
 
     const [deptFormOpen, setDeptFormOpen] = useState(false);
@@ -138,10 +141,10 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
     const actionsColumn = (onEdit: (r: Classification) => void): ColumnsType<Classification>[number] => ({
         title: 'عملیات',
         key: 'actions',
-        width: 100,
+        width: 130,
         align: 'center',
         render: (_, r) => {
-            if (!canManage) return null;
+            if (!canManage) return canDelete ? <CrmDeleteButton entity="classification" id={r.ClassificationID} label="دسته‌بندی" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
             const active = toBool(r.IsActive);
             return (
                 <Space>
@@ -149,6 +152,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                     <Popconfirm title={active ? 'غیرفعال‌کردن' : 'فعال‌کردن'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                         <Button type="text" size="small" danger={active} loading={togglingId === r.ClassificationID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                     </Popconfirm>
+                    {canDelete ? <CrmDeleteButton entity="classification" id={r.ClassificationID} label="دسته‌بندی" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                 </Space>
             );
         },

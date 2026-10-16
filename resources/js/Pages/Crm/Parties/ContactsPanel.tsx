@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -32,12 +33,14 @@ interface ContactsPanelProps {
     /** فقط در حالتِ partyId معنا دارد — این تماس مالِ کدام مخاطبِ مرتبط با این طرف‌حساب است. */
     relatedPersons?: { PersonID: number; DisplayName: string }[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
 }
 
 const emptyDraft = { id: null as number | null, contactTypeId: null as number | null, value: '', extension: '', description: '', isPrimary: false, relatedPersonId: null as number | null };
 
 /** اطلاعاتِ تماسِ یک طرف‌حساب یا یک مخاطب — «داخلی» فیلدی کنارِ مقدار است، نه نوعِ تماسِ جدا. */
-export default function ContactsPanel({ partyId, personId, items: initialItems, contactTypes, relatedPersons, canManage }: ContactsPanelProps) {
+export default function ContactsPanel({ partyId, personId, items: initialItems, contactTypes, relatedPersons, canManage, canDelete = false }: ContactsPanelProps) {
     const [items, setItems] = useState<Contact[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
@@ -135,10 +138,10 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
         {
             title: 'عملیات',
             key: 'actions',
-            width: 100,
+            width: 130,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="contact" id={r.ContactID} label="اطلاعاتِ تماس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 return (
                     <Space>
@@ -158,6 +161,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                         <Popconfirm title={active ? 'غیرفعال‌کردنِ تماس' : 'فعال‌کردنِ تماس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.ContactID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="contact" id={r.ContactID} label="اطلاعاتِ تماس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },

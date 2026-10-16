@@ -18,6 +18,7 @@ import { crmApi } from '../../../Components/Crm/crmApi';
 import BrandFormModal, { Brand } from './BrandFormModal';
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -35,10 +36,11 @@ function BrandLogo({ url, name }: { url?: string | null; name: string }) {
 }
 
 export default function CrmBrandsIndex() {
-    const { brands, filters, canManage } = usePage().props as unknown as {
+    const { brands, filters, canManage, canDelete = false } = usePage().props as unknown as {
         brands: BrandRow[];
         filters: { search: string | null; isActive: boolean | null };
         canManage: boolean;
+        canDelete?: boolean;
     };
 
     const [items, setItems] = useState<BrandRow[]>(brands || []);
@@ -133,7 +135,7 @@ export default function CrmBrandsIndex() {
             <PageHeader
                 icon={<TagsOutlined />}
                 title="برندها"
-                subtitle="مدیریتِ برندهایِ CRM — هر برند می‌تواند به چند طرف‌حساب مرتبط باشد"
+                subtitle="مدیریتِ برندهایِ «مخاطبین و ارتباطات» — هر برند می‌تواند به چند طرف‌حساب مرتبط باشد"
                 stats={[
                     { icon: <TagsOutlined />, label: 'کل', value: `${totalCount} برند` },
                     { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} برند` },
@@ -214,9 +216,11 @@ export default function CrmBrandsIndex() {
                                         {b.Name || '—'}
                                     </Text>
 
-                                    {canManage && (
+                                    {(canManage || canDelete) && (
                                         // کلیک رویِ Actionها صفحهٔ جزئیات را باز نمی‌کند (Popconfirm هم از طریقِ همین wrapper متوقف می‌شود)
                                         <div className="brand-card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                                            {canManage && (
+                                            <>
                                             <Tooltip title="ویرایش">
                                                 <Button type="text" size="small" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(b, e)} />
                                             </Tooltip>
@@ -237,6 +241,11 @@ export default function CrmBrandsIndex() {
                                                     />
                                                 </Tooltip>
                                             </Popconfirm>
+                                            </>
+                                            )}
+                                            {canDelete && (
+                                                <CrmDeleteButton entity="brand" id={b.BrandID} label="برند" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} />
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -247,26 +256,26 @@ export default function CrmBrandsIndex() {
             </Card>
 
             <style>{`
-                /* کارتِ برند: دسکتاپ 240×160؛ ستون‌ها با auto-fill/minmax (بدونِ تعدادِ ستونِ ثابت و بدونِ Overflowِ افقی) */
+                /* کارتِ برند: دسکتاپ 360×240 (۱.۵ برابرِ طراحیِ قبلیِ 240×160)؛ ستون‌ها با auto-fill/minmax (بدونِ تعدادِ ستونِ ثابت و بدونِ Overflowِ افقی) */
                 .brand-cards-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+                    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
                     gap: 16px;
                 }
                 @media (min-width: 768px) {
                     .brand-cards-grid {
-                        grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 240px));
+                        grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 360px));
                     }
                 }
                 .brand-card {
                     position: relative;
                     box-sizing: border-box;
                     min-width: 0;
-                    height: 160px;
+                    height: 240px;
                     display: flex;
                     flex-direction: column;
-                    gap: 10px;
-                    padding: 16px;
+                    gap: 14px;
+                    padding: 20px;
                     background: #fff;
                     border: 1px solid ${THEME.border};
                     border-radius: 12px;
@@ -280,12 +289,12 @@ export default function CrmBrandsIndex() {
                     border-color: ${THEME.borderPrimary};
                     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
                 }
-                /* ناحیهٔ ثابتِ لوگو (~200×90)؛ خودِ تصویر با object-fit: contain، بدونِ تغییرِ نسبت */
+                /* ناحیهٔ ثابتِ لوگو (~300×135)؛ خودِ تصویر با object-fit: contain، بدونِ تغییرِ نسبت */
                 .brand-card-logo {
                     position: relative;
                     width: 100%;
-                    max-width: 200px;
-                    height: 90px;
+                    max-width: 300px;
+                    height: 135px;
                     flex: 0 0 auto;
                     margin: 0 auto;
                     display: flex;
@@ -302,7 +311,7 @@ export default function CrmBrandsIndex() {
                     display: block;
                 }
                 .brand-card-logo-placeholder {
-                    font-size: 28px;
+                    font-size: 40px;
                     color: ${THEME.textLight};
                 }
                 /* وضعیت به‌صورتِ Overlay در گوشهٔ ناحیهٔ لوگو (بدونِ مصرفِ فضایِ عمودی) */
@@ -338,7 +347,7 @@ export default function CrmBrandsIndex() {
                     display: block;
                     width: 100%;
                     text-align: center;
-                    font-size: 14px;
+                    font-size: 16px;
                     color: ${THEME.textPrimary};
                 }
                 /* برندِ غیرفعال: کمی کم‌رنگ‌تر، ولی نام و وضعیت خوانا */
@@ -374,11 +383,11 @@ export default function CrmBrandsIndex() {
                 }
                 @media (max-width: 575px) {
                     .brand-card {
-                        height: 150px;
-                        gap: 8px;
+                        height: 225px;
+                        gap: 12px;
                     }
                     .brand-card-logo {
-                        height: 84px;
+                        height: 126px;
                     }
                 }
             `}</style>

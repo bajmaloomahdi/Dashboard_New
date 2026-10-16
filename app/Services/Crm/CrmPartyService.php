@@ -82,21 +82,47 @@ class CrmPartyService
         }
 
         // برندِ طرف‌حساب اینجا ثبت نمی‌شود؛ فقط از تبِ «برندها»ی جزئیاتِ طرف‌حساب (savePartyBrandCategory).
-        return $this->store->saveParty([
-            'partyId' => $input['partyId'] ?? null,
-            'partyNature' => $nature,
-            'officialName' => trim($input['officialName']),
-            'tradeName' => trim($input['tradeName'] ?? '') ?: null,
-            'registrationNumber' => trim($input['registrationNumber'] ?? '') ?: null,
-            'economicCode' => trim($input['economicCode'] ?? '') ?: null,
-            'identifierNumber' => $identifierNumber,
-            'identifierDate' => $input['identifierDate'] ?? null,
-            'description' => $input['description'] ?? null,
-            'departmentId' => $input['departmentId'] ?? null,
-            'partyTypeId' => $input['partyTypeId'] ?? null,
-            'activityId' => $input['activityId'] ?? null,
-            'userId' => $userId,
-        ]);
+        // نقش‌ها/سمت‌هایِ خودِ طرف‌حساب در همان تراکنشِ ذخیره Sync می‌شوند — فقط اگر کلیدشان ارسال شده باشد،
+        // تا مسیرهایِ دیگری که همین ذخیره را صدا می‌زنند (بدونِ این دو کلید) انتخاب‌هایِ قبلی را پاک نکنند.
+        return DB::transaction(function () use ($input, $nature, $identifierNumber, $userId) {
+            $res = $this->store->saveParty([
+                'partyId' => $input['partyId'] ?? null,
+                'partyNature' => $nature,
+                'officialName' => trim($input['officialName']),
+                'tradeName' => trim($input['tradeName'] ?? '') ?: null,
+                'registrationNumber' => trim($input['registrationNumber'] ?? '') ?: null,
+                'economicCode' => trim($input['economicCode'] ?? '') ?: null,
+                'identifierNumber' => $identifierNumber,
+                'identifierDate' => $input['identifierDate'] ?? null,
+                'description' => $input['description'] ?? null,
+                'departmentId' => $input['departmentId'] ?? null,
+                'partyTypeId' => $input['partyTypeId'] ?? null,
+                'activityId' => $input['activityId'] ?? null,
+                'userId' => $userId,
+            ]);
+
+            $partyId = (int) $res->PartyID;
+            if (array_key_exists('roleIds', $input)) {
+                $this->store->savePartyRoles($partyId, array_map('intval', $input['roleIds'] ?? []), $userId);
+            }
+            if (array_key_exists('positionIds', $input)) {
+                $this->store->savePartyPositions($partyId, array_map('intval', $input['positionIds'] ?? []), $userId);
+            }
+
+            return $res;
+        });
+    }
+
+    /* ---------- نقش‌ها و سمت‌هایِ خودِ طرف‌حساب (چندگانه) — مستقل از نقش/سمتِ مخاطب در رابطه ---------- */
+
+    public function listPartyRoles(int $partyId): array
+    {
+        return $this->store->getPartyRoles($partyId);
+    }
+
+    public function listPartyPositions(int $partyId): array
+    {
+        return $this->store->getPartyPositions($partyId);
     }
 
     public function togglePartyActive(int $partyId, int $userId): object
@@ -675,8 +701,14 @@ class CrmPartyService
         return $this->store->getRelationRoleIds($relationId);
     }
 
+    /** @return int[] */
+    public function getRelationPositionIds(int $relationId): array
+    {
+        return $this->store->getRelationPositionIds($relationId);
+    }
+
     /**
-     * ذخیرهٔ رابطه + جایگزینیِ کاملِ نقش‌ها در یک تراکنش — چون UI این دو را
+     * ذخیرهٔ رابطه + جایگزینیِ کاملِ نقش‌ها (و سمت‌ها، اگر positionIds ارسال شده باشد) در یک تراکنش — چون UI این دو را
      * یک عملیاتِ واحد می‌بیند (فرمِ «مخاطب» با چندین نقشِ هم‌زمان).
      *
      * @param  int[]  $roleIds
@@ -688,12 +720,21 @@ class CrmPartyService
                 'relationId' => $input['relationId'] ?? null,
                 'partyId' => $input['partyId'],
                 'personId' => $input['personId'],
-                'positionId' => $input['positionId'] ?? null,
+                // ستونِ قدیمیِ تک‌مقداری: اولین سمتِ انتخاب‌شده (منبعِ اصلی جدولِ CrmPartyPersonRelationPositions است)
+                'positionId' => array_key_exists('positionIds', $input)
+                    ? ($input['positionIds'][0] ?? null)
+                    : ($input['positionId'] ?? null),
                 'isPrimaryContact' => (int) ($input['isPrimaryContact'] ?? 0),
                 'userId' => $userId,
             ]);
 
             $this->store->saveRelationRoles((int) $res->RelationID, $roleIds, $userId);
+
+            if (array_key_exists('positionIds', $input)) {
+                $this->store->saveRelationPositions((int) $res->RelationID, array_values($input['positionIds'] ?? []), $userId);
+            } elseif (! empty($input['positionId'])) {
+                $this->store->saveRelationPositions((int) $res->RelationID, [(int) $input['positionId']], $userId);
+            }
 
             return $res;
         });

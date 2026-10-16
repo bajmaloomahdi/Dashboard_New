@@ -41,6 +41,7 @@ class CrmBrandController extends CrmApiController
             ),
             'filters' => $validated,
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 
@@ -56,6 +57,7 @@ class CrmBrandController extends CrmApiController
             'brand' => $brand,
             'parties' => $this->parties->listBrandParties($brandId),
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 

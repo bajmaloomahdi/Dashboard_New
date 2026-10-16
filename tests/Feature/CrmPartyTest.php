@@ -712,4 +712,36 @@ class CrmPartyTest extends TestCase
 
         $this->as(self::USER_FULL)->postJson("/crm/persons/{$person['personId']}/toggle")->assertOk()->assertJson(['success' => true]);
     }
+
+    /* ==================================================================== */
+    /*  «تاریخِ ایجاد» = Date_InsertFirst (فقط نمایشی، از ورودی گرفته نمی‌شود) */
+    /* ==================================================================== */
+
+    public function test_created_date_comes_from_date_insert_first_and_ignores_input(): void
+    {
+        $before = \Carbon\Carbon::parse(\Illuminate\Support\Facades\DB::selectOne('SELECT DATEADD(SECOND, -5, SYSDATETIME()) AS t')->t);
+        $party = $this->createParty([
+            // تلاش برایِ تعیینِ دستیِ تاریخِ ایجاد باید بی‌اثر باشد
+            'createdDate' => '2000-01-01', 'Date_InsertFirst' => '2000-01-01', 'dateInsertFirst' => '2000-01-01',
+            'identifierDate' => '2020-05-10',
+        ]);
+
+        $row = \Illuminate\Support\Facades\DB::table('CrmParties')->where('PartyID', $party['partyId'])->first();
+        $this->assertTrue(\Carbon\Carbon::parse($row->Date_InsertFirst)->greaterThanOrEqualTo($before));
+        $this->assertSame('2020-05-10', substr((string) $row->IdentifierDate, 0, 10)); // تاریخِ افتتاح/ثبت مستقل می‌ماند
+
+        // صفحهٔ جزئیات همان Date_InsertFirst را برمی‌گرداند
+        $html = $this->as(self::USER_FULL)->get("/crm/parties/{$party['partyId']}")->assertOk()->getContent();
+        preg_match('/<script data-page="app" type="application\/json">(.*?)<\/script>/s', $html, $m);
+        $props = json_decode(html_entity_decode($m[1]), true)['props'];
+        $this->assertSame(substr((string) $row->Date_InsertFirst, 0, 19), substr((string) $props['party']['Date_InsertFirst'], 0, 19));
+
+        // ویرایش تاریخِ ایجاد را تغییر نمی‌دهد
+        $this->as(self::USER_FULL)->postJson('/crm/parties', [
+            'partyId' => $party['partyId'], 'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ ویرایش‌شده',
+            'identifierNumber' => $row->IdentifierNumber, 'Date_InsertFirst' => '2000-01-01',
+        ])->assertOk();
+        $after = \Illuminate\Support\Facades\DB::table('CrmParties')->where('PartyID', $party['partyId'])->value('Date_InsertFirst');
+        $this->assertSame((string) $row->Date_InsertFirst, (string) $after);
+    }
 }

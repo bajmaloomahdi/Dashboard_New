@@ -41,6 +41,7 @@ class CrmPersonController extends CrmApiController
             'titles' => $this->masterData->listTitles(null, true),
             'filters' => $validated,
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 
@@ -62,6 +63,7 @@ class CrmPersonController extends CrmApiController
             'contactTypes' => $this->masterData->listContactTypes(null, true),
             'titles' => $this->masterData->listTitles(null, true),
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 
@@ -120,12 +122,15 @@ class CrmPersonController extends CrmApiController
         return $this->runCrm(fn () => ['items' => $this->parties->listRelations($validated['partyId'])]);
     }
 
-    /** GET crm/relations/{relationId}/roles — نقش‌هایِ فعلی، برایِ پیش‌پرکردنِ فرمِ ویرایش. */
+    /** GET crm/relations/{relationId}/roles — نقش‌ها و سمت‌هایِ فعلی، برایِ پیش‌پرکردنِ فرمِ ویرایش. */
     public function relationRoles(int $relationId)
     {
         $this->authorizeCrm('CRM_VIEW');
 
-        return $this->runCrm(fn () => ['roleIds' => $this->parties->getRelationRoleIds($relationId)]);
+        return $this->runCrm(fn () => [
+            'roleIds' => $this->parties->getRelationRoleIds($relationId),
+            'positionIds' => $this->parties->getRelationPositionIds($relationId),
+        ]);
     }
 
     /** POST crm/relations — ایجاد/ویرایشِ رابطه + جایگزینیِ کاملِ نقش‌ها، در یک تراکنش. */
@@ -141,6 +146,8 @@ class CrmPersonController extends CrmApiController
             'isPrimaryContact' => 'nullable|boolean',
             'roleIds' => 'nullable|array',
             'roleIds.*' => 'integer|exists:CrmContactRoles,ContactRoleID',
+            'positionIds' => 'sometimes|nullable|array',
+            'positionIds.*' => 'integer|distinct|exists:CrmPositions,PositionID',
         ]);
 
         return $this->runCrm(function () use ($validated) {

@@ -32,6 +32,7 @@ class CrmDirectoryController extends CrmApiController
             'interactionTypes' => $this->masterData->listInteractionTypes(),
             'ownershipTypes' => $this->masterData->listOwnershipTypes(),
             'canManage'      => true,
+            'canDelete'      => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 

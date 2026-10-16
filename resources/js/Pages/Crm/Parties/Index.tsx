@@ -22,9 +22,10 @@ import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { crmApi } from '../../../Components/Crm/crmApi';
-import PartyFormModal, { Party } from './PartyFormModal';
+import PartyFormModal, { Party, PositionOption, RoleOption } from './PartyFormModal';
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Title, Text } = Typography;
 
@@ -40,10 +41,13 @@ interface PartyRow extends Party {
 }
 
 export default function CrmPartiesIndex() {
-    const { parties, filters, canManage } = usePage().props as unknown as {
+    const { parties, filters, canManage, canDelete = false, positions, contactRoles } = usePage().props as unknown as {
         parties: PartyRow[];
         filters: { search: string | null; isActive: boolean | null; partyNature: string | null };
         canManage: boolean;
+        canDelete?: boolean;
+        positions: PositionOption[];
+        contactRoles: RoleOption[];
     };
 
     const [items, setItems] = useState<PartyRow[]>(parties || []);
@@ -141,7 +145,7 @@ export default function CrmPartiesIndex() {
             <PageHeader
                 icon={<TeamOutlined />}
                 title="طرف‌حساب‌ها"
-                subtitle="مدیریتِ فروشگاه‌ها، شرکت‌ها و کارخانه‌هایِ CRM"
+                subtitle="مدیریتِ فروشگاه‌ها، شرکت‌ها و کارخانه‌هایِ «مخاطبین و ارتباطات»"
                 stats={[
                     { icon: <TeamOutlined />, label: 'کل', value: `${totalCount} طرف‌حساب` },
                     { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} طرف‌حساب` },
@@ -290,6 +294,9 @@ export default function CrmPartiesIndex() {
                                                 </Popconfirm>
                                             </>
                                         )}
+                                        {canDelete && (
+                                            <CrmDeleteButton entity="party" id={p.PartyID} label="طرف‌حساب" size="middle" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} />
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -350,6 +357,8 @@ export default function CrmPartiesIndex() {
                 }}
                 editingParty={editingParty}
                 onSuccess={handleModalSuccess}
+                contactRoles={contactRoles || []}
+                positions={positions || []}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />

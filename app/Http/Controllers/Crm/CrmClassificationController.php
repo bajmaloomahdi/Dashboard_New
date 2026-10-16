@@ -30,6 +30,7 @@ class CrmClassificationController extends CrmApiController
             'partyTypes'  => $this->masterData->listPartyTypes(),
             'activities'  => $this->masterData->listActivities(),
             'canManage'   => true,
+            'canDelete'   => $this->userCan(CrmDeleteController::PERM_DELETE),
         ]);
     }
 

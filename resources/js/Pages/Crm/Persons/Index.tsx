@@ -21,6 +21,7 @@ import PersonFormModal, { Person } from './PersonFormModal';
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Title, Text } = Typography;
 
@@ -30,11 +31,12 @@ interface PersonRow extends Person {
 }
 
 export default function CrmPersonsIndex() {
-    const { persons, titles, filters, canManage } = usePage().props as unknown as {
+    const { persons, titles, filters, canManage, canDelete = false } = usePage().props as unknown as {
         persons: PersonRow[];
         titles: { TitleID: number; DisplayName: string }[];
         filters: { search: string | null; isActive: boolean | null };
         canManage: boolean;
+        canDelete?: boolean;
     };
 
     const [items, setItems] = useState<PersonRow[]>(persons || []);
@@ -129,7 +131,7 @@ export default function CrmPersonsIndex() {
             <PageHeader
                 icon={<TeamOutlined />}
                 title="مخاطبین"
-                subtitle="مدیریتِ اشخاصِ حقیقیِ CRM — مخاطبینِ مرتبط با طرف‌حساب‌ها"
+                subtitle="مدیریتِ اشخاصِ حقیقیِ «مخاطبین و ارتباطات» —مخاطبینِ مرتبط با طرف‌حساب‌ها"
                 stats={[
                     { icon: <TeamOutlined />, label: 'کل', value: `${totalCount} مخاطب` },
                     { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} مخاطب` },
@@ -240,6 +242,9 @@ export default function CrmPersonsIndex() {
                                                     />
                                                 </Popconfirm>
                                             </>
+                                        )}
+                                        {canDelete && (
+                                            <CrmDeleteButton entity="person" id={p.PersonID} label="شخص" size="middle" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} />
                                         )}
                                     </div>
                                 </div>

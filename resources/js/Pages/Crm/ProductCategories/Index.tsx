@@ -21,6 +21,7 @@ import { buildCategoryTree, CategoryNode, ProductCategoryRow, withAncestors } fr
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import CategoryFormModal from './CategoryFormModal';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -29,7 +30,7 @@ const { Text } = Typography;
  * اجدادشان نشان می‌دهد تا جایِ هر دسته در درخت معلوم بماند.
  */
 export default function CrmProductCategoriesIndex() {
-    const { categories, canManage } = usePage().props as unknown as { categories: ProductCategoryRow[]; canManage: boolean };
+    const { categories, canManage, canDelete = false } = usePage().props as unknown as { categories: ProductCategoryRow[]; canManage: boolean; canDelete?: boolean };
 
     const [items, setItems] = useState<ProductCategoryRow[]>(categories || []);
     const [searchText, setSearchText] = useState('');
@@ -143,10 +144,10 @@ export default function CrmProductCategoriesIndex() {
         {
             title: 'عملیات',
             key: 'actions',
-            width: 140,
+            width: 170,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="product-category" id={r.ProductCategoryID} label="گروهِ کالایی" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 return (
                     <Space size={0}>
@@ -165,6 +166,7 @@ export default function CrmProductCategoriesIndex() {
                                 style={{ color: active ? THEME.error : THEME.success }}
                             />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="product-category" id={r.ProductCategoryID} label="گروهِ کالایی" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },

@@ -6,6 +6,7 @@ import { crmApi } from '../../../Components/Crm/crmApi';
 import AddressLocationPicker from '../../../Components/Crm/AddressLocationPicker';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { toBool } from '../../../Utils/bool';
+import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
 
@@ -44,6 +45,8 @@ interface AddressesPanelProps {
     addressTitles: { AddressTitleID: number; DisplayName: string }[];
     provinces: { ProvinceID: number; DisplayName: string }[];
     canManage: boolean;
+    /** دسترسیِ CRM_DELETE */
+    canDelete?: boolean;
     /** نمایشِ نقشهٔ انتخابِ موقعیت در فرم (فعلاً فقط آدرسِ طرف‌حساب) */
     showMap?: boolean;
     /** Map Keyِ نقشهٔ وبِ نشان (از .env، از طریقِ Propِ صفحه) */
@@ -76,7 +79,7 @@ const emptyDraft = {
  * مکملِ آدرسِ متنی است؛ نقشه فقط وقتی showMap باشد دیده می‌شود، ولی مختصاتِ موجود همیشه بدونِ تغییر
  * پس فرستاده می‌شود تا ذخیره از جایِ دیگر آن را پاک نکند.
  */
-export default function AddressesPanel({ partyId, personId, items: initialItems, addressTitles, provinces, canManage, showMap = false, neshanMapKey, neshanSearchEnabled = false }: AddressesPanelProps) {
+export default function AddressesPanel({ partyId, personId, items: initialItems, addressTitles, provinces, canManage, canDelete = false, showMap = false, neshanMapKey, neshanSearchEnabled = false }: AddressesPanelProps) {
     const [items, setItems] = useState<Address[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
@@ -236,10 +239,10 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
         {
             title: 'عملیات',
             key: 'actions',
-            width: 100,
+            width: 130,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="address" id={r.AddressID} label="آدرس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 return (
                     <Space>
@@ -247,6 +250,7 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
                         <Popconfirm title={active ? 'غیرفعال‌کردنِ آدرس' : 'فعال‌کردنِ آدرس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.AddressID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
+                        {canDelete ? <CrmDeleteButton entity="address" id={r.AddressID} label="آدرس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },

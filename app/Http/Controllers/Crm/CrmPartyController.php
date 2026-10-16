@@ -43,6 +43,21 @@ class CrmPartyController extends CrmApiController
             ),
             'filters' => $validated,
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
+            // گزینه‌هایِ «نقش» و «سمت»ِ فرمِ ایجاد/ویرایشِ طرف‌حساب (فقط فعال‌ها؛ انتخابِ غیرفعالِ قبلی از خودِ طرف‌حساب می‌آید)
+            'positions' => $this->masterData->listPositions(null, true),
+            'contactRoles' => $this->masterData->listContactRoles(null, true),
+        ]);
+    }
+
+    /** GET crm/parties/{partyId}/roles-positions — انتخاب‌هایِ فعلیِ نقش/سمتِ طرف‌حساب (برایِ ویرایش از فهرست). */
+    public function rolesPositions(int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        return $this->runCrm(fn () => [
+            'roles' => $this->parties->listPartyRoles($partyId),
+            'positions' => $this->parties->listPartyPositions($partyId),
         ]);
     }
 
@@ -56,6 +71,9 @@ class CrmPartyController extends CrmApiController
 
         return Inertia::render('Crm/Parties/Show', [
             'party' => $party,
+            // نقش‌ها و سمت‌هایِ خودِ طرف‌حساب (چندگانه) — جدا از نقش/سمتِ مخاطبین در تبِ «مخاطبین»
+            'partyRoles' => $this->parties->listPartyRoles($partyId),
+            'partyPositions' => $this->parties->listPartyPositions($partyId),
             'brandCategories' => $this->parties->listPartyBrandCategories($partyId),
             'addresses' => $this->parties->listAddresses($partyId),
             'contacts' => $this->parties->listContacts($partyId),
@@ -79,6 +97,7 @@ class CrmPartyController extends CrmApiController
             'partyTypes' => $this->masterData->listPartyTypes(null, true),
             'activities' => $this->masterData->listActivities(null, null, true),
             'canManage' => $this->userCan(self::PERM_MANAGE),
+            'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
             // Map Keyِ نقشهٔ وبِ نشان — فقط از .env، فقط برایِ این صفحه (فرمِ آدرسِ طرف‌حساب)
             'neshanMapKey' => config('services.neshan.map_key'),
             // فقط وجودِ کلیدِ Service (نه خودِ کلید) — تا UI بداند جست‌وجویِ محل (Geocoding) در دسترس است
@@ -122,6 +141,11 @@ class CrmPartyController extends CrmApiController
             'departmentId' => 'nullable|integer|exists:CrmDepartments,DepartmentID',
             'partyTypeId' => 'nullable|integer|exists:CrmPartyTypes,PartyTypeID',
             'activityId' => 'nullable|integer|exists:CrmActivities,ActivityID',
+            // نقش‌ها/سمت‌هایِ خودِ طرف‌حساب — اختیاری؛ فقط اگر ارسال شوند Sync می‌شوند (آرایهٔ خالی = برداشتنِ همه)
+            'roleIds' => 'sometimes|nullable|array',
+            'roleIds.*' => 'integer|distinct|exists:CrmContactRoles,ContactRoleID',
+            'positionIds' => 'sometimes|nullable|array',
+            'positionIds.*' => 'integer|distinct|exists:CrmPositions,PositionID',
         ]);
 
         return $this->runCrm(function () use ($validated) {

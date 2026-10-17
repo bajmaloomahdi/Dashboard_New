@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
-import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from './crmApi';
+import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, filterHeaderCss } from './tableFilters';
 import CrmDeleteButton, { type CrmDeleteEntity } from './CrmDeleteButton';
 import NotificationModal, { NotificationType } from '../NotificationModal';
 import { toBool } from '../../Utils/bool';
@@ -107,9 +108,6 @@ export default function MasterDataManager({
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [parentRows, setParentRows] = useState<any[]>([]);
-    const [grandParentOptions, setGrandParentOptions] = useState<{ value: number; label: string }[]>([]);
-    const [gridParentFilterId, setGridParentFilterId] = useState<number | null>(null);
-    const [gridGrandParentFilterId, setGridGrandParentFilterId] = useState<number | null>(null);
 
     const loadParentOptions = async () => {
         if (!parentSelect) return;
@@ -119,41 +117,29 @@ export default function MasterDataManager({
         }
     };
 
-    const loadGrandParentOptions = async () => {
-        if (!grandParentSelect) return;
-        const res = await crmApi(grandParentSelect.apiBase);
-        if (res.ok && res.success) {
-            setGrandParentOptions((res.items || []).map((row: any) => ({ value: row[grandParentSelect.idField], label: row.DisplayName })));
-        }
-    };
-
     useEffect(() => {
         loadParentOptions();
-        loadGrandParentOptions();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    /** گزینه‌هایِ Selectِ والد — فرم همهٔ والدها را نشان می‌دهد (فقط والدِ مستقیم پرسیده
-     * می‌شود)؛ نوارِ فیلترِ گرید اگر جدِّ بزرگ‌تری انتخاب شده باشد، فقط والدهایِ زیرمجموعهٔ
-     * همان جد را نشان می‌دهد. */
+    /** گزینه‌هایِ Selectِ والد در فرم (فقط والدِ مستقیم پرسیده می‌شود) */
     const contextField = parentSelect?.optionContextField;
-    const toParentOptions = (rows: any[]) =>
-        rows.map((row: any) => ({
-            value: row[parentSelect?.idField ?? ''],
-            label: contextField && row[contextField] ? `${row.DisplayName} — ${row[contextField]}` : row.DisplayName,
-        }));
-    const formParentOptions = toParentOptions(parentRows);
-    const gridParentOptions = toParentOptions(
-        grandParentSelect && gridGrandParentFilterId
-            ? parentRows.filter((r) => r[grandParentSelect.idField] === gridGrandParentFilterId)
-            : parentRows
-    );
+    const formParentOptions = parentRows.map((row: any) => ({
+        value: row[parentSelect?.idField ?? ''],
+        label: contextField && row[contextField] ? `${row.DisplayName} — ${row[contextField]}` : row.DisplayName,
+    }));
 
-    const displayedItems = items.filter((row) => {
-        if (parentSelect && gridParentFilterId && row[parentSelect.idField] !== gridParentFilterId) return false;
-        if (grandParentSelect && gridGrandParentFilterId && row[grandParentSelect.idField] !== gridGrandParentFilterId) return false;
-        return true;
+    // فیلترِ ستونیِ شبیهِ اکسل (با تایپ، همان لحظه) — جدِّ بزرگ‌تر/والد/کد/نام/وضعیت
+    const grandCol = grandParentSelect?.displayColumn;
+    const parentCol = parentSelect?.displayColumn;
+    const colF = useColumnFilters<MasterDataRow>(items, {
+        ...(grandCol ? { grand: { get: (r: MasterDataRow) => r[grandCol.dataIndex], mode: 'text' as const } } : {}),
+        ...(parentCol ? { parent: { get: (r: MasterDataRow) => r[parentCol.dataIndex], mode: 'text' as const } } : {}),
+        code: { get: (r) => r.Code, mode: 'text' },
+        name: { get: (r) => r.DisplayName, mode: 'text' },
+        status: { get: (r) => (toBool(r.IsActive) ? '1' : '0'), mode: 'exact' },
     });
+    const displayedItems = colF.filtered;
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -175,7 +161,6 @@ export default function MasterDataManager({
 
     const openCreate = () => {
         loadParentOptions();
-        loadGrandParentOptions();
         setDraft({ ...emptyDraft });
         setError(null);
         setFormOpen(true);
@@ -183,7 +168,6 @@ export default function MasterDataManager({
 
     const openEdit = (row: MasterDataRow) => {
         loadParentOptions();
-        loadGrandParentOptions();
         setDraft({
             id: row[idField],
             displayName: row.DisplayName,
@@ -245,21 +229,42 @@ export default function MasterDataManager({
         reload();
     };
 
-    const codeColumn = { title: 'کد', dataIndex: 'Code', key: 'Code', width: 140, render: (v: string) => <Text code dir="ltr" style={{ whiteSpace: 'nowrap' }}>{v}</Text> };
-    const nameColumn = { title: 'نام', dataIndex: 'DisplayName', key: 'DisplayName' };
-
-    // در گریدهایِ سلسله‌مراتبی (فعالیت/شهر/شهرستان) ستون‌هایِ سطوحِ بالادستی اول می‌آیند، بعد کد، بعد نام
+    // در گریدهایِ سلسله‌مراتبی (فعالیت/شهر/شهرستان) ستون‌هایِ سطوحِ بالادستی اول می‌آیند، بعد کد، بعد نام؛
+    // عنوانِ هر ستون همان موجودیتِ تعریف‌شده است (مثلاً «نامِ شهر»، «استان») و زیرِ آن کادرِ فیلتر.
     const columns: ColumnsType<MasterDataRow> = [
-        ...(grandParentSelect?.displayColumn
-            ? [{ title: grandParentSelect.displayColumn.title, dataIndex: grandParentSelect.displayColumn.dataIndex, key: grandParentSelect.displayColumn.dataIndex } as const]
+        { title: 'ردیف', key: 'row', width: 64, align: 'center', render: (_, __, i) => i + 1 },
+        ...(grandCol
+            ? [{
+                  title: <FilterHeader label={grandCol.title}><TextFilterInput value={colF.values.grand} onChange={(v) => colF.setValue('grand', v)} /></FilterHeader>,
+                  dataIndex: grandCol.dataIndex,
+                  key: grandCol.dataIndex,
+              }]
             : []),
-        ...(parentSelect
-            ? [{ title: parentSelect.displayColumn.title, dataIndex: parentSelect.displayColumn.dataIndex, key: parentSelect.displayColumn.dataIndex } as const]
+        ...(parentCol
+            ? [{
+                  title: <FilterHeader label={parentCol.title}><TextFilterInput value={colF.values.parent} onChange={(v) => colF.setValue('parent', v)} /></FilterHeader>,
+                  dataIndex: parentCol.dataIndex,
+                  key: parentCol.dataIndex,
+              }]
             : []),
-        codeColumn,
-        nameColumn,
         {
-            title: 'وضعیت',
+            title: <FilterHeader label={`کدِ ${entityLabel}`}><TextFilterInput value={colF.values.code} onChange={(v) => colF.setValue('code', v)} /></FilterHeader>,
+            dataIndex: 'Code',
+            key: 'Code',
+            width: 150,
+            render: (v: string) => <Text code dir="ltr" style={{ whiteSpace: 'nowrap' }}>{v}</Text>,
+        },
+        {
+            title: <FilterHeader label={`نامِ ${entityLabel}`}><TextFilterInput value={colF.values.name} onChange={(v) => colF.setValue('name', v)} /></FilterHeader>,
+            dataIndex: 'DisplayName',
+            key: 'DisplayName',
+        },
+        {
+            title: (
+                <FilterHeader label="وضعیت">
+                    <SelectFilterInput value={colF.values.status} onChange={(v) => colF.setValue('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
+                </FilterHeader>
+            ),
             key: 'status',
             width: 110,
             align: 'center',
@@ -315,13 +320,22 @@ export default function MasterDataManager({
 
     return (
         <div>
-            {canManage ? (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <style>{filterHeaderCss}</style>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <Space size={8} wrap>
+                    <Text type="secondary">
+                        {colF.hasAny ? `${displayedItems.length} از ${items.length} ردیف` : `${items.length} ردیف`}
+                    </Text>
+                    {colF.hasAny ? (
+                        <Button size="small" icon={<ReloadOutlined />} onClick={colF.clear}>پاک‌کردنِ فیلترها</Button>
+                    ) : null}
+                </Space>
+                {canManage ? (
                     <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                         {entityLabel} جدید
                     </Button>
-                </div>
-            ) : null}
+                ) : null}
+            </div>
 
             {error && !formOpen ? (
                 <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} style={{ marginBottom: 12, borderRadius: 8 }} />
@@ -370,43 +384,13 @@ export default function MasterDataManager({
                 </Space>
             ) : null}
 
-            {parentSelect ? (
-                <Space style={{ marginBottom: 12 }} wrap>
-                    {grandParentSelect ? (
-                        <Select
-                            style={{ width: 200 }}
-                            placeholder={`فیلترِ ${grandParentSelect.label}`}
-                            value={gridGrandParentFilterId ?? undefined}
-                            onChange={(v) => {
-                                setGridGrandParentFilterId(v ?? null);
-                                setGridParentFilterId(null);
-                            }}
-                            options={grandParentOptions}
-                            allowClear
-                            showSearch
-                            filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                        />
-                    ) : null}
-                    <Select
-                        style={{ width: 200 }}
-                        placeholder={`فیلترِ ${parentSelect.label}`}
-                        value={gridParentFilterId ?? undefined}
-                        onChange={(v) => setGridParentFilterId(v ?? null)}
-                        options={gridParentOptions}
-                        allowClear
-                        showSearch
-                        filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                    />
-                </Space>
-            ) : null}
-
             <Table
                 rowKey={idField}
                 columns={columns}
                 dataSource={displayedItems}
                 pagination={false}
                 scroll={{ x: true }}
-                locale={{ emptyText: <Empty description={`${entityLabel}ی ثبت نشده است`} /> }}
+                locale={{ emptyText: <Empty description={colF.hasAny ? 'ردیفی با این فیلترها یافت نشد' : `${entityLabel}ی ثبت نشده است`} /> }}
             />
 
             <NotificationModal key={notificationKey} open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />

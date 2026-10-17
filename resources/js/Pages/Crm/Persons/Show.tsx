@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined, MessageOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -13,6 +13,7 @@ import PersonFormModal, { Person } from './PersonFormModal';
 import AddressesPanel from '../Parties/AddressesPanel';
 import ContactsPanel from '../Parties/ContactsPanel';
 import RelatedPartiesPanel from './RelatedPartiesPanel';
+import InteractionsPanel from '../Parties/InteractionsPanel';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
@@ -32,6 +33,9 @@ export default function CrmPersonShow() {
         contacts: any[];
         addresses: any[];
         relations: any[];
+        interactions: any[];
+        interactionTypes: any[];
+        users: { UserID: number; FullName: string }[];
         addressTitles: any[];
         provinces: any[];
         contactTypes: any[];
@@ -40,11 +44,16 @@ export default function CrmPersonShow() {
         canDelete?: boolean;
     };
 
-    const { person: currentPerson, contacts, addresses, relations, addressTitles, provinces, contactTypes, titles, canManage, canDelete = false } = props;
+    const { person: currentPerson, contacts, addresses, relations, interactions, interactionTypes, users, addressTitles, provinces, contactTypes, titles, canManage, canDelete = false } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations'>('contacts');
+    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions'>('contacts');
+
+    // طرف‌حساب‌هایی که تعاملِ جدیدِ این مخاطب می‌تواند به آن‌ها مربوط شود (فقط رابطه‌هایِ فعال)
+    const personParties = (relations || [])
+        .filter((r) => toBool(r.IsActive))
+        .map((r) => ({ PartyID: Number(r.PartyID), DisplayName: r.PartyDisplayName as string }));
 
     const isActive = toBool(currentPerson.IsActive);
 
@@ -52,6 +61,7 @@ export default function CrmPersonShow() {
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'relations' as const, label: 'طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
+        { key: 'interactions' as const, label: 'تعاملات', icon: <MessageOutlined />, count: (interactions || []).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -131,6 +141,20 @@ export default function CrmPersonShow() {
             {activeTab === 'relations' && (
                 <Card style={STYLES.card}>
                     <RelatedPartiesPanel items={relations || []} />
+                </Card>
+            )}
+
+            {activeTab === 'interactions' && (
+                <Card style={STYLES.card}>
+                    <InteractionsPanel
+                        personId={currentPerson.PersonID}
+                        items={interactions || []}
+                        personParties={personParties}
+                        users={users || []}
+                        interactionTypes={interactionTypes || []}
+                        canManage={canManage}
+                        canDelete={canDelete}
+                    />
                 </Card>
             )}
 

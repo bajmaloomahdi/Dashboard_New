@@ -49,7 +49,9 @@ interface Interaction {
     InteractionType: string;
     InteractionTypeID: number;
     InteractionTypeDisplayName: string;
-    PartyID: number;
+    /** null = تعاملِ مستقیمِ مخاطب (بدونِ طرف‌حساب) */
+    PartyID: number | null;
+    PartyName?: string | null;
     ProjectID: number | null;
     ProjectTitle: string | null;
     PersonID: number | null;
@@ -70,9 +72,14 @@ interface Interaction {
 }
 
 interface InteractionsPanelProps {
-    partyId: number;
+    /** حالتِ طرف‌حساب: تعاملاتِ همین طرف‌حساب (مخاطب از relatedPersons انتخاب می‌شود) */
+    partyId?: number;
+    /** حالتِ مخاطب (صفحهٔ مخاطب): همهٔ تعاملاتِ این مخاطب؛ طرف‌حساب اختیاری و از personParties */
+    personId?: number;
     items: Interaction[];
-    relatedPersons: { PersonID: number; DisplayName: string }[];
+    relatedPersons?: { PersonID: number; DisplayName: string }[];
+    /** فقط حالتِ مخاطب: طرف‌حساب‌هایی که این مخاطب با آن‌ها رابطهٔ فعال دارد */
+    personParties?: { PartyID: number; DisplayName: string }[];
     users: { UserID: number; FullName: string }[];
     interactionTypes: InteractionTypeOption[];
     canManage: boolean;
@@ -108,6 +115,8 @@ const emptyDraft = (defaultTypeId: number | null = null) => ({
     time: dayjs() as Dayjs | null,
     status: 'DONE' as InteractionStatus,
     personId: null as number | null,
+    /** فقط حالتِ مخاطب: طرف‌حسابِ تعامل (null = تعاملِ مستقیمِ مخاطب) */
+    partyId: null as number | null,
     ownerUserId: null as number | null,
     description: '',
     outcome: '',
@@ -153,17 +162,18 @@ const formatSize = (bytes: number | string) => {
 };
 
 /**
- * تعاملاتِ یک طرف‌حساب — تماس/جلسه/یادداشت/پیگیری. قواعدِ وضعیت در Backend اعمال
+ * تعاملاتِ یک طرف‌حساب (یا در صفحهٔ مخاطب: همهٔ تعاملاتِ آن مخاطب) — تماس/جلسه/یادداشت/پیگیری. قواعدِ وضعیت در Backend اعمال
  * می‌شود؛ اینجا فقط گزینه‌هایِ مجاز نشان داده می‌شود و تغییرِ وضعیت فقط از
  * دکمه‌هایِ «انجام شد/لغو» (فقط برایِ تعاملِ برنامه‌ریزی‌شده) انجام می‌شود.
  */
-export default function InteractionsPanel({ partyId, items: initialItems, relatedPersons, users, interactionTypes, canManage, canDelete = false }: InteractionsPanelProps) {
+export default function InteractionsPanel({ partyId, personId, items: initialItems, relatedPersons = [], personParties = [], users, interactionTypes, canManage, canDelete = false }: InteractionsPanelProps) {
+    const isPersonMode = partyId === undefined && personId !== undefined;
     const [items, setItems] = useState<Interaction[]>(initialItems || []);
     const [typeFilter, setTypeFilter] = useState<number | null>(null);
     const [projectFilter, setProjectFilter] = useState<number | null>(null);
     const [textFilter, setTextFilter] = useState('');
-    const [partyProjects, setPartyProjects] = useState<PartyProject[]>([]);
-    const [partyProjectsLoaded, setPartyProjectsLoaded] = useState(false);
+    // پروژه‌هایِ پیمانکاری به‌ازایِ هر طرف‌حساب (در حالتِ مخاطب طرف‌حسابِ فرم عوض می‌شود)
+    const [projectsByParty, setProjectsByParty] = useState<Record<number, PartyProject[]>>({});
     const [partyProjectsLoading, setPartyProjectsLoading] = useState(false);
 
     /** Codeِ نوعِ انتخاب‌شده در فرم — فقط برایِ قواعدِ نمایشی/وضعیتِ وابسته به نوع (NOTE/FOLLOWUP/CALL/MEETING) */
@@ -184,10 +194,13 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
 
     const isEdit = draft.id !== null;
+    /** طرف‌حسابِ تعاملِ در حالِ ویرایش/ثبت: در حالتِ طرف‌حساب ثابت، در حالتِ مخاطب از فرم */
+    const formPartyId: number | null = isPersonMode ? draft.partyId : partyId ?? null;
+    const partyProjects = formPartyId !== null ? projectsByParty[formPartyId] || [] : [];
     const notify = (type: NotificationType, message: string) => setNotification({ open: true, type, message });
 
     const reload = async () => {
-        const res = await crmApi(`/crm/interactions?partyId=${partyId}`);
+        const res = await crmApi(isPersonMode ? `/crm/interactions?personId=${personId}` : `/crm/interactions?partyId=${partyId}`);
         if (res.ok && res.success) setItems(res.items || []);
     };
 
@@ -195,14 +208,13 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
      * پروژه‌هایی که همین Party پیمانکارِ فعالِ آن‌هاست (Stage B: GET crm/parties/{partyId}/projects).
      * فقط یک‌بار و فقط هنگامِ نیازِ واقعی (تیک‌خوردنِ Checkbox یا ویرایشِ تعاملِ دارایِ Project) بارگذاری می‌شود.
      */
-    const loadPartyProjects = async () => {
-        if (partyProjectsLoaded) return;
+    const loadPartyProjects = async (forPartyId: number | null) => {
+        if (forPartyId === null || projectsByParty[forPartyId]) return;
         setPartyProjectsLoading(true);
         try {
-            const res = await crmApi(`/crm/parties/${partyId}/projects`);
+            const res = await crmApi(`/crm/parties/${forPartyId}/projects`);
             if (res.ok && res.success) {
-                setPartyProjects(res.items || []);
-                setPartyProjectsLoaded(true);
+                setProjectsByParty((m) => ({ ...m, [forPartyId]: res.items || [] }));
             }
         } finally {
             setPartyProjectsLoading(false);
@@ -236,6 +248,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
             interactionTypeId: typeIdByCode('FOLLOWUP'),
             status: 'PLANNED',
             personId: row.PersonID,
+            partyId: row.PartyID,
             followUpOfId: row.InteractionID,
             followUpOfSubject: row.Subject,
             subject: `پیگیریِ: ${row.Subject}`,
@@ -245,7 +258,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
         setFollowUp(emptyFollowUp());
         setError(null);
         resetAttachments([]);
-        if (row.ProjectID !== null) loadPartyProjects();
+        if (row.ProjectID !== null) loadPartyProjects(row.PartyID);
         setFormOpen(true);
     };
 
@@ -259,6 +272,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
             time: time ? dayjs(time, 'HH:mm') : null,
             status: row.Status,
             personId: row.PersonID,
+            partyId: row.PartyID,
             ownerUserId: row.OwnerUserID,
             description: row.Description || '',
             outcome: row.Outcome || '',
@@ -270,7 +284,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
         setFollowUp(emptyFollowUp());
         setError(null);
         resetAttachments(row.Attachments || []);
-        if (row.ProjectID !== null) loadPartyProjects();
+        if (row.ProjectID !== null) loadPartyProjects(row.PartyID);
         setFormOpen(true);
     };
 
@@ -315,9 +329,9 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
         const res = await crmApi('/crm/interactions', 'POST', {
             interactionId: draft.id ?? undefined,
             interactionTypeId: draft.interactionTypeId,
-            partyId,
-            personId: draft.personId ?? undefined,
-            projectId: draft.linkedToProject ? draft.projectId ?? undefined : undefined,
+            partyId: formPartyId ?? undefined,
+            personId: isPersonMode ? personId : draft.personId ?? undefined,
+            projectId: formPartyId !== null && draft.linkedToProject ? draft.projectId ?? undefined : undefined,
             subject: draft.subject.trim(),
             description: draft.description.trim() || undefined,
             outcome: draft.outcome.trim() || undefined,
@@ -340,9 +354,9 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
         if (!isEdit && followUp.enabled && followUp.date) {
             const fu = await crmApi('/crm/interactions', 'POST', {
                 interactionTypeId: typeIdByCode('FOLLOWUP'),
-                partyId,
-                personId: draft.personId ?? undefined,
-                projectId: draft.linkedToProject ? draft.projectId ?? undefined : undefined,
+                partyId: formPartyId ?? undefined,
+                personId: isPersonMode ? personId : draft.personId ?? undefined,
+                projectId: formPartyId !== null && draft.linkedToProject ? draft.projectId ?? undefined : undefined,
                 subject: followUp.subject.trim(),
                 interactionDate: toApiDateTime(followUp.date, followUp.time),
                 followUpOfId: res.interactionId,
@@ -449,6 +463,14 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                 </div>
             ),
         },
+        ...(isPersonMode
+            ? [{
+                  title: 'طرف‌حساب',
+                  key: 'party',
+                  width: 170,
+                  render: (_: unknown, r: Interaction) => (r.PartyID !== null ? <Text>{r.PartyName || '—'}</Text> : <Text type="secondary">مستقیم (بدونِ طرف‌حساب)</Text>),
+              }]
+            : []),
         {
             title: 'پروژه',
             key: 'project',
@@ -575,18 +597,36 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                                 options={(interactionTypes || []).map((t) => ({ value: t.InteractionTypeID, label: t.DisplayName }))}
                             />
                         </div>
-                        <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخاطب</Text>
-                            <Select
-                                allowClear
-                                style={{ width: 190 }}
-                                placeholder="با کدام مخاطب؟"
-                                value={draft.personId ?? undefined}
-                                onChange={(v) => setDraft((d) => ({ ...d, personId: v ?? null }))}
-                                options={(relatedPersons || []).map((p) => ({ value: p.PersonID, label: p.DisplayName }))}
-                                notFoundContent="ابتدا از تبِ «مخاطبین» یک نفر را به این طرف‌حساب مرتبط کنید"
-                            />
-                        </div>
+                        {isPersonMode ? (
+                            <div>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>طرف‌حساب (اختیاری)</Text>
+                                <Select
+                                    allowClear
+                                    showSearch
+                                    style={{ width: 210 }}
+                                    placeholder="بدونِ طرف‌حساب"
+                                    disabled={isEdit || draft.followUpOfId !== null}
+                                    value={draft.partyId ?? undefined}
+                                    onChange={(v) => setDraft((d) => ({ ...d, partyId: v ?? null, linkedToProject: false, projectId: null }))}
+                                    options={(personParties || []).map((p) => ({ value: p.PartyID, label: p.DisplayName }))}
+                                    filterOption={(input, option) => (option?.label as string)?.includes(input)}
+                                    notFoundContent="این مخاطب با هیچ طرف‌حسابی رابطهٔ فعال ندارد"
+                                />
+                            </div>
+                        ) : (
+                            <div>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخاطب</Text>
+                                <Select
+                                    allowClear
+                                    style={{ width: 190 }}
+                                    placeholder="با کدام مخاطب؟"
+                                    value={draft.personId ?? undefined}
+                                    onChange={(v) => setDraft((d) => ({ ...d, personId: v ?? null }))}
+                                    options={(relatedPersons || []).map((p) => ({ value: p.PersonID, label: p.DisplayName }))}
+                                    notFoundContent="ابتدا از تبِ «مخاطبین» یک نفر را به این طرف‌حساب مرتبط کنید"
+                                />
+                            </div>
+                        )}
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>موضوع</Text>
                             <Input style={{ width: 240 }} value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} />
@@ -625,13 +665,14 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                         </div>
                     </Space>
 
+                    {formPartyId !== null ? (
                     <div>
                         <Checkbox
                             checked={draft.linkedToProject}
                             onChange={(e) => {
                                 const checked = e.target.checked;
                                 if (checked) {
-                                    loadPartyProjects();
+                                    loadPartyProjects(formPartyId);
                                     setDraft((d) => ({ ...d, linkedToProject: true }));
                                 } else {
                                     setDraft((d) => ({ ...d, linkedToProject: false, projectId: null }));
@@ -657,6 +698,7 @@ export default function InteractionsPanel({ partyId, items: initialItems, relate
                             </div>
                         ) : null}
                     </div>
+                    ) : null}
 
                     {/* flex به‌جایِ Space تا در موبایل هر فیلد تا عرضِ صفحه کوچک شود (دسکتاپ همان 340px) */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 8, width: '100%' }}>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Crm;
 use App\Services\Crm\CrmMasterDataService;
 use App\Services\Crm\CrmPartyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 /**
@@ -58,6 +59,11 @@ class CrmPersonController extends CrmApiController
             'contacts' => $this->parties->listContacts(null, $personId),
             'addresses' => $this->parties->listAddresses(null, $personId),
             'relations' => $this->parties->listRelationsForPerson($personId),
+            // همهٔ تعاملاتِ این مخاطب: مستقیم (بدونِ طرف‌حساب) و تعاملاتِ طرف‌حساب‌ها که این مخاطب در آن‌ها انتخاب شده
+            'interactions' => $this->parties->listInteractions(null, $personId),
+            'interactionTypes' => $this->masterData->listInteractionTypes(null, true),
+            'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))
+                ->map(fn ($u) => ['UserID' => (int) $u->UserID, 'FullName' => $u->FullName])->values()->all(),
             'addressTitles' => $this->masterData->listAddressTitles(null, true),
             'provinces' => $this->masterData->listProvinces(null, true),
             'contactTypes' => $this->masterData->listContactTypes(null, true),

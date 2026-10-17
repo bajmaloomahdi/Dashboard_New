@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Popconfirm } from 'antd';
+import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Popconfirm, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
     EditOutlined,
@@ -26,6 +27,10 @@ import PartyFormModal, { Party, PositionOption, RoleOption } from './PartyFormMo
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
+import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
+import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
+import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
+import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, distinctOptions, filterHeaderCss } from '../../../Components/Crm/tableFilters';
 
 const { Title, Text } = Typography;
 
@@ -38,6 +43,17 @@ interface PartyRow extends Party {
     ActiveAddressCount: number;
     ActiveContactCount: number;
     ClassificationCount: number;
+    /** تماسِ اصلی (sp_Crm_GetParties) */
+    PrimaryContactValue?: string | null;
+    PrimaryContactType?: string | null;
+    PrimaryContactExtension?: string | null;
+    /** نامِ مخاطبِ تماسِ اصلی یا «مخاطبِ اصلی»ِ طرف‌حساب (sp_Crm_GetParties) */
+    PrimaryContactPersonName?: string | null;
+    /** آدرسِ اصلی (اولین آدرسِ فعال) — نمایِ جدولی */
+    PrimaryAddressProvince?: string | null;
+    PrimaryAddressCity?: string | null;
+    PrimaryAddressText?: string | null;
+    PrimaryAddressTitle?: string | null;
 }
 
 export default function CrmPartiesIndex() {
@@ -61,6 +77,34 @@ export default function CrmPartiesIndex() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingParty, setEditingParty] = useState<PartyRow | null>(null);
     const [togglingId, setTogglingId] = useState<number | null>(null);
+    const [viewMode, setViewMode] = useListViewMode('crm.parties.viewMode');
+    const [page, setPage] = useState({ current: 1, pageSize: 20 });
+    // فیلترهایِ ستونیِ شبیهِ اکسل (با تایپ، همان لحظه؛ سمتِ مرورگر رویِ همین فهرستِ بارگذاری‌شده)
+    const typeText = (p: PartyRow) => [p.PartyTypeName, p.ActivityName].filter(Boolean).join(' / ');
+    const colF = useColumnFilters<PartyRow>(items, {
+        name: { get: (p) => p.DisplayName, mode: 'text' },
+        nature: { get: (p) => p.PartyNature, mode: 'exact' },
+        identifier: { get: (p) => p.IdentifierNumber, mode: 'text' },
+        type: { get: typeText, mode: 'exact' },
+        person: { get: (p) => p.PrimaryContactPersonName, mode: 'text' },
+        contact: { get: (p) => [p.PrimaryContactValue, p.PrimaryContactType, p.PrimaryContactExtension].filter(Boolean).join(' '), mode: 'text' },
+        address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
+        status: { get: (p) => (toBool(p.IsActive) ? '1' : '0'), mode: 'exact' },
+    });
+    const setColFilter = (key: string, value: string) => {
+        colF.setValue(key, value);
+        setPage((pg) => ({ ...pg, current: 1 }));
+    };
+
+    // در نمایِ جدولی جست‌وجو فقط از فیلترِ ستون‌هاست؛ فیلترهایِ بالایِ صفحه (حالتِ کارتی) پاک می‌شوند تا همهٔ ردیف‌ها بیایند
+    useEffect(() => {
+        if (viewMode === 'grid' && (searchText || statusFilter !== null || natureFilter)) {
+            setSearchText('');
+            setStatusFilter(null);
+            setNatureFilter(null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewMode]);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -90,6 +134,7 @@ export default function CrmPartiesIndex() {
             return;
         }
         setSearching(true);
+        setPage((pg) => ({ ...pg, current: 1 }));
         if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         searchTimeoutRef.current = setTimeout(async () => {
             await reload();
@@ -102,6 +147,7 @@ export default function CrmPartiesIndex() {
     }, [searchText, statusFilter, natureFilter]);
 
     const handleReset = () => {
+        colF.clear();
         setSearchText('');
         setStatusFilter(null);
         setNatureFilter(null);
@@ -137,6 +183,131 @@ export default function CrmPartiesIndex() {
         reload();
     };
 
+    const renderActions = (p: PartyRow) => {
+        const isActive = toBool(p.IsActive);
+        return (
+            <>
+                <Tooltip title="مشاهده">
+                    <Button type="text" icon={<EyeOutlined />} style={{ color: THEME.primary }} onClick={() => router.visit(`/crm/parties/${p.PartyID}`)} />
+                </Tooltip>
+                {canManage && (
+                    <>
+                        <Tooltip title="ویرایش">
+                            <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(p, e)} />
+                        </Tooltip>
+                        <Popconfirm
+                            title={isActive ? 'غیرفعال‌کردنِ طرف‌حساب' : 'فعال‌کردنِ طرف‌حساب'}
+                            description="آیا مطمئن هستید؟"
+                            onConfirm={() => handleToggle(p)}
+                            okText="بله"
+                            cancelText="خیر"
+                        >
+                            <Button
+                                type="text"
+                                icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+                                loading={togglingId === p.PartyID}
+                                style={{ color: isActive ? THEME.error : THEME.success }}
+                            />
+                        </Popconfirm>
+                    </>
+                )}
+                {canDelete && (
+                    <CrmDeleteButton entity="party" id={p.PartyID} label="طرف‌حساب" size="middle" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} />
+                )}
+            </>
+        );
+    };
+
+    const natureTag = (p: PartyRow) => {
+        const isLegal = p.PartyNature === 'LEGAL';
+        return (
+            <Tag color={isLegal ? 'geekblue' : 'purple'} style={{ borderRadius: 6, margin: 0 }} icon={isLegal ? <BankOutlined /> : <UserOutlined />}>
+                {isLegal ? 'حقوقی' : 'حقیقی'}
+            </Tag>
+        );
+    };
+
+    const statusTag = (p: PartyRow) => {
+        const isActive = toBool(p.IsActive);
+        return (
+            <Tag icon={isActive ? <CheckCircleOutlined /> : <StopOutlined />} color={isActive ? 'success' : 'default'} style={{ borderRadius: 6, margin: 0 }}>
+                {isActive ? 'فعال' : 'غیرفعال'}
+            </Tag>
+        );
+    };
+
+    const columns: ColumnsType<PartyRow> = [
+        { title: 'ردیف', key: 'row', width: 64, align: 'center', render: (_, __, i) => (page.current - 1) * page.pageSize + i + 1 },
+        {
+            title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
+            key: 'name',
+            render: (_, p) => <Text strong>{p.DisplayName || '—'}</Text>,
+        },
+        {
+            title: (
+                <FilterHeader label="ماهیت">
+                    <SelectFilterInput value={colF.values.nature} onChange={(v) => setColFilter('nature', v)} options={[{ value: 'INDIVIDUAL', label: 'حقیقی' }, { value: 'LEGAL', label: 'حقوقی' }]} />
+                </FilterHeader>
+            ),
+            key: 'nature',
+            align: 'center',
+            render: (_, p) => natureTag(p),
+        },
+        {
+            title: <FilterHeader label="شناسه / کدِ ملی"><TextFilterInput value={colF.values.identifier} onChange={(v) => setColFilter('identifier', v)} /></FilterHeader>,
+            key: 'identifier',
+            render: (_, p) => (p.IdentifierNumber ? <Text dir="ltr">{p.IdentifierNumber}</Text> : <Text type="secondary">—</Text>),
+        },
+        {
+            title: (
+                <FilterHeader label="نوع / فعالیت">
+                    <SelectFilterInput value={colF.values.type} onChange={(v) => setColFilter('type', v)} options={distinctOptions(items, typeText)} />
+                </FilterHeader>
+            ),
+            key: 'type',
+            render: (_, p) => typeText(p) || <Text type="secondary">—</Text>,
+        },
+        {
+            title: <FilterHeader label="مخاطب"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
+            key: 'person',
+            render: (_, p) => p.PrimaryContactPersonName || <Text type="secondary">—</Text>,
+        },
+        {
+            title: <FilterHeader label="تماسِ اصلی"><TextFilterInput value={colF.values.contact} onChange={(v) => setColFilter('contact', v)} placeholder="شماره، ایمیل، نوع…" /></FilterHeader>,
+            key: 'contact',
+            render: (_, p) => <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} />,
+        },
+        {
+            title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهر، آدرس…" /></FilterHeader>,
+            key: 'address',
+            width: 260,
+            render: (_, p) => (
+                <PrimaryAddressCell province={p.PrimaryAddressProvince} city={p.PrimaryAddressCity} text={p.PrimaryAddressText} title={p.PrimaryAddressTitle} />
+            ),
+        },
+        {
+            title: (
+                <FilterHeader label="وضعیت">
+                    <SelectFilterInput value={colF.values.status} onChange={(v) => setColFilter('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
+                </FilterHeader>
+            ),
+            key: 'status',
+            align: 'center',
+            render: (_, p) => statusTag(p),
+        },
+        {
+            title: 'عملیات',
+            key: 'actions',
+            width: 170,
+            align: 'center',
+            render: (_, p) => (
+                <div className="party-grid-actions" onClick={(e) => e.stopPropagation()}>
+                    {renderActions(p)}
+                </div>
+            ),
+        },
+    ];
+
     const totalCount = items?.length || 0;
     const activeCount = items?.filter((p) => toBool(p.IsActive)).length || 0;
 
@@ -160,8 +331,10 @@ export default function CrmPartiesIndex() {
             />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
-                <Row gutter={[16, 16]} align="middle">
-                    <Col xs={24} sm={12} md={9}>
+                <Row gutter={[16, 16]} align="middle" justify={viewMode === 'grid' ? 'end' : 'start'}>
+                    {viewMode === 'cards' ? (
+                    <>
+                    <Col xs={24} sm={12} md={8}>
                         <Input
                             placeholder="جستجو در نام، شناسه..."
                             prefix={searching ? <LoadingOutlined style={{ color: THEME.primary }} /> : <SearchOutlined />}
@@ -171,7 +344,7 @@ export default function CrmPartiesIndex() {
                             size="large"
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={5}>
+                    <Col xs={24} sm={12} md={4}>
                         <Select
                             placeholder="ماهیت"
                             style={{ width: '100%' }}
@@ -185,7 +358,7 @@ export default function CrmPartiesIndex() {
                             ]}
                         />
                     </Col>
-                    <Col xs={24} sm={12} md={6}>
+                    <Col xs={24} sm={12} md={4}>
                         <Select
                             placeholder="وضعیت"
                             style={{ width: '100%' }}
@@ -204,6 +377,11 @@ export default function CrmPartiesIndex() {
                             بازنشانی
                         </Button>
                     </Col>
+                    </>
+                    ) : null}
+                    <Col xs={24} sm={12} md={4} style={{ textAlign: 'center' }}>
+                        <ListViewToggle value={viewMode} onChange={setViewMode} />
+                    </Col>
                 </Row>
             </Card>
 
@@ -214,6 +392,33 @@ export default function CrmPartiesIndex() {
                     </div>
                 ) : (items || []).length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>هیچ طرف‌حسابی یافت نشد</div>
+                ) : viewMode === 'grid' ? (
+                    <>
+                    <Space size={8} wrap style={{ marginBottom: 8 }}>
+                        <Text type="secondary">{colF.hasAny ? `${colF.filtered.length} از ${items.length} ردیف` : `${items.length} ردیف`}</Text>
+                        {colF.hasAny ? (
+                            <Button size="small" icon={<ReloadOutlined />} onClick={() => { colF.clear(); setPage((pg) => ({ ...pg, current: 1 })); }}>پاک‌کردنِ فیلترهایِ جدول</Button>
+                        ) : null}
+                    </Space>
+                    <Table
+                        rowKey="PartyID"
+                        columns={columns}
+                        dataSource={colF.filtered}
+                        size="middle"
+                        locale={{ emptyText: 'ردیفی با این فیلترها یافت نشد' }}
+                        scroll={{ x: 'max-content' }}
+                        rowClassName={(p) => (toBool(p.IsActive) ? 'party-grid-row' : 'party-grid-row is-inactive')}
+                        onRow={(p) => ({ onClick: () => router.visit(`/crm/parties/${p.PartyID}`) })}
+                        onChange={(pg) => setPage({ current: pg.current ?? 1, pageSize: pg.pageSize ?? 20 })}
+                        pagination={{
+                            current: page.current,
+                            pageSize: page.pageSize,
+                            showSizeChanger: true,
+                            pageSizeOptions: [10, 20, 50, 100],
+                            showTotal: (total) => (colF.hasAny ? `${total} از ${items.length} طرف‌حساب` : `${total} طرف‌حساب`),
+                        }}
+                    />
+                    </>
                 ) : (
                     <div className="party-cards-grid">
                         {items.map((p) => {
@@ -239,6 +444,10 @@ export default function CrmPartiesIndex() {
                                             {p.IdentifierNumber}
                                         </Text>
                                     ) : null}
+
+                                    <div style={{ marginBottom: 8 }}>
+                                        <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} personName={p.PrimaryContactPersonName} />
+                                    </div>
 
                                     <Space size={6} wrap style={{ marginBottom: 12 }}>
                                         {Number(p.ClassificationCount) > 0 ? (
@@ -270,33 +479,7 @@ export default function CrmPartiesIndex() {
                                     </div>
 
                                     <div className="party-card-actions" onClick={(e) => e.stopPropagation()}>
-                                        <Tooltip title="مشاهده">
-                                            <Button type="text" icon={<EyeOutlined />} style={{ color: THEME.primary }} onClick={() => router.visit(`/crm/parties/${p.PartyID}`)} />
-                                        </Tooltip>
-                                        {canManage && (
-                                            <>
-                                                <Tooltip title="ویرایش">
-                                                    <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(p, e)} />
-                                                </Tooltip>
-                                                <Popconfirm
-                                                    title={isActive ? 'غیرفعال‌کردنِ طرف‌حساب' : 'فعال‌کردنِ طرف‌حساب'}
-                                                    description="آیا مطمئن هستید؟"
-                                                    onConfirm={() => handleToggle(p)}
-                                                    okText="بله"
-                                                    cancelText="خیر"
-                                                >
-                                                    <Button
-                                                        type="text"
-                                                        icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />}
-                                                        loading={togglingId === p.PartyID}
-                                                        style={{ color: isActive ? THEME.error : THEME.success }}
-                                                    />
-                                                </Popconfirm>
-                                            </>
-                                        )}
-                                        {canDelete && (
-                                            <CrmDeleteButton entity="party" id={p.PartyID} label="طرف‌حساب" size="middle" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} />
-                                        )}
+                                        {renderActions(p)}
                                     </div>
                                 </div>
                             );
@@ -339,6 +522,10 @@ export default function CrmPartiesIndex() {
                     border-top: 1px dashed ${THEME.borderLight};
                     margin-top: 6px;
                 }
+                ${filterHeaderCss}
+                .party-grid-row { cursor: pointer; }
+                .party-grid-row.is-inactive td { color: ${THEME.textLight}; }
+                .party-grid-actions { display: inline-flex; gap: 2px; }
                 .party-card-actions {
                     display: flex;
                     justify-content: flex-end;

@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * تعاملاتِ یک طرف‌حساب (CrmInteractions): تماس/جلسه/یادداشت/پیگیری + پیوست‌هایِ هر تعامل
+ * تعاملاتِ یک طرف‌حساب یا مستقیماً یک مخاطب (CrmInteractions؛ PartyID یا PersonID): تماس/جلسه/یادداشت/پیگیری + پیوست‌هایِ هر تعامل
  * (CrmInteractionAttachments؛ مشاهده/دانلود با CRM_VIEW، افزودن/حذف با CRM_MANAGE_PARTIES).
  */
 class CrmInteractionController extends CrmApiController
@@ -47,8 +47,9 @@ class CrmInteractionController extends CrmApiController
         $validated = $request->validate([
             'interactionId' => 'nullable|integer|exists:CrmInteractions,InteractionID',
             'interactionTypeId' => 'required|integer|exists:CrmInteractionTypes,InteractionTypeID',
-            'partyId' => 'required|integer|exists:CrmParties,PartyID',
-            'personId' => 'nullable|integer|exists:CrmPersons,PersonID',
+            // تعاملِ طرف‌حساب (مخاطب اختیاری) یا تعاملِ مستقیمِ مخاطب (بدونِ طرف‌حساب)
+            'partyId' => 'nullable|integer|exists:CrmParties,PartyID|required_without:personId',
+            'personId' => 'nullable|integer|exists:CrmPersons,PersonID|required_without:partyId',
             'projectId' => 'nullable|integer|exists:Projects,ProjectID',
             'subject' => 'nullable|string|max:200',
             'description' => 'nullable|string',
@@ -57,6 +58,9 @@ class CrmInteractionController extends CrmApiController
             'status' => 'nullable|string|max:20',
             'followUpOfId' => 'nullable|integer|exists:CrmInteractions,InteractionID',
             'ownerUserId' => 'nullable|integer|exists:Users,UserID',
+        ], [
+            'partyId.required_without' => 'طرف‌حساب یا مخاطبِ تعامل باید مشخص باشد.',
+            'personId.required_without' => 'طرف‌حساب یا مخاطبِ تعامل باید مشخص باشد.',
         ]);
 
         return $this->runCrm(function () use ($validated) {

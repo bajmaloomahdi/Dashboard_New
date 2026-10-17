@@ -462,7 +462,7 @@ class CrmPartyService
         return $this->store->saveInteraction([
             'interactionId' => $input['interactionId'] ?? null,
             'interactionTypeId' => $input['interactionTypeId'],
-            'partyId' => $input['partyId'],
+            'partyId' => $input['partyId'] ?? null,
             'personId' => $input['personId'] ?? null,
             'projectId' => $input['projectId'] ?? null,
             'subject' => trim($input['subject'] ?? ''),

@@ -17,6 +17,7 @@ import { router, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import type { User } from '../Types';
 import MenuSearchPalette from './GlobalSearch/MenuSearchPalette';
+import raga360Logo from '../../images/raga360-logo.webp';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -268,22 +269,22 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                         flexShrink: 0,
                     }}
                 />
-                {/* جستجوی سریع منوها — دسکتاپ و تبلت (در موبایل با CSS پنهان می‌شود) */}
+                {/* جستجوی ۳۶۰ درجه (منوها + جست‌وجویِ سراسری) — دسکتاپ و تبلت (در موبایل با CSS پنهان می‌شود) */}
                 <button
                     type="button"
                     className="app-header-search"
                     onClick={openSearch}
-                    aria-label="جستجوی صفحه‌ها و گزارش‌ها"
+                    aria-label="جستجوی ۳۶۰ درجه"
                     aria-haspopup="dialog"
                     aria-expanded={searchOpen}
                     aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
                 >
                     <SearchOutlined aria-hidden />
-                    <span className="app-header-search-text">جستجوی صفحه‌ها…</span>
+                    <span className="app-header-search-text">جستجوی ۳۶۰ درجه…</span>
                     <kbd className="app-header-search-kbd" dir="ltr" aria-hidden>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
                 </button>
                 {/* برند فشرده — فقط در موبایل (در دسکتاپ لوگو داخل Sider است) */}
-                <span className="app-header-brand">🎯 داشبورد</span>
+                <span className="app-header-brand"><img src={raga360Logo} alt="Raga 360°" /></span>
             </div>
 
             <Space className="app-header-actions" size="middle" align="center">
@@ -355,11 +356,11 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                     </div>
                 </div>
 
-                {/* جستجوی سریع منوها — فقط موبایل (در دسکتاپ/تبلت با CSS پنهان می‌شود) */}
+                {/* جستجوی ۳۶۰ درجه — فقط موبایل (در دسکتاپ/تبلت با CSS پنهان می‌شود) */}
                 <Button
                     type="text"
                     className="app-header-search-icon"
-                    aria-label="جستجوی صفحه‌ها و گزارش‌ها"
+                    aria-label="جستجوی ۳۶۰ درجه"
                     aria-haspopup="dialog"
                     aria-expanded={searchOpen}
                     icon={<SearchOutlined style={{ fontSize: 22 }} aria-hidden />}
@@ -463,14 +464,17 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
 
                 /* برند فشرده‌ی هدر — فقط در موبایل/تبلت دیده می‌شود */
                 .app-header-brand {
-                    font-size: 15px;
-                    font-weight: 700;
-                    color: #667eea;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
+                    display: inline-flex;
+                    align-items: center;
+                    height: 40px;
+                    width: 120px;
                     max-width: 42vw;
+                    overflow: hidden;
+                    border-radius: 8px;
+                    flex-shrink: 0;
                 }
+                /* حاشیهٔ پس‌زمینهٔ بالا/پایینِ تصویر بریده می‌شود تا نوشتهٔ لوگو بزرگ‌تر دیده شود */
+                .app-header-brand img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 46%; display: block; }
                 @media (min-width: 992px) {
                     .app-header-brand { display: none !important; }
                 }

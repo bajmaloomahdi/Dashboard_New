@@ -445,7 +445,7 @@ export default function MenuSearchPalette({ open, onClose, focusToken, isMobile 
             destroyOnHidden
             afterOpenChange={handleAfterOpenChange}
             // عنوانِ پنهان: rc-dialog آن را با aria-labelledby به dialog وصل می‌کند (نامِ دسترس‌پذیرِ Modal)
-            title={<span id={titleId} style={srOnly}>{serverEnabled ? 'جستجوی سراسری' : 'جستجوی صفحه‌ها و گزارش‌ها'}</span>}
+            title={<span id={titleId} style={srOnly}>جستجوی ۳۶۰ درجه</span>}
             width={isMobile ? 'calc(100vw - 16px)' : serverEnabled ? 640 : 560}
             style={{ top: isMobile ? 8 : 80 }}
             styles={{ header: { margin: 0, padding: 0, minHeight: 0 }, body: { padding: 0 } }}

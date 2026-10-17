@@ -514,6 +514,17 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('imageId')->name('party-images.update-description');
         Route::get('party-images/{imageId}', [CrmPartyController::class, 'imageShow'])
             ->whereNumber('imageId')->name('party-images.show');
+        // فایل‌هایِ پیوستِ طرف‌حساب (غیر از تصاویر) — مشاهده/دانلود با CRM_VIEW، افزودن/حذف/ویرایشِ توضیح با CRM_MANAGE_PARTIES
+        Route::get('parties/{partyId}/attachments', [CrmPartyController::class, 'attachmentsIndex'])
+            ->whereNumber('partyId')->name('parties.attachments.index');
+        Route::post('parties/{partyId}/attachments', [CrmPartyController::class, 'attachmentsStore'])
+            ->whereNumber('partyId')->name('parties.attachments.store');
+        Route::post('party-attachments/{attachmentId}/delete', [CrmPartyController::class, 'attachmentsDestroy'])
+            ->whereNumber('attachmentId')->name('party-attachments.delete');
+        Route::post('party-attachments/{attachmentId}/description', [CrmPartyController::class, 'attachmentsUpdateDescription'])
+            ->whereNumber('attachmentId')->name('party-attachments.update-description');
+        Route::get('party-attachments/{attachmentId}/download', [CrmPartyController::class, 'attachmentDownload'])
+            ->whereNumber('attachmentId')->name('party-attachments.download');
         // اطلاعاتِ تکمیلیِ طرف‌حساب — مشاهده با CRM_VIEW، ثبت/ویرایش با CRM_MANAGE_PARTIES
         Route::get('parties/{partyId}/supplementary-info', [CrmPartyController::class, 'supplementaryInfoShow'])
             ->whereNumber('partyId')->name('parties.supplementary-info.show');

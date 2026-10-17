@@ -85,12 +85,16 @@ class CrmPersonController extends CrmApiController
 
         $validated = $request->validate([
             'personId' => 'nullable|integer|exists:CrmPersons,PersonID',
-            'firstName' => 'required|string|max:100',
+            'firstName' => 'nullable|string|max:100',
             'lastName' => 'required|string|max:100',
-            'titleId' => 'nullable|integer|exists:CrmTitles,TitleID',
+            'titleId' => 'required|integer|exists:CrmTitles,TitleID',
             'identifierNumber' => 'nullable|string|max:20',
             'identifierDate' => 'nullable|date',
             'description' => 'nullable|string',
+        ], [
+            'lastName.required' => 'نامِ خانوادگی الزامی است.',
+            'titleId.required' => 'عنوان الزامی است.',
+            'titleId.exists' => 'عنوانِ انتخاب‌شده معتبر نیست.',
         ]);
 
         return $this->runCrm(function () use ($validated) {

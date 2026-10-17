@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Services\Crm\Exceptions\CrmValidationException;
 use App\Services\Crm\Support\CrmBrandLogo;
 use App\Services\Crm\Support\CrmInteractionAttachmentFiles;
+use App\Services\Crm\Support\CrmPartyAttachmentFiles;
 use App\Services\Crm\Support\CrmPartyImageFiles;
 use App\Services\Crm\Support\CrmStore;
 use Illuminate\Http\UploadedFile;
@@ -29,6 +30,7 @@ class CrmPartyService
         private CrmBrandLogo $logos,
         private CrmInteractionAttachmentFiles $attachmentFiles,
         private CrmPartyImageFiles $partyImageFiles,
+        private CrmPartyAttachmentFiles $partyAttachmentFiles,
     ) {
     }
 
@@ -361,6 +363,86 @@ class CrmPartyService
         }
 
         return ['path' => $row->ImagePath, 'mime' => $row->ImageMimeType];
+    }
+
+    /* ---------- فایل‌هایِ پیوستِ طرف‌حساب (CrmPartyAttachments — غیر از تصاویر) ---------- */
+
+    public function listPartyAttachments(int $partyId): array
+    {
+        return array_map(fn (object $row) => $this->partyAttachmentFiles->present($row), $this->store->getPartyAttachments($partyId));
+    }
+
+    /**
+     * افزودنِ یک یا چند فایل: اول همهٔ فایل‌ها بررسی می‌شوند، بعد رویِ دیسک ذخیره و ردیف‌ها در یک
+     * تراکنش ثبت می‌شوند؛ هر خطا → Rollbackِ همهٔ ردیف‌ها و حذفِ فایل‌هایِ همین درخواست (هم‌الگو با addPartyImages).
+     *
+     * @param  array<int, mixed>  $files
+     */
+    public function addPartyAttachments(int $partyId, array $files, int $userId): int
+    {
+        $files = array_values($files);
+        if (! $files) {
+            throw new CrmValidationException('هیچ فایلی برایِ افزودن انتخاب نشده است.');
+        }
+        if (count($files) > CrmPartyAttachmentFiles::MAX_FILES) {
+            throw new CrmValidationException('در هر بار حداکثر ۱۰ فایل قابلِ افزودن است.');
+        }
+        foreach ($files as $file) {
+            $this->partyAttachmentFiles->validate($file);
+        }
+
+        $stored = [];
+        try {
+            DB::transaction(function () use ($files, $partyId, $userId, &$stored) {
+                foreach ($files as $file) {
+                    $s = $this->partyAttachmentFiles->store($file, $partyId);
+                    $stored[] = $s['path'];
+                    $this->store->addPartyAttachment([
+                        'partyId' => $partyId,
+                        'fileName' => $s['name'],
+                        'fileExtension' => $s['extension'],
+                        'fileSize' => $s['size'],
+                        'filePath' => $s['path'],
+                        'userId' => $userId,
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            foreach ($stored as $path) {
+                $this->partyAttachmentFiles->delete($path);
+            }
+            throw $e;
+        }
+
+        return count($files);
+    }
+
+    /** حذفِ منطقی (IsActive=0 در SP) — فایلِ فیزیکی رویِ دیسک دست‌نخورده می‌ماند. */
+    public function deletePartyAttachment(int $partyAttachmentId, int $userId): object
+    {
+        return $this->store->deletePartyAttachment($partyAttachmentId, $userId);
+    }
+
+    /** ویرایشِ فقط توضیحِ یک فایل؛ فایلِ هدف همیشه دقیقاً همان PartyAttachmentIDِ داده‌شده است. */
+    public function updatePartyAttachmentDescription(int $partyAttachmentId, ?string $description, int $userId): object
+    {
+        if ($description !== null && mb_strlen(trim($description)) > CrmPartyAttachmentFiles::MAX_DESCRIPTION) {
+            throw new CrmValidationException('توضیحاتِ فایل حداکثر ۵۰۰ کاراکتر است.');
+        }
+
+        return $this->store->updatePartyAttachmentDescription($partyAttachmentId, $description !== null ? (trim($description) ?: null) : null, $userId);
+    }
+
+    /** مسیرِ داخلی و نامِ اصلی فقط برایِ Routeِ دانلود؛ فقط فایلِ فعال. @return array{path: string, name: string}|null */
+    public function getPartyAttachmentFile(int $partyAttachmentId): ?array
+    {
+        $rows = $this->store->getPartyAttachments(null, $partyAttachmentId);
+        $row = $rows[0] ?? null;
+        if (! $row || ! $this->partyAttachmentFiles->exists($row->FilePath)) {
+            return null;
+        }
+
+        return ['path' => $row->FilePath, 'name' => $row->FileName];
     }
 
     /**

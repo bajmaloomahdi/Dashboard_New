@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 use Tests\Concerns\CreatesPermissionlessUser;
 
@@ -15,7 +16,7 @@ use Tests\Concerns\CreatesPermissionlessUser;
  */
 class CrmAddressLocationTest extends TestCase
 {
-    use CreatesPermissionlessUser, DatabaseTransactions;
+    use CreatesPermissionlessUser, CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -230,7 +231,7 @@ class CrmAddressLocationTest extends TestCase
             ->assertInertia(fn ($page) => $page->component('Crm/Parties/Show')->where('neshanMapKey', 'test-key-from-config')->where('neshanSearchEnabled', true));
         $this->assertStringNotContainsString('secret-service-key', $response->getContent(), 'کلیدِ Service هرگز به مرورگر نمی‌رود.');
 
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ن', 'lastName' => 'ن'])->json('personId');
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ن', 'lastName' => 'ن'])->json('personId');
         $this->as(self::USER_FULL)->get("/crm/persons/{$person}")->assertOk()
             ->assertInertia(fn ($page) => $page->component('Crm/Persons/Show')->missing('neshanMapKey')->missing('neshanSearchEnabled'));
     }

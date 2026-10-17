@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 use Tests\Concerns\CreatesPermissionlessUser;
 
@@ -19,7 +20,7 @@ use Tests\Concerns\CreatesPermissionlessUser;
  */
 class CrmPartyTest extends TestCase
 {
-    use CreatesPermissionlessUser, DatabaseTransactions;
+    use CreatesPermissionlessUser, CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -446,7 +447,7 @@ class CrmPartyTest extends TestCase
     {
         $party = $this->createParty();
         $typeId = $this->contactTypeId();
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'سارا', 'lastName' => 'احمدی'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'سارا', 'lastName' => 'احمدی'])->assertOk()->json();
 
         $this->as(self::USER_FULL)->postJson('/crm/relations', [
             'partyId' => $party['partyId'], 'personId' => $person['personId'],
@@ -467,7 +468,7 @@ class CrmPartyTest extends TestCase
     {
         $party = $this->createParty();
         $contact = $this->as(self::USER_FULL)->postJson('/crm/contacts', [
-            'partyId' => $party['partyId'], 'contactTypeId' => $this->contactTypeId(), 'contactValue' => '021123456',
+            'partyId' => $party['partyId'], 'contactTypeId' => $this->contactTypeId(), 'contactValue' => '02112345678',
         ])->assertOk()->json();
 
         $this->as(self::USER_FULL)->postJson("/crm/contacts/{$contact['contactId']}/toggle")->assertOk()->assertJson(['success' => true]);
@@ -479,7 +480,7 @@ class CrmPartyTest extends TestCase
 
     public function test_create_person_independent_of_party(): void
     {
-        $res = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'سارا', 'lastName' => 'احمدی'])->assertOk()->json();
+        $res = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'سارا', 'lastName' => 'احمدی'])->assertOk()->json();
         $this->assertTrue($res['success']);
 
         $list = $this->as(self::USER_FULL)->getJson('/crm/persons?search=سارا')->json('items');
@@ -505,6 +506,7 @@ class CrmPartyTest extends TestCase
     public function test_person_identifier_number_must_be_exactly_10_digits_when_provided(): void
     {
         $res = $this->as(self::USER_FULL)->postJson('/crm/persons', [
+            'titleId' => $this->crmTitleId(),
             'firstName' => 'ن', 'lastName' => 'ن', 'identifierNumber' => '12345',
         ]);
         $res->assertStatus(422)->assertJson(['success' => false]);
@@ -513,6 +515,7 @@ class CrmPartyTest extends TestCase
     public function test_person_description_is_saved(): void
     {
         $res = $this->as(self::USER_FULL)->postJson('/crm/persons', [
+            'titleId' => $this->crmTitleId(),
             'firstName' => 'یاسمن', 'lastName' => 'صادقی', 'description' => 'یادداشتِ تستی',
         ])->assertOk()->json();
 
@@ -523,7 +526,7 @@ class CrmPartyTest extends TestCase
 
     public function test_person_show_page_requires_view_permission(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ح', 'lastName' => 'ح'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ح', 'lastName' => 'ح'])->assertOk()->json();
 
         $this->as($this->permissionlessUser())->get("/crm/persons/{$person['personId']}")->assertStatus(403);
         $this->as(self::USER_FULL)->get("/crm/persons/{$person['personId']}")->assertOk();
@@ -535,7 +538,7 @@ class CrmPartyTest extends TestCase
 
     public function test_contact_can_be_created_directly_for_a_person_without_a_party(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ص', 'lastName' => 'ص'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ص', 'lastName' => 'ص'])->assertOk()->json();
 
         $res = $this->as(self::USER_FULL)->postJson('/crm/contacts', [
             'personId' => $person['personId'], 'contactTypeId' => $this->contactTypeId(), 'contactValue' => '09121234567',
@@ -549,7 +552,7 @@ class CrmPartyTest extends TestCase
 
     public function test_address_can_be_created_directly_for_a_person_without_a_party(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ق', 'lastName' => 'ق'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ق', 'lastName' => 'ق'])->assertOk()->json();
         $geo = $this->geoChain();
 
         $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], [
@@ -564,10 +567,32 @@ class CrmPartyTest extends TestCase
         $this->assertSame('محلهٔ تست', $list[0]['NeighborhoodName']);
     }
 
+    public function test_address_text_is_optional(): void
+    {
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'lastName' => 'بی‌آدرس'])->assertOk()->json();
+        $geo = $this->geoChain();
+
+        // بدونِ متنِ آدرس، و با متنِ فقط‌فاصله
+        $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], ['personId' => $person['personId']]))
+            ->assertOk()->assertJson(['success' => true]);
+        $res = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], ['personId' => $person['personId'], 'addressText' => '   ', 'plateNumber' => '12']))
+            ->assertOk()->assertJson(['success' => true]);
+
+        $list = collect($this->as(self::USER_FULL)->getJson("/crm/addresses?personId={$person['personId']}")->json('items'));
+        $this->assertCount(2, $list);
+        $this->assertSame(['', ''], $list->pluck('AddressText')->all());
+
+        // ویرایش: پاک‌کردنِ متنِ آدرسِ موجود هم مجاز است
+        $withText = $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], ['personId' => $person['personId'], 'addressText' => 'خیابانِ اول']))->json('addressId');
+        $this->as(self::USER_FULL)->postJson('/crm/addresses', array_merge($geo['address'], ['addressId' => $withText, 'personId' => $person['personId']]))
+            ->assertOk()->assertJson(['success' => true]);
+        $this->assertSame('', \Illuminate\Support\Facades\DB::table('CrmAddresses')->where('AddressID', $withText)->value('AddressText'));
+    }
+
     public function test_contact_requires_exactly_one_of_party_or_person(): void
     {
         $party = $this->createParty();
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ط', 'lastName' => 'ط'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ط', 'lastName' => 'ط'])->assertOk()->json();
 
         // نه طرف‌حساب نه مخاطب
         $this->as(self::USER_FULL)->postJson('/crm/contacts', [
@@ -583,7 +608,7 @@ class CrmPartyTest extends TestCase
 
     public function test_same_person_can_relate_to_multiple_parties(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'رضا', 'lastName' => 'کریمی'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'رضا', 'lastName' => 'کریمی'])->assertOk()->json();
         $partyA = $this->createParty();
         $partyB = $this->createParty();
 
@@ -598,7 +623,7 @@ class CrmPartyTest extends TestCase
 
     public function test_person_show_page_lists_related_parties_with_role_position_and_primary_flag(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'نیما', 'lastName' => 'رستمی'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'نیما', 'lastName' => 'رستمی'])->assertOk()->json();
         $party = $this->createParty(['officialName' => 'شرکتِ رابطهٔ‌معکوس']);
 
         $position = $this->as(self::USER_FULL)->postJson('/crm/directory/positions', ['displayName' => 'مدیرِفروش'])->assertOk()->json();
@@ -629,7 +654,7 @@ class CrmPartyTest extends TestCase
     public function test_relation_requires_position_role_primary_and_status(): void
     {
         $party = $this->createParty();
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'م', 'lastName' => 'م'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'م', 'lastName' => 'م'])->assertOk()->json();
 
         $position = $this->as(self::USER_FULL)->postJson('/crm/directory/positions', [
             'displayName' => 'مدیرِ فروش',
@@ -667,7 +692,7 @@ class CrmPartyTest extends TestCase
     public function test_same_person_cannot_be_added_twice_to_same_party(): void
     {
         $party = $this->createParty();
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ت', 'lastName' => 'ت'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ت', 'lastName' => 'ت'])->assertOk()->json();
 
         $this->as(self::USER_FULL)->postJson('/crm/relations', ['partyId' => $party['partyId'], 'personId' => $person['personId']])->assertOk();
 
@@ -678,8 +703,8 @@ class CrmPartyTest extends TestCase
     public function test_only_one_primary_contact_per_party(): void
     {
         $party = $this->createParty();
-        $personA = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ا', 'lastName' => 'ا'])->assertOk()->json();
-        $personB = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ب', 'lastName' => 'ب'])->assertOk()->json();
+        $personA = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ا', 'lastName' => 'ا'])->assertOk()->json();
+        $personB = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ب', 'lastName' => 'ب'])->assertOk()->json();
 
         $relA = $this->as(self::USER_FULL)->postJson('/crm/relations', [
             'partyId' => $party['partyId'], 'personId' => $personA['personId'], 'isPrimaryContact' => true,
@@ -697,7 +722,7 @@ class CrmPartyTest extends TestCase
     public function test_toggle_relation_active_changes_relation_status(): void
     {
         $party = $this->createParty();
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'و', 'lastName' => 'و'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'و', 'lastName' => 'و'])->assertOk()->json();
         $relation = $this->as(self::USER_FULL)->postJson('/crm/relations', ['partyId' => $party['partyId'], 'personId' => $person['personId']])->assertOk()->json();
 
         $this->as(self::USER_FULL)->postJson("/crm/relations/{$relation['relationId']}/toggle")->assertOk()->assertJson(['success' => true]);
@@ -708,7 +733,7 @@ class CrmPartyTest extends TestCase
 
     public function test_toggle_person_active(): void
     {
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'ژ', 'lastName' => 'ژ'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ژ', 'lastName' => 'ژ'])->assertOk()->json();
 
         $this->as(self::USER_FULL)->postJson("/crm/persons/{$person['personId']}/toggle")->assertOk()->assertJson(['success' => true]);
     }

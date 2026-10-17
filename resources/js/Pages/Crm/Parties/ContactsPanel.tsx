@@ -61,6 +61,19 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
         return t ? /تلفن|فکس/.test(t.DisplayName) : false;
     };
 
+    /** موبایل/تلفن/فکس فقط رقم می‌پذیرند (سرور هم همین را کنترل می‌کند) */
+    const isNumberType = (typeId: number | null) => {
+        const t = contactTypes.find((c) => c.ContactTypeID === typeId);
+        return t ? ['موبایل', 'تلفن', 'فکس'].includes(t.DisplayName.trim()) : false;
+    };
+
+    /** ارقامِ فارسی/عربی → لاتین و حذفِ هر نویسهٔ غیرِرقمی */
+    const digitsOnly = (v: string) =>
+        v.replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+            .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+            .replace(/\D/g, '')
+            .slice(0, 11);
+
     const handleSave = async () => {
         if (!draft.contactTypeId) {
             setError('نوعِ تماس الزامی است.');
@@ -203,13 +216,25 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                             <Select
                                 style={{ width: 160 }}
                                 value={draft.contactTypeId ?? undefined}
-                                onChange={(v) => setDraft((d) => ({ ...d, contactTypeId: v }))}
+                                onChange={(v) => setDraft((d) => ({ ...d, contactTypeId: v, value: isNumberType(v) ? digitsOnly(d.value) : d.value }))}
                                 options={contactTypes.map((c) => ({ value: c.ContactTypeID, label: c.DisplayName }))}
                             />
                         </div>
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مقدار</Text>
-                            <Input dir="ltr" style={{ width: 220 }} value={draft.value} onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))} />
+                            {isNumberType(draft.contactTypeId) ? (
+                                <Input
+                                    dir="ltr"
+                                    style={{ width: 220 }}
+                                    inputMode="numeric"
+                                    maxLength={11}
+                                    placeholder={draft.contactTypeId && contactTypes.find((c) => c.ContactTypeID === draft.contactTypeId)?.DisplayName.trim() === 'موبایل' ? '09123544125' : '02155955160'}
+                                    value={draft.value}
+                                    onChange={(e) => setDraft((d) => ({ ...d, value: digitsOnly(e.target.value) }))}
+                                />
+                            ) : (
+                                <Input dir="ltr" style={{ width: 220 }} value={draft.value} onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))} />
+                            )}
                         </div>
                         {isPhoneType(draft.contactTypeId) ? (
                             <div>

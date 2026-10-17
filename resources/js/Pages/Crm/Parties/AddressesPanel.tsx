@@ -57,6 +57,13 @@ interface AddressesPanelProps {
 
 const toCoord = (v: number | string | null | undefined) => (v === null || v === undefined || v === '' ? null : Number(v));
 
+/** «استان تهران» — عنوان فقط وقتی اضافه می‌شود که خودِ نام از قبل با همان کلمه شروع نشده باشد؛ نامِ خالی = هیچ. */
+const withLabel = (label: string, name: string | null | undefined): string => {
+    const n = (name || '').trim();
+    if (!n) return '';
+    return n.startsWith(`${label} `) ? n : `${label} ${n}`;
+};
+
 const emptyDraft = {
     id: null as number | null,
     addressTitleId: null as number | null,
@@ -155,10 +162,6 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
             setError('عنوانِ آدرس، استان، شهرستان و شهر الزامی است.');
             return;
         }
-        if (!draft.addressText.trim()) {
-            setError('متنِ آدرس الزامی است.');
-            return;
-        }
         if ((draft.latitude === null) !== (draft.longitude === null)) {
             setError('عرض و طولِ جغرافیایی باید با هم ثبت یا با هم حذف شوند.');
             return;
@@ -176,7 +179,7 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
             neighborhoodId: draft.neighborhoodId ?? undefined,
             municipalZoneId: draft.municipalZoneId ?? undefined,
             postalCode: draft.postalCode.trim() || undefined,
-            addressText: draft.addressText.trim(),
+            addressText: draft.addressText.trim() || undefined,
             plateNumber: draft.plateNumber.trim() || undefined,
             unit: draft.unit.trim() || undefined,
             latitude: draft.latitude,
@@ -208,11 +211,22 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
             render: (_, r) => (
                 <div>
                     <Text style={{ fontSize: 12, color: '#6B7280' }}>
-                        {r.ProvinceName} / {r.CountyName} / {r.CityName}
-                        {r.NeighborhoodName ? ` / ${r.NeighborhoodName}` : ''}
+                        {[
+                            withLabel('استان', r.ProvinceName),
+                            withLabel('شهرستان', r.CountyName),
+                            withLabel('شهر', r.CityName),
+                            withLabel('محله', r.NeighborhoodName),
+                        ].filter(Boolean).join(' / ')}
                         {r.MunicipalZoneName ? ` — ${r.MunicipalZoneName}` : ''}
                     </Text>
-                    <div>{r.AddressText}{r.PlateNumber ? ` — پلاک ${r.PlateNumber}` : ''}{r.Unit ? `, واحد ${r.Unit}` : ''}</div>
+                    {(() => {
+                        const line = [
+                            (r.AddressText || '').trim(),
+                            r.PlateNumber ? `پلاک ${r.PlateNumber}` : '',
+                            r.Unit ? `واحد ${r.Unit}` : '',
+                        ].filter(Boolean).join(' — ');
+                        return line ? <div>{line}</div> : null;
+                    })()}
                     {showMap && r.Latitude !== null && r.Longitude !== null ? (
                         <Text type="secondary" style={{ fontSize: 12 }} dir="ltr">
                             <EnvironmentOutlined /> {Number(r.Latitude)}, {Number(r.Longitude)}
@@ -360,7 +374,7 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
                             <Input value={draft.unit} onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))} />
                         </Col>
                         <Col xs={24}>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>متنِ آدرس</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>متنِ آدرس (اختیاری)</Text>
                             <Input.TextArea rows={2} value={draft.addressText} onChange={(e) => setDraft((d) => ({ ...d, addressText: e.target.value }))} />
                         </Col>
                         {showMap ? (

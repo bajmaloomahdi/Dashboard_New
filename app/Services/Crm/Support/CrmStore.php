@@ -506,6 +506,35 @@ class CrmStore
         );
     }
 
+    /* ---------- فایل‌هایِ پیوستِ طرف‌حساب (CrmPartyAttachments) ---------- */
+
+    /** شاملِ FilePath (فقط برایِ لایهٔ PHP — به Frontend نمی‌رود) */
+    public function getPartyAttachments(?int $partyId = null, ?int $partyAttachmentId = null): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyAttachments @PartyID = ?, @PartyAttachmentID = ?', [$partyId, $partyAttachmentId]);
+    }
+
+    public function addPartyAttachment(array $p): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_AddPartyAttachment @PartyID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @Description = ?, @UserID = ?',
+            [$p['partyId'], $p['fileName'], $p['fileExtension'] ?? null, $p['fileSize'], $p['filePath'], $p['description'] ?? null, $p['userId']]
+        );
+    }
+
+    public function deletePartyAttachment(int $partyAttachmentId, int $userId): object
+    {
+        return $this->write('EXEC dbo.sp_Crm_DeletePartyAttachment @PartyAttachmentID = ?, @UserID = ?', [$partyAttachmentId, $userId]);
+    }
+
+    public function updatePartyAttachmentDescription(int $partyAttachmentId, ?string $description, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_UpdatePartyAttachmentDescription @PartyAttachmentID = ?, @Description = ?, @UserID = ?',
+            [$partyAttachmentId, $description, $userId]
+        );
+    }
+
     /* ---------- پیوستِ تعاملات (CrmInteractionAttachments) ---------- */
 
     /** شاملِ FilePath (فقط برایِ لایهٔ PHP — به Frontend نمی‌رود) */

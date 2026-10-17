@@ -108,7 +108,7 @@ class CrmAddressController extends CrmApiController
             'neighborhoodId' => 'nullable|integer|exists:CrmNeighborhoods,NeighborhoodID',
             'municipalZoneId' => 'nullable|integer|exists:CrmMunicipalZones,MunicipalZoneID',
             'postalCode' => 'nullable|string|max:10',
-            'addressText' => 'required|string|max:500',
+            'addressText' => 'nullable|string|max:500',
             'plateNumber' => 'nullable|string|max:20',
             'unit' => 'nullable|string|max:20',
             'latitude' => 'nullable',

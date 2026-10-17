@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 
 /**
@@ -18,7 +19,7 @@ use Tests\TestCase;
  */
 class SortOrderCodeRuleTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesCrmTitle, DatabaseTransactions;
 
     private int $seq = 0;
 
@@ -172,7 +173,7 @@ class SortOrderCodeRuleTest extends TestCase
             'partyNature' => 'LEGAL', 'officialName' => $this->uniq('شرکتِ ترتیب'), 'identifierNumber' => $digits,
             'roleIds' => [$r1, $r2, $r3],
         ])->assertOk()->json('partyId');
-        $personId = (int) $this->postJson('/crm/persons', ['firstName' => 'ترتیب', 'lastName' => 'تست'])->assertOk()->json('personId');
+        $personId = (int) $this->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'ترتیب', 'lastName' => 'تست'])->assertOk()->json('personId');
         $this->postJson('/crm/relations', ['partyId' => $partyId, 'personId' => $personId, 'roleIds' => [$r1, $r2, $r3]])->assertOk();
 
         // کلیدها: r2=901001، r3=901002، r1=901003

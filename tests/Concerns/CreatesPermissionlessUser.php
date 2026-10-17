@@ -16,16 +16,23 @@ trait CreatesPermissionlessUser
     protected function permissionlessUser(): int
     {
         if ($this->permissionlessUserId === null) {
-            $code = 'NOPERM_' . strtoupper(bin2hex(random_bytes(6)));
-            DB::insert(
-                'INSERT INTO dbo.Users (UserCode, UserName, PasswordHash, FirstName, LastName, IsActive, CreateDate, RowGuid, IsLocked, FailedLoginCount) '
-                . "VALUES (?, ?, N'x', N'بدونِ', N'دسترسی', 1, GETDATE(), NEWID(), 0, 0)",
-                [$code, strtolower($code)]
-            );
-            $this->permissionlessUserId = (int) DB::table('Users')->where('UserCode', $code)->value('UserID');
+            $this->permissionlessUserId = $this->createUserWithoutRoles();
         }
 
         return $this->permissionlessUserId;
+    }
+
+    /** هر بار یک کاربرِ جدیدِ بدونِ نقش (برایِ آزمون‌هایی که چند کاربرِ مستقل با دسترسی‌هایِ متفاوت لازم دارند). */
+    protected function createUserWithoutRoles(): int
+    {
+        $code = 'NOPERM_' . strtoupper(bin2hex(random_bytes(6)));
+        DB::insert(
+            'INSERT INTO dbo.Users (UserCode, UserName, PasswordHash, FirstName, LastName, IsActive, CreateDate, RowGuid, IsLocked, FailedLoginCount) '
+            . "VALUES (?, ?, N'x', N'بدونِ', N'دسترسی', 1, GETDATE(), NEWID(), 0, 0)",
+            [$code, strtolower($code)]
+        );
+
+        return (int) DB::table('Users')->where('UserCode', $code)->value('UserID');
     }
 
     /**

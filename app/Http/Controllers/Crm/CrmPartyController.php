@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Crm;
 use App\Services\Crm\CrmMasterDataService;
 use App\Services\Crm\CrmPartyService;
 use App\Services\Crm\Exceptions\CrmValidationException;
+use App\Services\Crm\Support\CrmPartyAttachmentFiles;
 use App\Services\Crm\Support\CrmPartyImageFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,7 @@ class CrmPartyController extends CrmApiController
             'interactions' => $this->parties->listInteractions($partyId),
             'interactionTypes' => $this->masterData->listInteractionTypes(null, true),
             'partyImages' => $this->parties->listPartyImages($partyId),
+            'partyAttachments' => $this->parties->listPartyAttachments($partyId),
             'supplementaryInfo' => $this->parties->getSupplementaryInfo($partyId),
             // فقط نوع‌هایِ فعال برایِ انتخابِ جدید؛ نوعِ غیرفعالی که همین حالا روی طرف‌حساب ثبت است از خودِ supplementaryInfo می‌آید
             'ownershipTypes' => $this->masterData->listOwnershipTypes(null, true),
@@ -270,6 +272,80 @@ class CrmPartyController extends CrmApiController
 
             return ['message' => $res->Message ?? 'توضیحاتِ تصویر به‌روزرسانی شد.'];
         });
+    }
+
+    /* ---------- فایل‌هایِ پیوستِ طرف‌حساب (CrmPartyAttachments — تبِ «ضمائم و سایر ویژگی‌ها»، غیر از تصاویر) ---------- */
+
+    /** GET crm/parties/{partyId}/attachments — فهرستِ فایل‌هایِ فعال (برایِ Reload بعدِ Upload/Delete). */
+    public function attachmentsIndex(int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        return $this->runCrm(fn () => ['items' => $this->parties->listPartyAttachments($partyId)]);
+    }
+
+    /** POST crm/parties/{partyId}/attachments — multipart: files[] */
+    public function attachmentsStore(Request $request, int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return $this->runCrm(function () use ($request, $partyId) {
+            $files = $request->file('files');
+            if (! is_array($files)) {
+                throw new CrmValidationException('هیچ فایلی برایِ افزودن انتخاب نشده است.');
+            }
+
+            $count = $this->parties->addPartyAttachments($partyId, $files, $this->actorId());
+
+            return ['message' => $count > 1 ? "{$count} فایل ثبت شد." : 'فایل ثبت شد.'];
+        });
+    }
+
+    /** POST crm/party-attachments/{attachmentId}/delete — حذفِ منطقی (IsActive=0)؛ فایلِ فیزیکی باقی می‌ماند. */
+    public function attachmentsDestroy(int $attachmentId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return $this->runCrm(function () use ($attachmentId) {
+            $res = $this->parties->deletePartyAttachment($attachmentId, $this->actorId());
+
+            return ['message' => $res->Message ?? 'فایل حذف شد.'];
+        });
+    }
+
+    /** POST crm/party-attachments/{attachmentId}/description — ویرایشِ فقط توضیحِ یک فایل (هدف فقط از Route). */
+    public function attachmentsUpdateDescription(Request $request, int $attachmentId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        $validated = $request->validate([
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        return $this->runCrm(function () use ($validated, $attachmentId) {
+            $res = $this->parties->updatePartyAttachmentDescription($attachmentId, $validated['description'] ?? null, $this->actorId());
+
+            return ['message' => $res->Message ?? 'توضیحاتِ فایل به‌روزرسانی شد.'];
+        });
+    }
+
+    /**
+     * GET crm/party-attachments/{attachmentId}/download — استریم از Private Disk با نامِ اصلیِ فایل
+     * (همیشه attachment، هرگز inline). فایلِ حذف‌شده (IsActive=0) یا ناموجود → 404.
+     */
+    public function attachmentDownload(int $attachmentId)
+    {
+        $this->authorizeCrm(self::PERM_VIEW);
+
+        $file = $this->parties->getPartyAttachmentFile($attachmentId);
+        abort_if(! $file, 404, 'فایل یافت نشد.');
+
+        return Storage::disk(CrmPartyAttachmentFiles::DISK)->download($file['path'], $file['name'], [
+            'Content-Type' => 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+            'Content-Security-Policy' => "default-src 'none'",
+        ]);
     }
 
     /* ---------- اطلاعاتِ تکمیلیِ طرف‌حساب (CrmPartySupplementaryInfo — تبِ «ضمائم و سایر ویژگی‌ها») ---------- */

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 use Tests\Concerns\CreatesPermissionlessUser;
 
@@ -15,7 +16,7 @@ use Tests\Concerns\CreatesPermissionlessUser;
  */
 class CrmInteractionTest extends TestCase
 {
-    use CreatesPermissionlessUser, DatabaseTransactions;
+    use CreatesPermissionlessUser, CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -40,7 +41,7 @@ class CrmInteractionTest extends TestCase
 
     private function createPerson(string $name = 'مخاطب'): int
     {
-        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => $name, 'lastName' => 'تست'])->assertOk()->json('personId');
+        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => $name, 'lastName' => 'تست'])->assertOk()->json('personId');
     }
 
     private function relate(int $partyId, int $personId): void

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 
 /**
@@ -13,7 +14,7 @@ use Tests\TestCase;
  */
 class CrmRelationMultiPositionTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -54,7 +55,7 @@ class CrmRelationMultiPositionTest extends TestCase
             'officialName' => 'شرکتِ مخاطب‌دار',
             'identifierNumber' => $this->digits(11),
         ])->assertOk()->json('partyId');
-        $personId = (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'آزمون', 'lastName' => 'مخاطب ' . $this->digits(4)])
+        $personId = (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'آزمون', 'lastName' => 'مخاطب ' . $this->digits(4)])
             ->assertOk()->json('personId');
 
         return [$partyId, $personId];

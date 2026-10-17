@@ -17,6 +17,7 @@ import RelationsPanel from './RelationsPanel';
 import ClassificationsPanel from './ClassificationsPanel';
 import InteractionsPanel from './InteractionsPanel';
 import PartyImagesPanel from './PartyImagesPanel';
+import PartyAttachmentsPanel, { PartyAttachment } from './PartyAttachmentsPanel';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PartySupplementaryInfoPanel, { PartySupplementaryInfo, OwnershipTypeOption } from './PartySupplementaryInfoPanel';
 
@@ -47,6 +48,7 @@ export default function CrmPartyShow() {
         interactions: any[];
         interactionTypes: { InteractionTypeID: number; Code: string; DisplayName: string }[];
         partyImages: { PartyImageID: number; PartyID: number; ImageMimeType: string; Description: string | null; SortOrder: number; IsActive: boolean | number | string; Date_InsertFirst: string; CreatedByName: string | null; ImageUrl: string }[];
+        partyAttachments?: PartyAttachment[];
         supplementaryInfo: PartySupplementaryInfo | null;
         ownershipTypes: OwnershipTypeOption[];
         users: { UserID: number; FullName: string }[];
@@ -66,7 +68,7 @@ export default function CrmPartyShow() {
     };
 
     const {
-        party: currentParty, partyRoles, partyPositions, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
+        party: currentParty, partyRoles, partyPositions, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, partyAttachments, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
         positions, contactRoles, titles, departments, partyTypes, activities, canManage, canDelete = false, neshanMapKey, neshanSearchEnabled,
     } = props;
 
@@ -87,7 +89,7 @@ export default function CrmPartyShow() {
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'brands' as const, label: 'برندها', icon: <TagOutlined />, count: (brandCategories || []).filter((r) => toBool(r.IsActive)).length },
-        { key: 'attachments' as const, label: 'ضمائم و سایر ویژگی‌ها', icon: <PaperClipOutlined />, count: (partyImages || []).length },
+        { key: 'attachments' as const, label: 'ضمائم و سایر ویژگی‌ها', icon: <PaperClipOutlined />, count: (partyImages || []).length + (partyAttachments || []).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -275,6 +277,16 @@ export default function CrmPartyShow() {
                     <PartyImagesPanel
                         partyId={currentParty.PartyID}
                         items={partyImages || []}
+                        canManage={canManage}
+                    />
+                </Card>
+            )}
+
+            {activeTab === 'attachments' && (
+                <Card style={{ ...STYLES.card, marginTop: 16 }}>
+                    <PartyAttachmentsPanel
+                        partyId={currentParty.PartyID}
+                        items={partyAttachments || []}
                         canManage={canManage}
                     />
                 </Card>

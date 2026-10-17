@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Table, Button, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty, Input, Divider } from 'antd';
-import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled, UserAddOutlined } from '@ant-design/icons';
+import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled, UserAddOutlined, PhoneOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
@@ -18,6 +18,10 @@ interface Relation {
     PositionID: number | null;
     PositionName: string | null;
     RoleNames: string | null;
+    /** موبایل/تلفنِ اصلیِ این مخاطب (از تماس‌هایِ خودِ شخص یا تماس‌هایِ این طرف‌حساب که به او مرتبط‌اند) */
+    PrimaryPhone?: string | null;
+    PrimaryPhoneExtension?: string | null;
+    PrimaryPhoneType?: string | null;
     IsPrimaryContact: boolean | number | string;
     IsActive: boolean | number | string;
 }
@@ -161,15 +165,15 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
     };
 
     const handleCreateNewPerson = async () => {
-        if (!newPerson.firstName.trim() || !newPerson.lastName.trim()) {
-            setError('نام و نامِ خانوادگیِ شخصِ جدید الزامی است.');
+        if (!newPerson.titleId || !newPerson.lastName.trim()) {
+            setError('عنوان و نامِ خانوادگیِ شخصِ جدید الزامی است.');
             return;
         }
         setSaving(true);
         const res = await crmApi('/crm/persons', 'POST', {
-            firstName: newPerson.firstName.trim(),
+            firstName: newPerson.firstName.trim() || undefined,
             lastName: newPerson.lastName.trim(),
-            titleId: newPerson.titleId ?? undefined,
+            titleId: newPerson.titleId,
             identifierNumber: newPerson.identifierNumber.trim() || undefined,
             identifierDate: newPerson.identifierDate || undefined,
         });
@@ -178,7 +182,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             setError(res.message);
             return;
         }
-        const created: Person = { PersonID: res.personId, DisplayName: `${newPerson.firstName.trim()} ${newPerson.lastName.trim()}` };
+        const created: Person = { PersonID: res.personId, DisplayName: [newPerson.firstName.trim(), newPerson.lastName.trim()].filter(Boolean).join(' ') };
         setPersonOptions((opts) => [created, ...opts]);
         setDraft((d) => ({ ...d, personId: created.PersonID }));
         setCreatingNewPerson(false);
@@ -237,6 +241,18 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                     <Text>{r.PersonName}</Text>
                 </Space>
             ),
+        },
+        {
+            title: 'شمارهٔ تماسِ اصلی',
+            key: 'primaryPhone',
+            render: (_, r) => r.PrimaryPhone ? (
+                <Space size={4}>
+                    <PhoneOutlined style={{ color: '#6B7280', fontSize: 12 }} />
+                    <a href={`tel:${r.PrimaryPhone}`} dir="ltr">{r.PrimaryPhone}</a>
+                    {r.PrimaryPhoneExtension ? <Text type="secondary" style={{ fontSize: 12 }}>(داخلی: {r.PrimaryPhoneExtension})</Text> : null}
+                    {r.PrimaryPhoneType ? <Text type="secondary" style={{ fontSize: 12 }}>{r.PrimaryPhoneType}</Text> : null}
+                </Space>
+            ) : <Text type="secondary">—</Text>,
         },
         { title: 'سمت‌ها', dataIndex: 'PositionName', key: 'PositionName', render: (v) => v || <Text type="secondary">—</Text> },
         { title: 'نقش‌ها', dataIndex: 'RoleNames', key: 'RoleNames', render: (v) => v || <Text type="secondary">—</Text> },
@@ -318,15 +334,14 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                         <Space direction="vertical" style={{ background: '#FAFAFA', padding: 12, borderRadius: 8, width: '100%' }} size={8}>
                             <Space wrap>
                                 <Select
-                                    allowClear
-                                    placeholder="عنوان"
+                                    placeholder="عنوان *"
                                     value={newPerson.titleId ?? undefined}
                                     onChange={(v) => setNewPerson((p) => ({ ...p, titleId: v ?? null }))}
                                     options={(titles || []).map((t) => ({ value: t.TitleID, label: t.DisplayName }))}
                                     style={{ width: 130 }}
                                 />
-                                <Input placeholder="نام" value={newPerson.firstName} onChange={(e) => setNewPerson((p) => ({ ...p, firstName: e.target.value }))} style={{ width: 150 }} />
-                                <Input placeholder="نامِ خانوادگی" value={newPerson.lastName} onChange={(e) => setNewPerson((p) => ({ ...p, lastName: e.target.value }))} style={{ width: 150 }} />
+                                <Input placeholder="نام (اختیاری)" value={newPerson.firstName} onChange={(e) => setNewPerson((p) => ({ ...p, firstName: e.target.value }))} style={{ width: 150 }} />
+                                <Input placeholder="نامِ خانوادگی *" value={newPerson.lastName} onChange={(e) => setNewPerson((p) => ({ ...p, lastName: e.target.value }))} style={{ width: 150 }} />
                             </Space>
                             <Space wrap>
                                 <Input

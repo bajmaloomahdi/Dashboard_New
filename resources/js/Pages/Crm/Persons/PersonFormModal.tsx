@@ -35,7 +35,7 @@ const emptyValues = {
 /**
  * فرمِ ایجاد/ویرایشِ مخاطب (CrmPersons) — شخصِ حقیقیِ مستقل از طرف‌حساب که از
  * طریقِ رابطه (سمت/نقش/مخاطبِ اصلی) به یک یا چند طرف‌حساب متصل می‌شود.
- * کدِ ملی و تاریخِ تولد اختیاری‌اند.
+ * عنوان و نامِ خانوادگی الزامی‌اند؛ نام، کدِ ملی و تاریخِ تولد اختیاری‌اند.
  */
 export default function PersonFormModal({ open, onClose, editingPerson, titles, onSuccess }: PersonFormModalProps) {
     const isEdit = !!editingPerson;
@@ -69,8 +69,12 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
     };
 
     const handleSubmit = async () => {
-        if (!values.firstName.trim() || !values.lastName.trim()) {
-            setFormError('نام و نامِ خانوادگی الزامی است.');
+        const missing: Record<string, string> = {};
+        if (!values.titleId) missing.titleId = 'عنوان الزامی است.';
+        if (!values.lastName.trim()) missing.lastName = 'نامِ خانوادگی الزامی است.';
+        if (Object.keys(missing).length) {
+            setFieldErrors(missing);
+            setFormError(Object.values(missing).join(' '));
             return;
         }
 
@@ -80,9 +84,9 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
 
         const res = await crmApi('/crm/persons', 'POST', {
             personId: editingPerson ? editingPerson.PersonID : undefined,
-            firstName: values.firstName.trim(),
+            firstName: values.firstName.trim() || undefined,
             lastName: values.lastName.trim(),
-            titleId: values.titleId ?? undefined,
+            titleId: values.titleId,
             identifierNumber: values.identifierNumber.trim() || undefined,
             identifierDate: values.identifierDate || undefined,
             description: values.description.trim() || undefined,
@@ -126,9 +130,8 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             <Form layout="vertical" requiredMark>
                 <Row gutter={16}>
                     <Col xs={24} md={6}>
-                        <Form.Item label="عنوان">
+                        <Form.Item label="عنوان" required validateStatus={fieldErrors.titleId ? 'error' : ''} help={fieldErrors.titleId}>
                             <Select
-                                allowClear
                                 placeholder="عنوان"
                                 value={values.titleId ?? undefined}
                                 onChange={(v) => setValues((s) => ({ ...s, titleId: v ?? null }))}
@@ -138,7 +141,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
                         </Form.Item>
                     </Col>
                     <Col xs={24} md={9}>
-                        <Form.Item label="نام" required validateStatus={fieldErrors.firstName ? 'error' : ''} help={fieldErrors.firstName}>
+                        <Form.Item label="نام" validateStatus={fieldErrors.firstName ? 'error' : ''} help={fieldErrors.firstName}>
                             <Input value={values.firstName} onChange={(e) => setValues((s) => ({ ...s, firstName: e.target.value }))} size="large" />
                         </Form.Item>
                     </Col>

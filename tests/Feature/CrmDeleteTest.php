@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 
 /**
@@ -13,7 +14,7 @@ use Tests\TestCase;
  */
 class CrmDeleteTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2; // CRM_VIEW + CRM_MANAGE_PARTIES + CRM_DELETE (نقشِ ادمین)
 
@@ -45,7 +46,7 @@ class CrmDeleteTest extends TestCase
 
     private function person(): int
     {
-        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'آزمون', 'lastName' => 'حذف ' . $this->digits(4)])
+        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'آزمون', 'lastName' => 'حذف ' . $this->digits(4)])
             ->assertOk()->json('personId');
     }
 

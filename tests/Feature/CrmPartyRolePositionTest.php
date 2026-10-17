@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 
 /**
@@ -17,7 +18,7 @@ use Tests\TestCase;
  */
 class CrmPartyRolePositionTest extends TestCase
 {
-    use DatabaseTransactions;
+    use CreatesCrmTitle, DatabaseTransactions;
 
     private const USER_FULL = 2;
 
@@ -213,7 +214,7 @@ class CrmPartyRolePositionTest extends TestCase
         $partyPosition = $this->position('سمتِ‌طرف‌حساب');
 
         $party = $this->saveParty(['roleIds' => [$partyRole], 'positionIds' => [$partyPosition]]);
-        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['firstName' => 'علی', 'lastName' => 'تستی'])->assertOk()->json();
+        $person = $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'firstName' => 'علی', 'lastName' => 'تستی'])->assertOk()->json();
 
         $relation = $this->as(self::USER_FULL)->postJson('/crm/relations', [
             'partyId' => $party['partyId'], 'personId' => $person['personId'],

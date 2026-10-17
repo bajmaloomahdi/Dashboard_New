@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Card,
     Button,
@@ -24,6 +24,7 @@ import MainLayout from '../../Layouts/MainLayout';
 import PageHeader from '../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { THEME, STYLES } from '../../theme';
+import ImageGalleryPreview from '../../Components/ImageGalleryPreview';
 
 const { Title, Text } = Typography;
 
@@ -64,6 +65,18 @@ export default function CompanyIndex() {
     // پیش‌نمایش لوگو و فاوآیکون
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+
+    // کلیک رویِ لوگو/فاوآیکون → تصویرِ اصلی در گالری (قبلی/بعدی بینِ همین دو تصویر). نبودِ فایل (خطایِ بارگذاری) → Placeholder و بدونِ گالری.
+    const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+    const galleryItems = [
+        logoPreview ? { src: logoPreview, alt: 'لوگو' } : null,
+        faviconPreview ? { src: faviconPreview, alt: 'فاوآیکون' } : null,
+    ].filter((i): i is { src: string; alt: string } => i !== null);
+    const openGallery = (src: string | null) => {
+        if (!src) return;
+        const i = galleryItems.findIndex((g) => g.src === src);
+        if (i >= 0) setGalleryIndex(i);
+    };
 
     useEffect(() => {
         // وقتی صفحه لود شد، لوگو و فاوآیکون فعلی رو نشون بده (از روت جداگانه)
@@ -203,6 +216,15 @@ export default function CompanyIndex() {
                         <Col xs={24} md={12}>
                             <Form.Item label="لوگو (حداکثر 2MB)">
                                 <Space align="start" size={16}>
+                                    <span
+                                        className={logoPreview ? 'company-image-zoomable' : undefined}
+                                        title={logoPreview ? 'نمایشِ تصویرِ اصلی' : undefined}
+                                        role={logoPreview ? 'button' : undefined}
+                                        tabIndex={logoPreview ? 0 : undefined}
+                                        aria-label={logoPreview ? 'نمایشِ تصویرِ اصلیِ لوگو' : undefined}
+                                        onClick={() => openGallery(logoPreview)}
+                                        onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGallery(logoPreview); } }}
+                                    >
                                     <Avatar
                                         size={80}
                                         shape="square"
@@ -215,12 +237,14 @@ export default function CompanyIndex() {
                                             <img
                                                 src={logoPreview}
                                                 alt="logo"
+                                                onError={() => setLogoPreview(null)}
                                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                             />
                                         ) : (
                                             <PictureOutlined style={{ fontSize: 28, color: '#bfbfbf' }} />
                                         )}
                                     </Avatar>
+                                    </span>
                                     <Upload beforeUpload={beforeLogoUpload} showUploadList={false}>
                                         <Button icon={<UploadOutlined />}>انتخاب لوگو</Button>
                                     </Upload>
@@ -232,6 +256,15 @@ export default function CompanyIndex() {
                         <Col xs={24} md={12}>
                             <Form.Item label="فاوآیکون (حداکثر 512KB)">
                                 <Space align="start" size={16}>
+                                    <span
+                                        className={faviconPreview ? 'company-image-zoomable' : undefined}
+                                        title={faviconPreview ? 'نمایشِ تصویرِ اصلی' : undefined}
+                                        role={faviconPreview ? 'button' : undefined}
+                                        tabIndex={faviconPreview ? 0 : undefined}
+                                        aria-label={faviconPreview ? 'نمایشِ تصویرِ اصلیِ فاوآیکون' : undefined}
+                                        onClick={() => openGallery(faviconPreview)}
+                                        onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGallery(faviconPreview); } }}
+                                    >
                                     <Avatar
                                         size={80}
                                         shape="square"
@@ -244,12 +277,14 @@ export default function CompanyIndex() {
                                             <img
                                                 src={faviconPreview}
                                                 alt="favicon"
+                                                onError={() => setFaviconPreview(null)}
                                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                             />
                                         ) : (
                                             <PictureOutlined style={{ fontSize: 28, color: '#bfbfbf' }} />
                                         )}
                                     </Avatar>
+                                    </span>
                                     <Upload beforeUpload={beforeFaviconUpload} showUploadList={false}>
                                         <Button icon={<UploadOutlined />}>انتخاب فاوآیکون</Button>
                                     </Upload>
@@ -272,6 +307,9 @@ export default function CompanyIndex() {
                     </Row>
                 </Form>
             </Card>
+
+            <ImageGalleryPreview items={galleryItems} current={galleryIndex} onChange={setGalleryIndex} />
+            <style>{`.company-image-zoomable { cursor: zoom-in; display: inline-block; line-height: 0; }`}</style>
 
             <NotificationModal
                 key={notificationKey}

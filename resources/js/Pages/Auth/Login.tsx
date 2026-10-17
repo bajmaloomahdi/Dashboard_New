@@ -1,8 +1,9 @@
 import { Button, Form, Input, Typography, Checkbox, Modal } from 'antd';
-import { UserOutlined, LockOutlined, LoginOutlined, SafetyOutlined, CloseCircleFilled } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, LoginOutlined, CloseCircleFilled } from '@ant-design/icons';
 import { useForm, usePage, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import CompanyLogo from '../../Components/CompanyLogo';
+import raga360Logo from '../../../images/raga360-logo.webp';
 
 const { Title, Text } = Typography;
 
@@ -213,25 +214,19 @@ export default function Login() {
                 }}>
                     <div className={`fade-in-up ${shake ? 'shake' : ''}`} style={{ width: '100%', maxWidth: 400 }}>
                         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-                            <div style={{
-                                width: 70,
-                                height: 70,
-                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                borderRadius: 20,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: 20,
-                                boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)',
-                            }}>
-                                <SafetyOutlined style={{ fontSize: 32, color: '#fff' }} />
-                            </div>
-                            <Title level={2} style={{ marginBottom: 8 }}>
-                                خوش آمدید
-                            </Title>
-                            <Text type="secondary">
-                                برای ورود، اطلاعات کاربری خود را وارد کنید
-                            </Text>
+                            <img
+                                src={raga360Logo}
+                                alt="Raga 360°"
+                                style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    maxWidth: 320,
+                                    height: 'auto',
+                                    margin: '0 auto',
+                                    borderRadius: 16,
+                                    boxShadow: '0 10px 30px rgba(102, 126, 234, 0.25)',
+                                }}
+                            />
                         </div>
 
                         <Form

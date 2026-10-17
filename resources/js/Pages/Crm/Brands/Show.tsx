@@ -12,6 +12,7 @@ import { toBool } from '../../../Utils/bool';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import BrandFormModal, { Brand } from './BrandFormModal';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
+import ImageGalleryPreview from '../../../Components/ImageGalleryPreview';
 
 const { Link, Text } = Typography;
 
@@ -51,6 +52,7 @@ export default function CrmBrandShow() {
 
     // لوگو در هدر؛ خطایِ بارگذاری → آیکونِ پیش‌فرض (با تغییرِ LogoUrl بعد از ویرایش، دوباره تلاش می‌شود)
     const [logoFailed, setLogoFailed] = useState(false);
+    const [logoPreview, setLogoPreview] = useState<number | null>(null);
     useEffect(() => setLogoFailed(false), [currentBrand.LogoUrl]);
 
     const tabDefs = [{ key: 'parties' as const, label: 'طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (parties || []).length }];
@@ -104,13 +106,14 @@ export default function CrmBrandShow() {
                     width: 96px; height: 44px; padding: 4px; border-radius: 8px; background: #fff; overflow: hidden;
                 }
                 .brand-show-logo img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+                .brand-show-logo.is-zoomable { cursor: zoom-in; border: none; }
             `}</style>
             <PageHeader
                 icon={
                     currentBrand.LogoUrl && !logoFailed ? (
-                        <span className="brand-show-logo">
+                        <button type="button" className="brand-show-logo is-zoomable" title="نمایشِ تصویرِ اصلی" aria-label="نمایشِ تصویرِ اصلیِ لوگو" onClick={() => setLogoPreview(0)}>
                             <img src={currentBrand.LogoUrl} alt={currentBrand.Name} onError={() => setLogoFailed(true)} />
-                        </span>
+                        </button>
                     ) : (
                         <TagsOutlined />
                     )
@@ -176,6 +179,9 @@ export default function CrmBrandShow() {
             <BrandFormModal open={editOpen} onClose={() => setEditOpen(false)} editingBrand={currentBrand} onSuccess={handleEditSuccess} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
+            {currentBrand.LogoUrl && !logoFailed ? (
+                <ImageGalleryPreview items={[{ src: currentBrand.LogoUrl, alt: currentBrand.Name }]} current={logoPreview} onChange={setLogoPreview} />
+            ) : null}
         </MainLayout>
     );
 }

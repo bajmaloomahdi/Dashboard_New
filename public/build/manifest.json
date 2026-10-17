@@ -110,8 +110,12 @@
     "src": "resources/css/app.css",
     "isEntry": true
   },
+  "resources/images/raga360-logo.webp": {
+    "file": "assets/raga360-logo-DwJRW0aG.webp",
+    "src": "resources/images/raga360-logo.webp"
+  },
   "resources/js/app.tsx": {
-    "file": "assets/app-bEjU60j2.js",
+    "file": "assets/app-WHd1do0y.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -122,6 +126,7 @@
       "assets/app-0vtxen5F.css"
     ],
     "assets": [
+      "assets/raga360-logo-DwJRW0aG.webp",
       "assets/vazirmatn-arabic-400-normal-DMZFCm7K.woff2",
       "assets/vazirmatn-arabic-400-normal-C4W5XURk.woff",
       "assets/vazirmatn-latin-ext-400-normal-BdGhO0lm.woff2",

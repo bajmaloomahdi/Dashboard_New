@@ -19,6 +19,7 @@ import BrandFormModal, { Brand } from './BrandFormModal';
 import { THEME, STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
+import ImageGalleryPreview from '../../../Components/ImageGalleryPreview';
 
 const { Text } = Typography;
 
@@ -26,11 +27,24 @@ interface BrandRow extends Brand {
     ActivePartyCount: number | string;
 }
 
-/** لوگویِ برند داخلِ ناحیهٔ ثابتِ کارت (object-fit: contain از CSS)؛ نبودن یا خطایِ بارگذاری = Placeholder */
-function BrandLogo({ url, name }: { url?: string | null; name: string }) {
+/**
+ * لوگویِ برند داخلِ ناحیهٔ ثابتِ کارت (object-fit: contain از CSS)؛ نبودن یا خطایِ بارگذاری = Placeholder.
+ * کلیک رویِ لوگو تصویرِ اصلی را در گالری باز می‌کند (نه صفحهٔ برند).
+ */
+function BrandLogo({ url, name, onOpen }: { url?: string | null; name: string; onOpen?: () => void }) {
     const [failed, setFailed] = useState(false);
     if (url && !failed) {
-        return <img src={url} alt={name} loading="lazy" onError={() => setFailed(true)} />;
+        return (
+            <img
+                src={url}
+                alt={name}
+                loading="lazy"
+                title="نمایشِ تصویرِ اصلی"
+                className={onOpen ? 'is-zoomable' : undefined}
+                onError={() => setFailed(true)}
+                onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(); } : undefined}
+            />
+        );
     }
     return <TagsOutlined className="brand-card-logo-placeholder" aria-hidden />;
 }
@@ -53,6 +67,7 @@ export default function CrmBrandsIndex() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingBrand, setEditingBrand] = useState<BrandRow | null>(null);
     const [togglingId, setTogglingId] = useState<number | null>(null);
+    const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -125,6 +140,13 @@ export default function CrmBrandsIndex() {
         }
         notify('success', res.message);
         reload();
+    };
+
+    // گالریِ لوگوها به ترتیبِ کارت‌ها — قبلی/بعدی در نمایشگر بینِ لوگوهایِ همین فهرست جابه‌جا می‌شود
+    const logoItems = (items || []).filter((b) => !!b.LogoUrl).map((b) => ({ id: b.BrandID, src: b.LogoUrl as string, alt: b.Name }));
+    const openLogo = (brandId: number) => {
+        const i = logoItems.findIndex((l) => l.id === brandId);
+        if (i >= 0) setGalleryIndex(i);
     };
 
     const totalCount = items?.length || 0;
@@ -208,7 +230,7 @@ export default function CrmBrandsIndex() {
                                     }}
                                 >
                                     <div className="brand-card-logo">
-                                        <BrandLogo key={b.LogoUrl || 'none'} url={b.LogoUrl} name={b.Name} />
+                                        <BrandLogo key={b.LogoUrl || 'none'} url={b.LogoUrl} name={b.Name} onOpen={() => openLogo(b.BrandID)} />
                                         <span className={`brand-card-status${active ? ' is-active' : ''}`}>{active ? 'فعال' : 'غیرفعال'}</span>
                                     </div>
 
@@ -310,6 +332,7 @@ export default function CrmBrandsIndex() {
                     object-fit: contain;
                     display: block;
                 }
+                .brand-card-logo img.is-zoomable { cursor: zoom-in; }
                 .brand-card-logo-placeholder {
                     font-size: 40px;
                     color: ${THEME.textLight};
@@ -403,6 +426,7 @@ export default function CrmBrandsIndex() {
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
+            <ImageGalleryPreview items={logoItems} current={galleryIndex} onChange={setGalleryIndex} />
         </MainLayout>
     );
 }

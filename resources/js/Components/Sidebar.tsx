@@ -14,6 +14,7 @@ import {
 import { useMemo } from 'react';
 import type { Menu as MenuType, MenuTree } from '../Types';
 import { buildMenuTree } from '../Utils/menuHelpers';
+import raga360Logo from '../../images/raga360-logo.webp';
 
 const { Sider } = Layout;
 
@@ -127,18 +128,31 @@ export function SidebarMenu({ menus, currentUrl, collapsed = false, onNavigate }
             {/* لوگو */}
             <div
                 style={{
-                    height: 64,
+                    height: 72,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: '#fff',
-                    fontSize: collapsed ? 20 : 18,
-                    fontWeight: 'bold',
-                    letterSpacing: 1,
+                    background: '#eef3f8',
+                    overflow: 'hidden',
                 }}
             >
-                {collapsed ? '🎯' : '🎯 داشبورد'}
+                {/* لوگویِ Raga 360° (۱۷۷۴×۸۸۷)؛ cover حاشیهٔ بالا/پایینِ پس‌زمینه را می‌بُرد.
+                    در حالتِ جمع‌شده فقط نشانِ «R» (حدودِ x ۲۹۰–۷۰۰، y ۱۹۰–۶۴۰ از تصویرِ اصلی) در قابِ ۵۲×۵۲ */}
+                {collapsed ? (
+                    <div style={{ width: 52, height: 52, position: 'relative', overflow: 'hidden' }}>
+                        <img
+                            src={raga360Logo}
+                            alt="Raga 360°"
+                            style={{ position: 'absolute', height: 102, width: 'auto', maxWidth: 'none', left: -31, top: -22 }}
+                        />
+                    </div>
+                ) : (
+                    <img
+                        src={raga360Logo}
+                        alt="Raga 360°"
+                        style={{ width: '100%', height: 72, objectFit: 'cover', objectPosition: '50% 46%', display: 'block' }}
+                    />
+                )}
             </div>
 
             {/* منوی داینامیک */}

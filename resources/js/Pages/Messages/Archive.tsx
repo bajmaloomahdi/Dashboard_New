@@ -19,7 +19,6 @@ import {
     CopyOutlined,
     LoadingOutlined,
     EyeOutlined,
-    ReadOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
@@ -29,6 +28,7 @@ import DataGrid from '../../Components/DataGrid';
 import DueDateBadge from '../../Components/DueDateBadge';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
+import { MessageChangeTag, messageRowClass, messageAttention, MESSAGE_ROW_CSS } from '../../Components/MessageReadBadges';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -51,6 +51,8 @@ interface Message {
     MessageStatusName: string;
     IsCopy: boolean | number;
     IsRead: boolean | number;
+    /** تغییرِ خوانده‌نشده (توضیح/ضمیمهٔ تازه، ارجاع، تغییرِ وضعیت، رونوشت) */
+    HasUnread?: boolean | number;
 }
 
 interface FilterItem {
@@ -201,7 +203,6 @@ export default function MessageArchive() {
             key: 'subject',
             align: 'center',
             render: (_, record: Message) => {
-                const isRead = record.IsRead === 1 || record.IsRead === true;
                 const palette = getPriorityPalette(record.PrioritySortOrder, maxPrioritySort);
 
                 return (
@@ -226,19 +227,16 @@ export default function MessageArchive() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
                             <Space size={6}>
-                                <Text strong style={{ fontWeight: isRead ? 400 : 700 }}>
+                                <Text strong style={{ fontWeight: messageAttention(record) ? 700 : 400 }}>
                                     {record.Subject}
                                 </Text>
+                                <MessageChangeTag record={record} />
                                 {record.IsCopy === 1 || record.IsCopy === true ? (
                                     <Tag icon={<CopyOutlined />} color="cyan" style={{ borderRadius: 6, marginInlineEnd: 0 }}>
                                         رونوشت
                                     </Tag>
                                 ) : null}
-                                {!isRead && (
-                                    <Tag icon={<ReadOutlined />} color="blue" style={{ borderRadius: 6, marginInlineEnd: 0 }}>
-                                        نخوانده
-                                    </Tag>
-                                )}
+
                             </Space>
                             {record.MessageText && (
                                 <Text type="secondary" style={{ fontSize: 11 }}>
@@ -418,7 +416,10 @@ export default function MessageArchive() {
                     customColumns={customColumns}
                     rowKey="MessageID"
                     showColumnSearch={false}
+                    rowClassName={messageRowClass}
+                    onRowClick={(record) => router.visit(`/messages/${record.MessageID}`)}
                 />
+                <style>{MESSAGE_ROW_CSS}</style>
             </Card>
 
             <NotificationModal

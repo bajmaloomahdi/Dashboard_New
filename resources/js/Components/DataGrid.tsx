@@ -17,6 +17,10 @@ interface DataGridProps {
     rowKey?: string;
     scrollY?: number | string;
     customColumns?: ColumnsType<any>;
+    /** کلاسِ اضافهٔ هر ردیف (کنارِ row-even/row-odd)، مثلاً برایِ متمایزکردنِ پیام‌هایِ جدید */
+    rowClassName?: (record: any) => string;
+    /** کلیک رویِ ردیف (مثلاً بازکردنِ نامه)؛ کلیک رویِ دکمه/لینک/کنترل‌هایِ داخلِ ردیف نادیده گرفته می‌شود */
+    onRowClick?: (record: any) => void;
 }
 
 export default function DataGrid({
@@ -30,6 +34,8 @@ export default function DataGrid({
     rowKey = '__key',
     scrollY = 600,
     customColumns,
+    rowClassName,
+    onRowClick,
 }: DataGridProps) {
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
@@ -172,11 +178,17 @@ export default function DataGrid({
                 scroll={{ x: 'max-content', y: scrollY }}
                 bordered
                 size="middle"
-                rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+                rowClassName={(record, index) => [index % 2 === 0 ? 'row-even' : 'row-odd', onRowClick ? 'row-clickable' : '', rowClassName?.(record) || ''].filter(Boolean).join(' ')}
+                onRow={onRowClick ? (record) => ({
+                    onClick: (e) => {
+                        if ((e.target as HTMLElement).closest('button, a, input, textarea, .ant-select, .ant-checkbox, .ant-dropdown, .ant-popover')) return;
+                        onRowClick(record);
+                    },
+                }) : undefined}
                 locale={{ emptyText: <Empty description="داده‌ای برای نمایش وجود ندارد" /> }}
             />
 
-            <style>{TABLE_CSS}</style>
+            <style>{TABLE_CSS + '.row-clickable { cursor: pointer; }'}</style>
         </>
     );
 }

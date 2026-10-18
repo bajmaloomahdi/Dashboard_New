@@ -41,6 +41,7 @@ import DueDateBadge from '../../Components/DueDateBadge';
 import WorkflowTaskCard from '../../Components/Workflow/WorkflowTaskCard';
 import StartWorkflowModal from '../../Components/Workflow/StartWorkflowModal';
 import { THEME, STYLES } from '../../theme';
+import { SeenReceipt } from '../../Components/MessageReadBadges';
 
 const { Title, Text } = Typography;
 
@@ -76,6 +77,10 @@ interface MessageDetail {
     MessageStatusName: string;
     Description: string | null;
     CreateDate: string;
+    /** رسیدِ مشاهدهٔ گیرنده */
+    ToSeen?: boolean | number;
+    ToSeenDate?: string | null;
+    ToLastSeenDate?: string | null;
 }
 
 interface CopyItem {
@@ -85,6 +90,10 @@ interface CopyItem {
     CreateDate: string;
     CreateUserName: string | null;
     Description: string | null;
+    /** رسیدِ مشاهدهٔ رونوشت‌گیرنده */
+    Seen?: boolean | number;
+    SeenDate?: string | null;
+    LastSeenDate?: string | null;
 }
 
 interface Attachment {
@@ -574,6 +583,13 @@ export default function MessageShow() {
                                 ),
                             },
                             {
+                                title: 'مشاهده',
+                                key: 'seen',
+                                align: 'center',
+                                width: 140,
+                                render: (_: unknown, r: MessageDetail) => <SeenReceipt seen={r.ToSeen} seenDate={r.ToSeenDate} lastSeenDate={r.ToLastSeenDate} />,
+                            },
+                            {
                                 title: 'وضعیت',
                                 dataIndex: 'MessageStatusName',
                                 key: 'MessageStatusName',
@@ -651,6 +667,13 @@ export default function MessageShow() {
                                         <Text>{name}</Text>
                                     </Space>
                                 ),
+                            },
+                            {
+                                title: 'مشاهده',
+                                key: 'seen',
+                                align: 'center',
+                                width: 140,
+                                render: (_: unknown, r: CopyItem) => <SeenReceipt seen={r.Seen} seenDate={r.SeenDate} lastSeenDate={r.LastSeenDate} />,
                             },
                             {
                                 title: 'توضیحات',

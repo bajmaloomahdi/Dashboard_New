@@ -31,6 +31,7 @@ import DataGrid from '../../Components/DataGrid';
 import DueDateBadge from '../../Components/DueDateBadge';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
+import { MessageChangeTag, SeenCountTag, messageRowClass, messageAttention, MESSAGE_ROW_CSS } from '../../Components/MessageReadBadges';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -52,6 +53,13 @@ interface Message {
     MessageStatusID: number;
     MessageStatusName: string;
     IsCopy: boolean | number;
+    /** کارتابل: آیا پیام تا حالا باز شده؛ صادره همیشه 1 */
+    IsRead?: boolean | number;
+    /** تغییرِ خوانده‌نشده (توضیح/ضمیمهٔ تازه، ارجاع، تغییرِ وضعیت، رونوشت) */
+    HasUnread?: boolean | number;
+    /** فقط صادره: رسیدِ مشاهده */
+    RecipientCount?: number | string;
+    SeenCount?: number | string;
 }
 
 interface FilterItem {
@@ -233,8 +241,10 @@ export default function MessagesIndex() {
                         <MessageOutlined style={{ color: '#fff', fontSize: 16 }} />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
-                        <Space size={6}>
-                            <Text strong>{record.Subject}</Text>
+                        <Space size={6} wrap>
+                            <Text strong style={{ fontWeight: messageAttention(record) ? 700 : 500 }}>{record.Subject}</Text>
+                            <MessageChangeTag record={record} />
+                            {activeMode === 'sent' ? <SeenCountTag seen={record.SeenCount} total={record.RecipientCount} /> : null}
                             {record.IsCopy === 1 || record.IsCopy === true ? (
                                 <Tag
                                     icon={<CopyOutlined />}
@@ -439,7 +449,10 @@ export default function MessagesIndex() {
                     customColumns={customColumns}
                     rowKey="MessageID"
                     showColumnSearch={false}
+                    rowClassName={messageRowClass}
+                    onRowClick={(record) => router.visit(`/messages/${record.MessageID}`)}
                 />
+                <style>{MESSAGE_ROW_CSS}</style>
             </Card>
 
             <NotificationModal

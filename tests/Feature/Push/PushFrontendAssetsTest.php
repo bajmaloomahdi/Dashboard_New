@@ -63,6 +63,8 @@ class PushFrontendAssetsTest extends TestCase
         $this->assertStringContainsString('بله، فعال کن', $prompt);
         $this->assertStringContainsString('فعلاً نه', $prompt);
         $this->assertStringContainsString('اعلان‌ها با موفقیت فعال شدند', $prompt);
+        // پنجرهٔ فعال‌سازی دکمهٔ اعلانِ آزمایشی ندارد (فقط در تنظیماتِ اعلان)
+        $this->assertStringNotContainsString('sendTest', $prompt);
         // مجوز فقط از راهِ enablePush (کلیکِ کاربر) خواسته می‌شود
         $this->assertStringNotContainsString('requestPermission', $prompt);
         // «فعلاً نه» و بستن: تعویق؛ هر Refresh دوباره نمایش داده نمی‌شود

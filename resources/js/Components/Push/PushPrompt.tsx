@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Modal, Result, Space, Typography } from 'antd';
-import { BellOutlined, SendOutlined } from '@ant-design/icons';
-import { enablePush, getConfig, permission, pushSupport, PushResultInfo, sendTest, syncOnLoad } from './pushClient';
+import { BellOutlined } from '@ant-design/icons';
+import { enablePush, getConfig, permission, pushSupport, PushResultInfo, syncOnLoad } from './pushClient';
 import { failureHelp, FailureHelpView } from './pushGuide';
 
 const { Paragraph, Text } = Typography;
@@ -59,7 +59,6 @@ export default function PushPrompt({ userId }: { userId: number | string | undef
     const [mode, setMode] = useState<Mode>('hidden');
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState<PushResultInfo | null>(null);
-    const [testMessage, setTestMessage] = useState<string | null>(null);
     const started = useRef<string | null>(null);
 
     useEffect(() => {
@@ -142,13 +141,6 @@ export default function PushPrompt({ userId }: { userId: number | string | undef
 
     const close = () => setMode('hidden');
 
-    const test = () => {
-        setBusy(true);
-        sendTest()
-            .then((r) => setTestMessage(r.message))
-            .finally(() => setBusy(false));
-    };
-
     const help = failure ? failureHelp(failure.code, failure.message) : null;
 
     return (
@@ -192,17 +184,12 @@ export default function PushPrompt({ userId }: { userId: number | string | undef
                 <Result
                     status="success"
                     title="اعلان‌ها با موفقیت فعال شدند"
-                    subTitle={testMessage ?? 'می‌توانید برایِ اطمینان یک اعلانِ آزمایشی بفرستید.'}
+                    subTitle="از این پس پیام‌ها، ارجاع‌ها و یادآوری‌هایِ تازه رویِ همین دستگاه اعلان می‌شوند."
                     style={{ padding: '8px 0' }}
                     extra={
-                        <Space wrap style={{ justifyContent: 'center' }}>
-                            <Button icon={<SendOutlined />} loading={busy} onClick={test}>
-                                ارسالِ اعلانِ آزمایشی
-                            </Button>
-                            <Button type="primary" onClick={close}>
-                                بستن
-                            </Button>
-                        </Space>
+                        <Button type="primary" onClick={close}>
+                            بستن
+                        </Button>
                     }
                 />
             ) : null}

@@ -48,7 +48,7 @@ class CrmBrandTest extends TestCase
 
         return $this->as(self::USER_FULL)->postJson('/crm/parties', array_merge([
             'partyNature' => 'LEGAL',
-            'officialName' => 'شرکتِ تستیِ برند',
+            'officialName' => 'شرکتِ تستیِ برند' . ' ' . bin2hex(random_bytes(3)),
             'identifierNumber' => $digits,
         ], $overrides))->assertOk()->json();
     }

@@ -33,13 +33,13 @@ class CrmPersonInteractionTest extends TestCase
         }
 
         return (int) $this->as(self::USER_FULL)->postJson('/crm/parties', [
-            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تعاملِ مخاطب', 'identifierNumber' => $digits,
+            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تعاملِ مخاطب' . ' ' . bin2hex(random_bytes(3)), 'identifierNumber' => $digits,
         ])->assertOk()->json('partyId');
     }
 
     private function createPerson(): int
     {
-        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'lastName' => 'تعامل‌دار'])
+        return (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'lastName' => 'تعامل‌دار' . ' ' . bin2hex(random_bytes(3))])
             ->assertOk()->json('personId');
     }
 
@@ -95,7 +95,7 @@ class CrmPersonInteractionTest extends TestCase
 
         $items = collect($this->listForPerson($person));
         $this->assertEqualsCanonicalizing(['مستقیم', 'از طرفِ شرکت'], $items->pluck('Subject')->all());
-        $this->assertSame('شرکتِ تعاملِ مخاطب', $items->firstWhere('Subject', 'از طرفِ شرکت')['PartyName']);
+        $this->assertStringStartsWith('شرکتِ تعاملِ مخاطب', (string) $items->firstWhere('Subject', 'از طرفِ شرکت')['PartyName']);
 
         // تعاملِ مستقیمِ مخاطب در فهرستِ طرف‌حساب نمی‌آید
         $partyItems = collect($this->as(self::USER_FULL)->getJson("/crm/interactions?partyId={$party}")->json('items'));

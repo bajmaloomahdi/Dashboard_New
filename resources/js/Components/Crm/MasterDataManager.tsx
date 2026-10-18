@@ -54,6 +54,18 @@ export interface GrandParentSelectConfig {
     displayColumn?: { title: string; dataIndex: string };
 }
 
+/** ستونِ عددیِ اضافه (مثلاً جمعیت): ورودی در فرم (editable) یا فقط نمایشِ مقدارِ محاسبه‌شده در سرور */
+export interface NumberFieldConfig {
+    /** نامِ فیلد در ردیف‌هایِ برگشتی، مثلاً 'Population' */
+    dataIndex: string;
+    /** عنوانِ ستون/فیلد، مثلاً «جمعیت» یا «جمعیت (جمعِ شهرها)» */
+    title: string;
+    /** true = در فرم وارد می‌شود؛ false = فقط نمایش (مثلاً جمعِ زیرمجموعه‌ها) */
+    editable?: boolean;
+    /** نامِ پارامتر در بدنهٔ Save (فقط editable)، مثلاً 'population' */
+    paramName?: string;
+}
+
 interface MasterDataManagerProps {
     /** نامِ فیلدِ PK ردیف‌ها، مثلاً 'DepartmentID' */
     idField: string;
@@ -72,6 +84,7 @@ interface MasterDataManagerProps {
      * عمداً فقط والدِ مستقیم را می‌پرسد و این سطح را نشان نمی‌دهد. */
     grandParentSelect?: GrandParentSelectConfig;
     namePlaceholder?: string;
+    numberField?: NumberFieldConfig;
 }
 
 interface RowDraft {
@@ -79,9 +92,12 @@ interface RowDraft {
     displayName: string;
     sortOrder: number;
     parentId: number | null;
+    numberValue: number | null;
 }
 
-const emptyDraft: RowDraft = { id: null, displayName: '', sortOrder: 0, parentId: null };
+const emptyDraft: RowDraft = { id: null, displayName: '', sortOrder: 0, parentId: null, numberValue: null };
+
+const formatNumber = (v: unknown) => (v === null || v === undefined || v === '' ? '' : Number(v).toLocaleString('en-US'));
 
 /**
  * مدیرِ عمومیِ Master Data — برایِ همهٔ فهرست‌هایِ سادهٔ CRM (دپارتمان/نوع/فعالیت/
@@ -100,6 +116,7 @@ export default function MasterDataManager({
     parentSelect,
     grandParentSelect,
     namePlaceholder,
+    numberField,
 }: MasterDataManagerProps) {
     const [items, setItems] = useState<MasterDataRow[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
@@ -119,6 +136,9 @@ export default function MasterDataManager({
 
     useEffect(() => {
         loadParentOptions();
+        // ستونِ عددیِ محاسبه‌شده (مثلاً جمعیتِ شهرستان = جمعِ شهرها) با تغییرِ تبِ دیگری عوض می‌شود؛
+        // با هر بار بازشدنِ تب از سرور تازه خوانده می‌شود، نه از Propsِ لحظهٔ بارگذاریِ صفحه.
+        if (numberField && !numberField.editable) reload();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -137,6 +157,7 @@ export default function MasterDataManager({
         ...(parentCol ? { parent: { get: (r: MasterDataRow) => r[parentCol.dataIndex], mode: 'text' as const } } : {}),
         code: { get: (r) => r.Code, mode: 'text' },
         name: { get: (r) => r.DisplayName, mode: 'text' },
+        ...(numberField ? { number: { get: (r: MasterDataRow) => r[numberField.dataIndex], mode: 'text' as const } } : {}),
         status: { get: (r) => (toBool(r.IsActive) ? '1' : '0'), mode: 'exact' },
     });
     const displayedItems = colF.filtered;
@@ -173,6 +194,7 @@ export default function MasterDataManager({
             displayName: row.DisplayName,
             sortOrder: row.SortOrder,
             parentId: parentSelect ? row[parentSelect.idField] ?? null : null,
+            numberValue: numberField ? (row[numberField.dataIndex] === null || row[numberField.dataIndex] === undefined ? null : Number(row[numberField.dataIndex])) : null,
         });
         setError(null);
         setFormOpen(true);
@@ -202,6 +224,9 @@ export default function MasterDataManager({
         }
         if (parentSelect) {
             body[parentSelect.paramName] = draft.parentId;
+        }
+        if (numberField?.editable && numberField.paramName) {
+            body[numberField.paramName] = draft.numberValue;
         }
         const res = await crmApi(apiBase, 'POST', body);
         setSaving(false);
@@ -259,6 +284,15 @@ export default function MasterDataManager({
             dataIndex: 'DisplayName',
             key: 'DisplayName',
         },
+        ...(numberField
+            ? [{
+                  title: <FilterHeader label={numberField.title}><TextFilterInput value={colF.values.number} onChange={(v) => colF.setValue('number', v)} /></FilterHeader>,
+                  dataIndex: numberField.dataIndex,
+                  key: numberField.dataIndex,
+                  align: 'left' as const,
+                  render: (v: unknown) => (v === null || v === undefined ? <Text type="secondary">—</Text> : <Text dir="ltr">{formatNumber(v)}</Text>),
+              }]
+            : []),
         {
             title: (
                 <FilterHeader label="وضعیت">
@@ -368,6 +402,22 @@ export default function MasterDataManager({
                                 placeholder={namePlaceholder || entityLabel}
                             />
                         </div>
+                        {numberField?.editable ? (
+                            <div>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>{numberField.title}</Text>
+                                <InputNumber
+                                    style={{ width: 160 }}
+                                    min={0}
+                                    max={2147483647}
+                                    precision={0}
+                                    value={draft.numberValue}
+                                    formatter={(v) => formatNumber(v)}
+                                    parser={(v) => (v ? Number(String(v).replace(/[^\d]/g, '')) : (null as unknown as number))}
+                                    onChange={(v) => setDraft((d) => ({ ...d, numberValue: v === null || v === undefined ? null : Number(v) }))}
+                                    placeholder="اختیاری"
+                                />
+                            </div>
+                        ) : null}
                         <div>
                             <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>ترتیب</Text>
                             <InputNumber style={{ width: 90 }} value={draft.sortOrder} onChange={(v) => setDraft((d) => ({ ...d, sortOrder: v ?? 0 }))} />

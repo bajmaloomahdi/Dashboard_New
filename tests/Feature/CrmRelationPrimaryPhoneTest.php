@@ -49,13 +49,13 @@ class CrmRelationPrimaryPhoneTest extends TestCase
         }
 
         return (int) $this->as(self::USER_FULL)->postJson('/crm/parties', [
-            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تماسِ اصلی', 'identifierNumber' => $digits,
+            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تماسِ اصلی' . ' ' . bin2hex(random_bytes(3)), 'identifierNumber' => $digits,
         ])->assertOk()->json('partyId');
     }
 
     private function personRelatedTo(int $partyId): int
     {
-        $personId = (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'lastName' => 'تماس‌دار'])
+        $personId = (int) $this->as(self::USER_FULL)->postJson('/crm/persons', ['titleId' => $this->crmTitleId(), 'lastName' => 'تماس‌دار' . ' ' . bin2hex(random_bytes(3))])
             ->assertOk()->json('personId');
         $this->as(self::USER_FULL)->postJson('/crm/relations', ['partyId' => $partyId, 'personId' => $personId])
             ->assertOk()->assertJson(['success' => true]);

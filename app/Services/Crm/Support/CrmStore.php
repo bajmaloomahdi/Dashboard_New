@@ -234,8 +234,8 @@ class CrmStore
     public function saveCity(array $p): object
     {
         return $this->write(
-            'EXEC dbo.sp_Crm_SaveCity @CityID = ?, @CountyID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?',
-            [$p['cityId'] ?? null, $p['countyId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId']]
+            'EXEC dbo.sp_Crm_SaveCity @CityID = ?, @CountyID = ?, @DisplayName = ?, @SortOrder = ?, @UserID = ?, @Population = ?',
+            [$p['cityId'] ?? null, $p['countyId'], $p['displayName'], $p['sortOrder'] ?? 0, $p['userId'], $p['population'] ?? null]
         );
     }
 

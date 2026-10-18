@@ -298,6 +298,7 @@ class CrmMasterDataService
             'countyId'    => $input['countyId'] ?? null,
             'displayName' => trim($input['displayName'] ?? ''),
             'sortOrder'   => $input['sortOrder'] ?? 0,
+            'population'  => isset($input['population']) ? (int) $input['population'] : null,
             'userId'      => $userId,
         ]);
     }

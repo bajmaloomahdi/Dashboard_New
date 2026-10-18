@@ -146,6 +146,12 @@ class CrmGeographyController extends CrmApiController
             'countyId'    => 'required|integer|exists:CrmCounties,CountyID',
             'displayName' => 'required|string|max:200',
             'sortOrder'   => 'nullable|integer',
+            // جمعیتِ شهر؛ جمعیتِ شهرستان/استان از جمعِ شهرها محاسبه می‌شود و ورودی ندارد
+            'population'  => 'nullable|integer|min:0|max:2147483647',
+        ], [
+            'population.integer' => 'جمعیت باید عددِ صحیح باشد.',
+            'population.min' => 'جمعیت نمی‌تواند منفی باشد.',
+            'population.max' => 'جمعیت بیش از حدِ مجاز است.',
         ]);
 
         return $this->runCrm(function () use ($validated) {

@@ -44,7 +44,7 @@ class CrmPartyImageTest extends TestCase
         }
 
         return (int) $this->as(self::USER_FULL)->postJson('/crm/parties', [
-            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تصویر', 'identifierNumber' => $digits,
+            'partyNature' => 'LEGAL', 'officialName' => 'شرکتِ تصویر' . ' ' . bin2hex(random_bytes(3)), 'identifierNumber' => $digits,
         ])->assertOk()->json('partyId');
     }
 

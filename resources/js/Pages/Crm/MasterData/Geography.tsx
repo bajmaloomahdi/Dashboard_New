@@ -9,9 +9,9 @@ import MasterDataManager, { MasterDataRow } from '../../../Components/Crm/Master
 import { STYLES } from '../../../theme';
 
 interface PageProps {
-    provinces: (MasterDataRow & { ProvinceID: number })[];
-    counties: (MasterDataRow & { CountyID: number; ProvinceID: number; ProvinceName: string })[];
-    cities: (MasterDataRow & { CityID: number; CountyID: number; CountyName: string; ProvinceID: number; ProvinceName: string })[];
+    provinces: (MasterDataRow & { ProvinceID: number; Population: number | string | null })[];
+    counties: (MasterDataRow & { CountyID: number; ProvinceID: number; ProvinceName: string; Population: number | string | null })[];
+    cities: (MasterDataRow & { CityID: number; CountyID: number; CountyName: string; ProvinceID: number; ProvinceName: string; Population: number | string | null })[];
     neighborhoods: (MasterDataRow & { NeighborhoodID: number; CityID: number; CityName: string; CountyID: number; CountyName: string })[];
     municipalZones: MasterDataRow[];
     canManage: boolean;
@@ -59,6 +59,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="province"
                         entityLabel="استان"
                         namePlaceholder="تهران"
+                        numberField={{ dataIndex: 'Population', title: 'جمعیت (جمعِ شهرستان‌ها)' }}
                     />
                 </Card>
             )}
@@ -74,6 +75,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="county"
                         entityLabel="شهرستان"
                         namePlaceholder="شمیرانات"
+                        numberField={{ dataIndex: 'Population', title: 'جمعیت (جمعِ شهرها)' }}
                         parentSelect={{
                             label: 'استان',
                             paramName: 'provinceId',
@@ -96,6 +98,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="city"
                         entityLabel="شهر"
                         namePlaceholder="تجریش"
+                        numberField={{ dataIndex: 'Population', title: 'جمعیت', editable: true, paramName: 'population' }}
                         parentSelect={{
                             label: 'شهرستان',
                             paramName: 'countyId',

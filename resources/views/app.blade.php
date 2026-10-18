@@ -11,7 +11,7 @@
 
     <!-- نام و آیکون هنگام افزودن به صفحه اصلی موبایل (PWA) -->
     <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="/company/favicon">
+    <link rel="apple-touch-icon" href="/company/pwa-icon/180">
     <meta name="apple-mobile-web-app-title" content="{{ $siteTitle ?? 'پنل مدیریت' }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">

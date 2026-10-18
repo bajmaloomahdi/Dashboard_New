@@ -10,6 +10,7 @@ import {
     FolderOutlined,
     AppstoreOutlined,
     CalendarOutlined,
+    NotificationOutlined,
 } from '@ant-design/icons';
 import { useMemo } from 'react';
 import type { Menu as MenuType, MenuTree } from '../Types';
@@ -35,6 +36,7 @@ const getMenuIcon = (menuCode: string) => {
         ADMIN: <SettingOutlined />,
         USERS: <TeamOutlined />,
         ROLES: <SafetyOutlined />,
+        PUSH_BROADCAST: <NotificationOutlined />,
         SETTINGS: <SettingOutlined />,
         CEO_REPORT: <BarChartOutlined />,
         SALE_REPORT: <BarChartOutlined />,

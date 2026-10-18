@@ -19,6 +19,12 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\GlobalSearch\Support\SqlAccessContextResolver::class
         );
 
+        // Web Push — ارسالِ واقعی با minishlink/web-push؛ در آزمون‌ها با Transportِ ساختگی جایگزین می‌شود
+        $this->app->singleton(
+            \App\Services\Push\Contracts\PushTransport::class,
+            \App\Services\Push\WebPushTransport::class
+        );
+
         // جست‌وجویِ سراسری — محدودیتِ نرخ: redis (پیش‌فرض، اتمیک، fail-closed) یا cache (فقط آزمون، Store = array).
         // هر مقدارِ ناشناخته هم Redis در نظر گرفته می‌شود تا محدودیت هرگز بی‌صدا ضعیف نشود.
         $this->app->bind(\App\Services\GlobalSearch\RateLimit\SearchRateLimiter::class, function () {

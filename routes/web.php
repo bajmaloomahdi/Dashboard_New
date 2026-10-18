@@ -209,6 +209,20 @@ Route::middleware('auth')->group(function () {
     Route::get('messages/{id}/attachments/{attachmentId}', [MessageController::class, 'downloadAttachment'])->name('messages.attachments.show');
     Route::get('messages/{id}/comments/{commentId}/attachments/{attachmentId}', [MessageController::class, 'downloadCommentAttachment'])->name('messages.comment-attachments.show');
 
+    // Web Push — اشتراکِ دستگاه‌هایِ خودِ کاربر (اعلان در زمانِ بسته‌بودنِ برنامه)
+    Route::get('push/config', [\App\Http\Controllers\PushSubscriptionController::class, 'config'])->name('push.config');
+    // endpoint در بدنه (نه Query String) تا در لاگِ سرور ثبت نشود
+    Route::post('push/subscriptions/list', [\App\Http\Controllers\PushSubscriptionController::class, 'index'])->name('push.subscriptions.index');
+    Route::post('push/subscriptions', [\App\Http\Controllers\PushSubscriptionController::class, 'store'])->name('push.subscriptions.store');
+    Route::post('push/subscriptions/unsubscribe', [\App\Http\Controllers\PushSubscriptionController::class, 'unsubscribe'])->name('push.subscriptions.unsubscribe');
+    Route::post('push/test', [\App\Http\Controllers\PushSubscriptionController::class, 'test'])->name('push.test');
+    // اعلانِ عمومی (فقط با دسترسیِ PUSH_BROADCAST — در Controller بررسی می‌شود)
+    Route::get('push/broadcasts', [\App\Http\Controllers\PushBroadcastController::class, 'index'])->name('push.broadcasts.index');
+    Route::get('push/broadcasts/users', [\App\Http\Controllers\PushBroadcastController::class, 'users'])->name('push.broadcasts.users');
+    Route::get('push/broadcasts/list', [\App\Http\Controllers\PushBroadcastController::class, 'list'])->name('push.broadcasts.list');
+    Route::post('push/broadcasts/preview', [\App\Http\Controllers\PushBroadcastController::class, 'preview'])->name('push.broadcasts.preview');
+    Route::post('push/broadcasts', [\App\Http\Controllers\PushBroadcastController::class, 'store'])->middleware('throttle:10,1')->name('push.broadcasts.store');
+
 
     // اولویت‌های پیام
     Route::get('msg-priorities', [MsgPriorityController::class, 'index'])->name('msg-priorities.index');
@@ -584,6 +598,7 @@ Route::middleware('auth')->group(function () {
 // لوگو و فاوآیکون شرکت
 Route::get('company/logo', [CompanyController::class, 'logo'])->name('company.logo');
 Route::get('company/favicon', [CompanyController::class, 'favicon'])->name('company.favicon');
+Route::get('company/pwa-icon/{size}', [CompanyController::class, 'pwaIcon'])->whereNumber('size')->name('company.pwa-icon');
 Route::get('manifest.json', [CompanyController::class, 'manifest'])->name('company.manifest');
 
 // مسیر اصلی → لاگین

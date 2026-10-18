@@ -17,6 +17,7 @@ import { router, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import type { User } from '../Types';
 import MenuSearchPalette from './GlobalSearch/MenuSearchPalette';
+import PushSettingsModal from './Push/PushSettingsModal';
 import raga360Logo from '../../images/raga360-logo.webp';
 
 const { Header: AntHeader } = Layout;
@@ -125,12 +126,21 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
     const persianTime = getPersianTime(currentTime);
 
     const handleLogout = () => {
+        // پرچمِ همگام‌سازیِ اشتراکِ اعلان پاک شود تا کاربرِ بعدیِ همین مرورگر اشتراک را به نامِ خودش ثبت کند
+        try {
+            sessionStorage.removeItem('raga360.push.synced');
+        } catch {
+            /* بی‌اهمیت */
+        }
         router.post('/logout');
     };
 
     const handleChangePassword = () => {
         router.visit('/change-password');
     };
+
+    // اعلانِ گوشی/مرورگر (Web Push)
+    const [pushOpen, setPushOpen] = useState(false);
 
     const handleBellClick = () => {
         router.visit('/messages');
@@ -206,6 +216,11 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                 <div className="header-menu-item" onClick={handleChangePassword}>
                     <KeyOutlined style={{ color: '#1890ff', fontSize: 16 }} />
                     <Text>تغییر کلمه عبور</Text>
+                </div>
+
+                <div className="header-menu-item" onClick={() => setPushOpen(true)}>
+                    <BellOutlined style={{ color: '#667eea', fontSize: 16 }} />
+                    <Text>اعلان‌هایِ گوشی و مرورگر</Text>
                 </div>
 
                 <Divider style={{ margin: '8px 0' }} />
@@ -439,6 +454,8 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
                     </div>
                 </Dropdown>
             </Space>
+
+            <PushSettingsModal open={pushOpen} onClose={() => setPushOpen(false)} />
 
             <MenuSearchPalette
                 open={searchOpen}

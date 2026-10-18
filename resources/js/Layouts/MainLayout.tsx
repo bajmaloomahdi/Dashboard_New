@@ -4,6 +4,7 @@ import { usePage } from '@inertiajs/react';
 import Sidebar, { SidebarMenu } from '../Components/Sidebar';
 import Header from '../Components/Header';
 import ReminderWatcher from '../Components/ReminderWatcher';
+import PushPrompt from '../Components/Push/PushPrompt';
 
 const { Content, Footer } = Layout;
 const { useBreakpoint } = Grid;
@@ -46,6 +47,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <Layout style={{ minHeight: '100vh', direction: 'rtl' }}>
             {/* ناظرِ سراسریِ یادآوری‌ها — روی همه‌ی صفحات فعال است */}
             <ReminderWatcher />
+
+            {/* اعلانِ گوشی/مرورگر: همگام‌سازیِ اشتراکِ این دستگاه و پرسشِ فعال‌سازی پس از ورود */}
+            <PushPrompt userId={auth?.user?.UserID} />
 
             {/* Sider دسکتاپ — در موبایل با CSS مخفی می‌شود */}
             <Sidebar menus={menus || []} collapsed={collapsed} currentUrl={currentUrl} />

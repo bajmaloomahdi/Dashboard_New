@@ -346,3 +346,19 @@ Artisan::command('db:dump-sps', function () {
 
     $this->info(" <fg=green>[SUCCESS]</> تعداد {$count} Stored Procedure در پوشه sql/procedures ذخیره شد.");
 })->purpose('استخراج تمام Stored Procedureها برای نگهداری در گیت');
+/*
+|--------------------------------------------------------------------------
+| ۵. Web Push — زمان‌بندی (فقط سرویسِ scheduler در docker-compose آن را اجرا می‌کند: php artisan schedule:work)
+|--------------------------------------------------------------------------
+| withoutOverlapping + onOneServer: قفلِ مشترک در Cache Storeِ دیتابیس (جدولِ cache_locks)، تا اجرایِ هم‌زمان در
+| چند نمونهٔ برنامه رخ ندهد؛ Claimِ اتمیکِ Outbox در SQL لایهٔ دومِ حفاظت است.
+*/
+Illuminate\Support\Facades\Schedule::command('push:dispatch')
+    ->everyMinute()
+    ->withoutOverlapping(10)
+    ->onOneServer();
+
+Illuminate\Support\Facades\Schedule::command('push:cleanup')
+    ->dailyAt('03:30')
+    ->withoutOverlapping(30)
+    ->onOneServer();

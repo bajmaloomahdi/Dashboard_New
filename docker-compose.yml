@@ -49,6 +49,34 @@ services:
     networks:
       - dashboard
 
+  # Web Push — پردازشگرِ پس‌زمینه (Laravel Scheduler: هر دقیقه push:dispatch و روزانه push:cleanup).
+  # تنها روشِ مصوبِ اجرایِ Scheduler است؛ رویِ IIS یا نمونه‌هایِ دیگرِ برنامه Scheduler اجرا نشود.
+  # فعال‌سازی: docker compose --profile push up -d scheduler   (پروفایلِ جدا: `docker compose up` عادی آن را بالا نمی‌آورد)
+  # جلوگیری از اجرایِ هم‌زمان: یک نمونه (container_name ثابت) + قفلِ مشترکِ دیتابیس (withoutOverlapping/onOneServer)
+  # + Claimِ اتمیکِ Outbox در SQL. لاگ: docker logs dashboard_scheduler و storage/logs/push-*.log
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: dashboard_scheduler
+    restart: unless-stopped
+    user: www-data
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes:
+      - .:/var/www/html
+      - app_vendor:/var/www/html/vendor
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles: ["push"]
+    networks:
+      - dashboard
+
   # Global Search — Redis مستقلِ Rate Limit (کاملاً جدا از Redisِ اصلیِ برنامه).
   # رمز فقط در .env: GS_RATELIMIT_REDIS_PASSWORD (فقط نویسه‌های A-Z a-z 0-9 _ -). کاربر/ACL هنگامِ شروع از همان مقدار ساخته می‌شود.
   # فعال‌سازی/به‌روزرسانی: docker compose --profile globalsearch up -d gs-redis

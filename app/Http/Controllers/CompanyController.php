@@ -95,25 +95,73 @@ class CompanyController extends Controller
         $title = $company->SiteTitle ?: ($company->Name ?? 'پنل مدیریت');
 
         return response()->json([
+            'id' => '/',
             'name' => $title,
             'short_name' => $title,
             'start_url' => '/',
+            'scope' => '/',
             'display' => 'standalone',
+            'dir' => 'rtl',
+            'lang' => 'fa',
             'background_color' => '#ffffff',
             'theme_color' => '#667eea',
+            // آیکون‌هایِ PNGِ مربعِ واقعی (برایِ نصب و Web Push در اندروید/iPhone) — از فاوآیکون/لوگویِ همان شرکت ساخته می‌شوند
             'icons' => [
-                [
-                    'src' => '/company/favicon',
-                    'sizes' => '192x192',
-                    'type' => $company->FaviconMimeType ?? 'image/png',
-                ],
-                [
-                    'src' => '/company/favicon',
-                    'sizes' => '512x512',
-                    'type' => $company->FaviconMimeType ?? 'image/png',
-                ],
+                ['src' => '/company/pwa-icon/192', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/company/pwa-icon/512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/company/pwa-icon/512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
             ],
         ])->header('Content-Type', 'application/manifest+json');
+    }
+
+    /**
+     * آیکونِ PNGِ مربع با اندازهٔ دقیق (۱۸۰ برایِ iPhone، ۱۹۲ و ۵۱۲ برایِ مانیفست) از فاوآیکون یا لوگویِ شرکت؛
+     * زمینهٔ سفید و ۱۰٪ حاشیه (ناحیهٔ امنِ آیکونِ maskable). اگر هیچ تصویرِ قابلِ‌خواندنی نبود، یک آیکونِ ساده ساخته می‌شود.
+     */
+    public function pwaIcon(int $size)
+    {
+        abort_unless(in_array($size, [180, 192, 512], true), 404);
+
+        $source = null;
+        foreach (['sp_GetCompanyFavicon' => 'Favicon', 'sp_GetCompanyLogo' => 'Logo'] as $sp => $column) {
+            try {
+                $row = DB::select("EXEC {$sp}")[0] ?? null;
+                if ($row && ! empty($row->{$column})) {
+                    $img = @imagecreatefromstring($row->{$column});
+                    if ($img !== false) {
+                        $source = $img;
+                        break;
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        $canvas = imagecreatetruecolor($size, $size);
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+        if ($source) {
+            $sw = imagesx($source);
+            $sh = imagesy($source);
+            $box = (int) round($size * 0.8);
+            $scale = min($box / max(1, $sw), $box / max(1, $sh));
+            $w = max(1, (int) round($sw * $scale));
+            $h = max(1, (int) round($sh * $scale));
+            imagecopyresampled($canvas, $source, (int) (($size - $w) / 2), (int) (($size - $h) / 2), 0, 0, $w, $h, $sw, $sh);
+            imagedestroy($source);
+        } else {
+            $c = imagecolorallocate($canvas, 102, 126, 234);
+            $m = (int) round($size * 0.15);
+            imagefilledrectangle($canvas, $m, $m, $size - $m, $size - $m, $c);
+        }
+
+        ob_start();
+        imagepng($canvas);
+        $png = (string) ob_get_clean();
+        imagedestroy($canvas);
+
+        return response($png)
+            ->header('Content-Type', 'image/png')
+            ->header('Cache-Control', 'public, max-age=86400');
     }
 
     /**

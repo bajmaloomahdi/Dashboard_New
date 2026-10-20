@@ -20,10 +20,21 @@ export const toEnglishDigits = (str: string): string => {
     return result;
 };
 
+/**
+ * رشتهٔ تاریخ‌زمانِ سرور («YYYY-MM-DD[ HH:mm[:ss[.fffffff]]]»، ساعتِ محلی) → Date.
+ * Safari/iOS قالبِ با فاصله را نمی‌شناسد و `new Date()` در آن Invalid Date می‌دهد.
+ */
+export const parseServerDateTime = (value: Date | string): Date => {
+    if (value instanceof Date) return value;
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(value));
+    if (!m) return new Date(value);
+    return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
+};
+
 /** تبدیل تاریخ میلادی (Date یا رشته YYYY-MM-DD) به رشته شمسی YYYY/MM/DD برای نمایش */
 export const gregorianToJalaliDisplay = (value: Date | string | null): string => {
     if (!value) return '';
-    const date = value instanceof Date ? value : new Date(value);
+    const date = parseServerDateTime(value);
     if (isNaN(date.getTime())) return '';
     const d = new DateObject({ date, calendar: persian, locale: persian_fa });
     return toEnglishDigits(d.format('YYYY/MM/DD'));
@@ -32,7 +43,7 @@ export const gregorianToJalaliDisplay = (value: Date | string | null): string =>
 /** تبدیل تاریخ‌زمان میلادی به رشته شمسی همراه با ساعت: YYYY/MM/DD HH:mm */
 export const gregorianToJalaliDateTimeDisplay = (value: Date | string | null): string => {
     if (!value) return '';
-    const date = value instanceof Date ? value : new Date(value);
+    const date = parseServerDateTime(value);
     if (isNaN(date.getTime())) return '';
     const d = new DateObject({ date, calendar: persian, locale: persian_fa });
     return toEnglishDigits(d.format('YYYY/MM/DD HH:mm'));

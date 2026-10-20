@@ -60,9 +60,15 @@ class PushStore
         return DB::select('EXEC dbo.sp_Push_ClaimBatch @Worker = ?, @BatchSize = ?, @LeaseSeconds = ?', [$worker, $batchSize, $leaseSeconds]);
     }
 
-    public function checkOutbox(int $outboxId, string $worker): string
+    /** @return object{Validity: string, ExpiresInSeconds: ?int} — ثانیه‌هایِ باقی‌مانده تا پایانِ جلسه با ساعتِ SQL (پچِ ۱۱۳) */
+    public function checkOutbox(int $outboxId, string $worker): object
     {
-        return (string) (DB::selectOne('EXEC dbo.sp_Push_CheckOutbox @PushOutboxID = ?, @Worker = ?', [$outboxId, $worker])->Validity ?? 'LEASE_LOST');
+        $row = DB::selectOne('EXEC dbo.sp_Push_CheckOutbox @PushOutboxID = ?, @Worker = ?', [$outboxId, $worker]);
+
+        return (object) [
+            'Validity' => (string) ($row->Validity ?? 'LEASE_LOST'),
+            'ExpiresInSeconds' => isset($row->ExpiresInSeconds) ? (int) $row->ExpiresInSeconds : null,
+        ];
     }
 
     public function targets(int $outboxId, string $worker): array
@@ -140,6 +146,12 @@ class PushStore
     public function broadcastContent(int $recipientId): ?object
     {
         return DB::selectOne('EXEC dbo.sp_Push_GetBroadcastContent @PushBroadcastRecipientID = ?', [$recipientId]) ?: null;
+    }
+
+    /** یادآوریِ خودِ گیرنده (برایِ موضوع/متنِ Push) — sp_GetReminderById مالکیت و فعال بودن را کنترل می‌کند */
+    public function reminder(int $reminderId, int $userId): ?object
+    {
+        return DB::selectOne('EXEC sp_GetReminderById @ReminderID = ?, @UserID = ?', [$reminderId, $userId]) ?: null;
     }
 
     /** @param  array<int|string>  $ids */

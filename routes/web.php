@@ -264,6 +264,14 @@ Route::middleware('auth')->group(function () {
 
     // یادآوری‌ها (قبل از مسیرهای {id} رویداد تا تداخل نداشته باشند)
     Route::get('/calendar/reminders/due', [CalendarController::class, 'dueReminders'])->name('calendar.reminders.due');
+    Route::get('/calendar/invitations', [CalendarController::class, 'pendingInvitations'])->name('calendar.invitations.index');
+    Route::get('/calendar/notices', [CalendarController::class, 'notices'])->name('calendar.notices.index');
+    // تقویمِ مشترک: منابع (اشتراک‌گذاشته‌شده با من + واحدهایِ من)، تقویمِ واحد، اشتراکِ تقویمِ شخصی
+    Route::get('/calendar/sources', [CalendarController::class, 'sources'])->name('calendar.sources');
+    Route::get('/calendar/units/{unitId}/events', [CalendarController::class, 'unitEvents'])->whereNumber('unitId')->name('calendar.units.events');
+    Route::get('/calendar/shares', [CalendarController::class, 'shares'])->name('calendar.shares.index');
+    Route::post('/calendar/shares', [CalendarController::class, 'storeShare'])->name('calendar.shares.store');
+    Route::delete('/calendar/shares/{id}', [CalendarController::class, 'destroyShare'])->whereNumber('id')->name('calendar.shares.destroy');
     Route::get('/calendar/reminders', [CalendarController::class, 'myReminders'])->name('calendar.reminders.index');
     Route::post('/calendar/reminders/standalone', [CalendarController::class, 'storeStandaloneReminder'])->name('calendar.reminders.standalone.store');
     Route::put('/calendar/reminders/standalone/{id}', [CalendarController::class, 'updateStandaloneReminder'])->name('calendar.reminders.standalone.update');
@@ -274,6 +282,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/calendar/events/{id}', [CalendarController::class, 'show'])->name('calendar.events.show');
     Route::post('/calendar/events', [CalendarController::class, 'store'])->name('calendar.events.store');
     Route::put('/calendar/events/{id}', [CalendarController::class, 'update'])->name('calendar.events.update');
+    // جابه‌جایی/تغییرِ مدت با Drag & Drop — فقط شروع و پایان
+    Route::post('/calendar/events/{id}/move', [CalendarController::class, 'move'])->name('calendar.events.move');
     Route::delete('/calendar/events/{id}', [CalendarController::class, 'destroy'])->name('calendar.events.destroy');
     Route::post('/calendar/events/{id}/respond', [CalendarController::class, 'respond'])->name('calendar.events.respond');
     Route::post('/calendar/events/{id}/reminder', [CalendarController::class, 'saveMyEventReminder'])->name('calendar.events.reminder');

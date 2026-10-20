@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Modal, Button, Typography, Tag } from 'antd';
 import { BellFilled, CheckOutlined, ClockCircleOutlined, CalendarOutlined } from '@ant-design/icons';
 import { THEME } from '../theme';
-import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay, parseServerDateTime } from '../Utils/jalali';
 
 export interface DueReminder {
     ReminderID: number;
@@ -15,6 +15,8 @@ export interface DueReminder {
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | null;
     OffsetMinutes: number;
     RemindAt: string;
+    /** متن/توضیحاتِ رویداد (فقط با دسترسیِ خودِ کاربر)؛ خالی = بدونِ متن */
+    Description?: string | null;
 }
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
     queueCount: number; // تعداد یادآوری‌های دیگرِ در صف
     acknowledging: boolean;
     onAcknowledge: () => void;
+    /** پنجره پس از این مدت (میلی‌ثانیه) خودکار بسته می‌شود — فقط برایِ نوارِ پیشرفت؛ بستن در ReminderWatcher است */
+    autoCloseMs?: number;
 }
 
 const RECURRENCE_LABEL: Record<string, string> = {
@@ -34,7 +38,7 @@ const RECURRENCE_LABEL: Record<string, string> = {
 /** «۱۰ دقیقه دیگر» / «هم‌اکنون» / «۵ دقیقه گذشته» بر اساس فاصله‌ی زمانِ شروع تا الان */
 function relativeStart(startIso: string | null): { label: string; tone: 'now' | 'soon' | 'past' } {
     if (!startIso) return { label: '', tone: 'now' };
-    const diffMin = Math.round((new Date(startIso).getTime() - Date.now()) / 60000);
+    const diffMin = Math.round((parseServerDateTime(startIso).getTime() - Date.now()) / 60000);
     if (diffMin <= 0 && diffMin > -3) return { label: 'هم‌اکنون آغاز می‌شود', tone: 'now' };
     if (diffMin > 0) {
         if (diffMin < 60) return { label: `${diffMin} دقیقه‌ی دیگر`, tone: 'soon' };
@@ -47,9 +51,9 @@ function relativeStart(startIso: string | null): { label: string; tone: 'now' | 
     return { label: `${Math.floor(ago / 60)} ساعت پیش آغاز شده`, tone: 'past' };
 }
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
-export default function ReminderNotificationModal({ reminder, queueCount, acknowledging, onAcknowledge }: Props) {
+export default function ReminderNotificationModal({ reminder, queueCount, acknowledging, onAcknowledge, autoCloseMs }: Props) {
     const isAllDay = Number(reminder.IsAllDay) === 1;
     const isStandalone = reminder.EntityType === 'STANDALONE' || !reminder.StartDateTime;
 
@@ -57,7 +61,7 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
     // (برای رویدادهای تکرارشونده، StartDateTimeِ سرور همان شروعِ «رخدادِ اصلی» است نه رخدادِ جاری.)
     const occurrenceStart = useMemo(() => {
         if (isStandalone) return null;
-        const base = new Date(reminder.RemindAt);
+        const base = new Date(parseServerDateTime(reminder.RemindAt)); // Safari/iOS: نه new Date(رشتهٔ سرور)
         base.setMinutes(base.getMinutes() + (Number(reminder.OffsetMinutes) || 0));
         const pad = (n: number) => String(n).padStart(2, '0');
         return `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())} ${pad(base.getHours())}:${pad(base.getMinutes())}:00`;
@@ -81,6 +85,10 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
             }}
         >
             <div className="reminder-pop">
+                {autoCloseMs ? (
+                    // نوارِ زمانِ باقی‌مانده تا بسته‌شدنِ خودکار (بدونِ ثبتِ «دیدم»)
+                    <div className="reminder-pop-timer" style={{ animationDuration: `${autoCloseMs}ms`, animationPlayState: acknowledging ? 'paused' : 'running' }} />
+                ) : null}
                 <div className="reminder-pop-top">
                     <span className="reminder-pop-bell">
                         <BellFilled />
@@ -93,8 +101,19 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
 
                 <div className="reminder-pop-body">
                     <Title level={4} style={{ margin: '4px 0 10px', textAlign: 'center' }}>
-                        {reminder.Title || '(بدون عنوان)'}
+                        {reminder.Title || 'یادآوری'}
                     </Title>
+
+                    {reminder.Description && (
+                        // متنِ بلند کوتاه می‌شود؛ «بیشتر» کاملش را همین‌جا نشان می‌دهد (و کامل در جزئیاتِ رویداد هم هست)
+                        <Paragraph
+                            className="reminder-pop-desc"
+                            ellipsis={{ rows: 3, expandable: true, symbol: 'بیشتر' }}
+                            style={{ textAlign: 'center', whiteSpace: 'pre-wrap', color: THEME.textSecondary, marginBottom: 12 }}
+                        >
+                            {reminder.Description}
+                        </Paragraph>
+                    )}
 
                     {!isStandalone && (
                         <div className="reminder-pop-meta">
@@ -182,6 +201,12 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
                     display: inline-block; padding: 3px 12px; border-radius: 20px;
                     border: 1px solid; font-size: 12px; font-weight: 600;
                 }
+.reminder-pop-timer {
+                    position: absolute; top: 0; inset-inline-start: 0; height: 3px; width: 100%; z-index: 1;
+                    background: rgba(255,255,255,.85); transform-origin: right; animation: reminderTimer linear forwards;
+                }
+                @keyframes reminderTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+                .reminder-pop { position: relative; }
                 .reminder-pop-ack.ant-btn-primary {
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     border: none; box-shadow: 0 6px 16px rgba(102,126,234,.35);

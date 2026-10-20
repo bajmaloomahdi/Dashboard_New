@@ -2,6 +2,8 @@
 
 namespace App\Services\Push;
 
+use App\Services\Calendar\CalendarReminderRoller;
+use App\Services\Calendar\ReminderContent;
 use App\Services\Push\Contracts\PushTransport;
 use Illuminate\Support\Facades\Log;
 
@@ -30,7 +32,7 @@ class PushDispatcher
     public function run(?string $worker = null): array
     {
         $worker ??= self::workerName();
-        $stats = ['queuedNotifications' => 0, 'queuedReminders' => 0, 'processed' => 0, 'sent' => 0, 'retry' => 0, 'failed' => 0, 'expired' => 0, 'skipped' => 0];
+        $stats = ['queuedNotifications' => 0, 'queuedReminders' => 0, 'queuedInvites' => 0, 'queuedCancels' => 0, 'rolledReminders' => 0, 'processed' => 0, 'sent' => 0, 'retry' => 0, 'failed' => 0, 'expired' => 0, 'skipped' => 0];
 
         $state = $this->store->heartbeat($worker);
         if (! config('push.enabled')) {
@@ -40,9 +42,13 @@ class PushDispatcher
             return ['status' => 'not-activated'] + $stats;
         }
 
+        // پچِ ۱۱۳: یادآوریِ تکرارشونده‌ای که وقوعش گذشته (کاربر «دیدم» نزده) پیش از صف‌بندی به وقوعِ بعدی می‌رود
+        $stats['rolledReminders'] = app(CalendarReminderRoller::class)->roll();
         $q = $this->store->enqueue(config('push.max_age_minutes'));
         $stats['queuedNotifications'] = (int) ($q->NotificationsQueued ?? 0);
         $stats['queuedReminders'] = (int) ($q->RemindersQueued ?? 0);
+        $stats['queuedInvites'] = (int) ($q->InvitesQueued ?? 0);
+        $stats['queuedCancels'] = (int) ($q->CancelsQueued ?? 0);
 
         $deadline = microtime(true) + (int) config('push.run_budget_seconds', 50);
         while (microtime(true) < $deadline) {
@@ -62,7 +68,8 @@ class PushDispatcher
     private function processOne(object $row, string $worker, array &$stats): void
     {
         $id = (int) $row->PushOutboxID;
-        $validity = $this->store->checkOutbox($id, $worker);
+        $check = $this->store->checkOutbox($id, $worker);
+        $validity = $check->Validity;
         if ($validity === 'LEASE_LOST') {
             Log::channel('push')->warning('push: lease lost before send', ['outbox' => $id]);
 
@@ -96,8 +103,14 @@ class PushDispatcher
         }
 
         $validator = PushEndpointValidator::fromConfig();
-        $payload = $this->payloads->make($row, $broadcast);
-        $options = $this->payloads->options($row);
+        // یادآوری: موضوع و متن (فقط برایِ صاحبِ یادآوری و با همان دسترسیِ جزئیاتِ رویداد) — قابلِ خاموش کردن با PUSH_REMINDER_DETAILS
+        $reminder = null;
+        if ((string) $row->SourceType === 'REMINDER' && config('push.reminder_details', true)) {
+            $r = $this->store->reminder((int) $row->SourceID, (int) $row->UserID);
+            $reminder = $r ? ReminderContent::for($r, (int) $row->UserID) : null;
+        }
+        $payload = $this->payloads->make($row, $broadcast, $reminder);
+        $options = $this->payloads->options($row, $check->ExpiresInSeconds);
         $retry = false;
         $retryAfter = null;
         $lastError = null;

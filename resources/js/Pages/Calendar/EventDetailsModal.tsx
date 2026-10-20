@@ -22,10 +22,13 @@ import {
     CrownOutlined,
     RetweetOutlined,
     BellOutlined,
+    LockOutlined,
+    SyncOutlined,
 } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../Utils/jalali';
 import type { CalendarEventAttendee, CalendarPermission, ReminderOption } from '../../Types';
+import { parseDT, previousResponseText, recurrenceSummary } from './calendarUtils';
 
 const { Text, Paragraph } = Typography;
 
@@ -48,13 +51,15 @@ interface EventDetail {
     Date_InsertFirst: string;
     Date_LastUpdate: string | null;
     CanManage: boolean | number;
-    MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'NONE';
+    MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'UNIT' | 'NONE';
     MyResponseStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'TENTATIVE' | null;
 }
 
 interface EventDetailsModalProps {
     open: boolean;
     eventId: number | null;
+    /** وقوعی که رویش کلیک شده (برایِ رویدادِ تکرارشونده)؛ جزئیاتِ سرور شروعِ خودِ سری است */
+    occurrence?: { start: string; end: string } | null;
     currentUserId: number;
     permissions: CalendarPermission[];
     reminderOptions: ReminderOption[];
@@ -111,6 +116,7 @@ async function api(url: string, method: string, body?: any) {
 export default function EventDetailsModal({
     open,
     eventId,
+    occurrence = null,
     currentUserId,
     permissions,
     reminderOptions,
@@ -195,7 +201,8 @@ export default function EventDetailsModal({
     const canEdit = canManage && permissions.includes('CALENDAR_EDIT');
     const canDelete = canManage && permissions.includes('CALENDAR_DELETE');
     const isAttendee = event?.MyRelation === 'ATTENDEE';
-    const relatedToEvent = event && event.MyRelation !== 'NONE';
+    // عضوِ واحد (UNIT) که شرکت‌کننده نیست یادآوریِ شخصی ندارد
+    const relatedToEvent = event && event.MyRelation !== 'NONE' && event.MyRelation !== 'UNIT';
 
     const footer: React.ReactNode[] = [];
     if (event && (canEdit || canDelete)) {
@@ -204,7 +211,7 @@ export default function EventDetailsModal({
                 <Popconfirm
                     key="delete"
                     title="حذف رویداد"
-                    description="آیا از حذف این رویداد مطمئن هستید؟"
+                    description={event.RecurrenceType !== 'NONE' ? 'این رویداد تکرارشونده است؛ همهٔ وقوع‌هایِ آن حذف می‌شوند. مطمئن هستید؟' : 'آیا از حذف این رویداد مطمئن هستید؟'}
                     okText="بله، حذف شود"
                     cancelText="انصراف"
                     okButtonProps={{ danger: true, loading: deleting }}
@@ -246,9 +253,14 @@ export default function EventDetailsModal({
                                 <Tag color={STATUS_LABELS[event.Status]?.color} style={{ borderRadius: 6 }}>
                                     {STATUS_LABELS[event.Status]?.label || event.Status}
                                 </Tag>
+                                {Number(event.IsPrivate) === 1 && (
+                                    <Tag icon={<LockOutlined />} style={{ borderRadius: 6 }}>
+                                        خصوصی
+                                    </Tag>
+                                )}
                                 {event.RecurrenceType !== 'NONE' && (
                                     <Tag icon={<RetweetOutlined />} color="purple" style={{ borderRadius: 6 }}>
-                                        {RECURRENCE_LABELS[event.RecurrenceType]}
+                                        {recurrenceSummary(event.RecurrenceType, event.RecurrenceInterval, parseDT(event.StartDateTime)) || RECURRENCE_LABELS[event.RecurrenceType]}
                                         {event.RecurrenceEndDate ? ` تا ${gregorianToJalaliDisplay(event.RecurrenceEndDate)}` : ''}
                                     </Tag>
                                 )}
@@ -259,12 +271,19 @@ export default function EventDetailsModal({
                             )}
 
                             <Descriptions column={1} size="small" bordered>
-                                <Descriptions.Item label={<><ClockCircleOutlined /> شروع</>}>
+                                {event.RecurrenceType !== 'NONE' && occurrence && occurrence.start.slice(0, 19) !== String(event.StartDateTime).slice(0, 19) && (
+                                    <Descriptions.Item label={<><ClockCircleOutlined /> این وقوع</>}>
+                                        {Number(event.IsAllDay) === 1
+                                            ? gregorianToJalaliDisplay(occurrence.start) + ' (تمام‌روز)'
+                                            : `${gregorianToJalaliDateTimeDisplay(occurrence.start)} تا ${gregorianToJalaliDateTimeDisplay(occurrence.end)}`}
+                                    </Descriptions.Item>
+                                )}
+                                <Descriptions.Item label={<><ClockCircleOutlined /> {event.RecurrenceType !== 'NONE' ? 'شروعِ سری' : 'شروع'}</>}>
                                     {Number(event.IsAllDay) === 1
                                         ? gregorianToJalaliDisplay(event.StartDateTime) + ' (تمام‌روز)'
                                         : gregorianToJalaliDateTimeDisplay(event.StartDateTime)}
                                 </Descriptions.Item>
-                                <Descriptions.Item label={<><ClockCircleOutlined /> پایان</>}>
+                                <Descriptions.Item label={<><ClockCircleOutlined /> {event.RecurrenceType !== 'NONE' ? 'پایانِ نخستین وقوع' : 'پایان'}</>}>
                                     {Number(event.IsAllDay) === 1
                                         ? gregorianToJalaliDisplay(event.EndDateTime)
                                         : gregorianToJalaliDateTimeDisplay(event.EndDateTime)}
@@ -286,6 +305,12 @@ export default function EventDetailsModal({
                                                     <Tag color={RESPONSE_LABELS[a.ResponseStatus]?.color} style={{ borderRadius: 6 }}>
                                                         {RESPONSE_LABELS[a.ResponseStatus]?.label}
                                                     </Tag>
+                                                    {Number(a.InviteIsUpdate) === 1 && a.ResponseStatus === 'PENDING' && (
+                                                        <Tag icon={<SyncOutlined />} color="orange" style={{ borderRadius: 6 }}>تغییرِ جلسه</Tag>
+                                                    )}
+                                                    {a.PreviousResponseStatus && (
+                                                        <Text type="secondary" style={{ fontSize: 12 }}>{previousResponseText(a.PreviousResponseStatus, a.PreviousResponseDate)}</Text>
+                                                    )}
                                                 </Space>
                                             ))}
                                         </Space>

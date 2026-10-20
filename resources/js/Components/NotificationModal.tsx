@@ -7,6 +7,8 @@ import {
     WarningFilled,
 } from '@ant-design/icons';
 
+import { NOTIFY_DURATION_MS } from '../Utils/notify';
+
 const { Text } = Typography;
 
 export type NotificationType = 'success' | 'error' | 'info' | 'warning';
@@ -30,7 +32,7 @@ export default function NotificationModal({
     open,
     type,
     message,
-    duration = 3000,
+    duration = NOTIFY_DURATION_MS,
     onClose,
 }: NotificationModalProps) {
     const { icon: Icon, color } = iconMap[type];

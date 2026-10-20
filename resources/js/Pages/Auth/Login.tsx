@@ -3,6 +3,7 @@ import { UserOutlined, LockOutlined, LoginOutlined, CloseCircleFilled } from '@a
 import { useForm, usePage, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import CompanyLogo from '../../Components/CompanyLogo';
+import { NOTIFY_DURATION_MS } from '../../Utils/notify';
 import raga360Logo from '../../../images/raga360-logo.webp';
 
 const { Title, Text } = Typography;
@@ -143,7 +144,7 @@ export default function Login() {
             setModalOpen(true);
             setShake(true);
             setTimeout(() => setShake(false), 500);
-            setTimeout(() => setModalOpen(false), 3000);
+            setTimeout(() => setModalOpen(false), NOTIFY_DURATION_MS);
             return;
         }
 

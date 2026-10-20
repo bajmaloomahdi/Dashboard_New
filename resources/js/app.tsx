@@ -2,9 +2,14 @@ import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, message, notification } from 'antd';
 import faIR from 'antd/locale/fa_IR';
 import { THEME } from './theme';
+import { NOTIFY_DURATION_SECONDS } from './Utils/notify';
+
+// مدتِ نمایشِ پیش‌فرضِ همهٔ Toastها و اعلان‌هایِ Ant Design (تنظیمِ مرکزی: Utils/notify.ts)
+message.config({ duration: NOTIFY_DURATION_SECONDS });
+notification.config({ duration: NOTIFY_DURATION_SECONDS });
 
 // عنوان پایه رو از همون <title> که بلید (از دیتابیس، تنظیمات شرکت) رندر کرده می‌خونیم؛
 // این‌طوری با VITE_APP_NAME (که ممکنه هنوز "Laravel" پیش‌فرض باشه) قاطی نمی‌شه.

@@ -43,11 +43,17 @@ return [
     'run_budget_seconds' => 50,        // هر اجرایِ دقیقه‌ای حداکثر این‌قدر کار می‌کند
     'retention_days' => (int) env('PUSH_RETENTION_DAYS', 30),
 
+    // اعلانِ یادآوری با موضوع و متن (کوتاه‌شده). false = متنِ عمومیِ قبلی (مثلاً دستگاه‌هایِ مشترک).
+    // رویدادِ خصوصی همیشه بدونِ عنوان/متن رویِ صفحهٔ قفل؛ جزئیاتِ کامل پس از ورود در برنامه.
+    'reminder_details' => (bool) env('PUSH_REMINDER_DETAILS', true),
+
     // مدتِ نگه‌داری در سرویسِ Push برایِ دستگاهِ خاموش/آفلاین
     'ttl_seconds' => [
         'MESSAGE' => 172800,
         'TASK' => 172800,
         'REMINDER' => 21600,
+        'INVITE' => 172800,
+        'CANCEL' => 86400,
         'TEST' => 3600,
         'BROADCAST' => 86400,
     ],

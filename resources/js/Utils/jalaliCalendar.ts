@@ -89,6 +89,15 @@ export function buildMonthGrid(reference: Date, today: Date = new Date()): Jalal
     });
 }
 
+/** نخستین و آخرین روزِ ماهِ شمسیِ حاویِ تاریخ (نیمه‌شبِ محلی) — برای نمای دستورکار */
+export function jalaliMonthBounds(reference: Date): { from: Date; to: Date } {
+    const jRef = toJalali(reference);
+    const first = new DateObject({ year: jRef.year, month: jRef.month.number, day: 1, calendar: persian, locale: persian_fa });
+    const from = first.toDate();
+    from.setHours(0, 0, 0, 0);
+    return { from, to: addDays(from, first.month.length - 1) };
+}
+
 /** ۷ روز هفته‌ی شمسی حاوی تاریخ مرجع، برای نمای هفتگی */
 export function buildWeekDays(reference: Date, today: Date = new Date()): JalaliCell[] {
     const start = startOfJalaliWeek(reference);
@@ -113,4 +122,10 @@ export function toApiDateTime(date: Date): string {
 export function toApiDate(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** اجزایِ تاریخِ شمسی (برایِ توضیحِ قاعدهٔ تکرار و…) */
+export function jalaliParts(date: Date): { year: number; month: number; day: number; monthName: string; weekDay: string } {
+    const d = toJalali(date);
+    return { year: d.year, month: d.month.number, day: d.day, monthName: d.month.name, weekDay: WEEKDAY_LABELS_FA[d.weekDay.index] };
 }

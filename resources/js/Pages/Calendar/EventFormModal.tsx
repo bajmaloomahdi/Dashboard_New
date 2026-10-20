@@ -5,6 +5,7 @@ import PersianDateInput from '../../Components/PersianDateInput';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
 import { toApiDateTime } from '../../Utils/jalaliCalendar';
+import { recurrenceIntervalLabel, recurrenceSummary } from './calendarUtils';
 
 const { TextArea } = Input;
 
@@ -22,7 +23,12 @@ interface EventFormModalProps {
     currentUserId: number;
     eventId: number | null; // null = ایجاد رویداد جدید
     defaultDate: Date | null;
+    /** واحدهایی که کاربر عضوِ مستقیمِ آن‌هاست (CanManageEvents = اجازهٔ رویدادِ واحد) */
+    units?: { UnitID: number; UnitName: string; CanManageEvents: boolean | number }[];
 }
+
+/** «تقویمِ شخصی» در فیلدِ تقویم (۰ = بدونِ واحد) */
+const PERSONAL_CALENDAR = 0;
 
 const COLOR_PRESETS = ['#1677ff', '#722ed1', '#13a8a8', '#52c41a', '#fa8c16', '#eb2f96', '#f5222d', '#595959'];
 const NO_REMINDER = '__none__';
@@ -79,6 +85,8 @@ interface FormValues {
     AttendeeUserIDs: number[];
     ReminderOffsetMinutes: number | null;
     AttendeeReminders: Record<number, number | string>;
+    OrganizationalUnitID: number;
+    IsPrivate: boolean;
 }
 
 export default function EventFormModal({
@@ -90,13 +98,25 @@ export default function EventFormModal({
     currentUserId,
     eventId,
     defaultDate,
+    units = [],
 }: EventFormModalProps) {
     const canForOthers = permissions.includes('CALENDAR_CREATE_FOR_OTHERS');
+    // ویرایشِ رویدادِ موجود بدونِ «برای دیگران»: مالک و شرکت‌کنندگانِ فعلی دست‌نخورده فرستاده شوند (حذفِ بی‌صدا نشوند)
+    const [original, setOriginal] = useState<{ owner: number; attendees: number[]; unitId: number | null; unitName: string | null } | null>(null);
+    const manageableUnits = units.filter((u) => Number(u.CanManageEvents) === 1 || u.CanManageEvents === true);
     const [form] = Form.useForm<FormValues>();
     const [saving, setSaving] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const isAllDay = Form.useWatch('IsAllDay', form);
+    const selectedUnit = Form.useWatch('OrganizationalUnitID', form);
+    const isUnitEvent = !!selectedUnit && Number(selectedUnit) !== PERSONAL_CALENDAR;
+    useEffect(() => {
+        if (isUnitEvent && form.getFieldValue('IsPrivate')) form.setFieldValue('IsPrivate', false);
+    }, [isUnitEvent, form]);
     const recurrenceType = Form.useWatch('RecurrenceType', form);
+    const recurrenceInterval = Form.useWatch('RecurrenceInterval', form);
+    const startDateValue = Form.useWatch('StartDate', form);
+    const seriesStart = startDateValue ? new Date(`${startDateValue}T12:00:00`) : null;
     const attendeeIds: number[] = Form.useWatch('AttendeeUserIDs', form) || [];
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
@@ -129,7 +149,10 @@ export default function EventFormModal({
                 AttendeeUserIDs: [],
                 ReminderOffsetMinutes: NO_REMINDER as any,
                 AttendeeReminders: {},
+                OrganizationalUnitID: PERSONAL_CALENDAR,
+                IsPrivate: false,
             });
+            setOriginal(null);
             return;
         }
 
@@ -161,11 +184,19 @@ export default function EventFormModal({
                         .filter((a: any) => a.RelationType !== 'ORGANIZER')
                         .map((a: any) => a.UserID),
                     ReminderOffsetMinutes: (data.reminderOffsetMinutes ?? NO_REMINDER) as any,
+                    OrganizationalUnitID: ev.OrganizationalUnitID ? Number(ev.OrganizationalUnitID) : PERSONAL_CALENDAR,
+                    IsPrivate: Number(ev.IsPrivate) === 1,
                     AttendeeReminders: Object.fromEntries(
                         (data.attendees || [])
                             .filter((a: any) => a.ReminderOffsetMinutes !== null && a.ReminderOffsetMinutes !== undefined)
                             .map((a: any) => [a.UserID, a.ReminderOffsetMinutes]),
                     ),
+                });
+                setOriginal({
+                    owner: Number(ev.OwnerUserID) || currentUserId,
+                    attendees: (data.attendees || []).filter((a: any) => a.RelationType !== 'ORGANIZER').map((a: any) => Number(a.UserID)),
+                    unitId: ev.OrganizationalUnitID ? Number(ev.OrganizationalUnitID) : null,
+                    unitName: null,
                 });
             })
             .catch(() => showNotification('error', 'خطا در دریافت اطلاعات رویداد'))
@@ -199,6 +230,11 @@ export default function EventFormModal({
                 setSaving(false);
                 return;
             }
+            if (values.RecurrenceType !== 'NONE' && values.RecurrenceEndDate && values.StartDate && values.RecurrenceEndDate < values.StartDate) {
+                showNotification('error', 'پایانِ تکرار نمی‌تواند پیش از تاریخِ شروعِ رویداد باشد.');
+                setSaving(false);
+                return;
+            }
 
             const attendees = values.AttendeeUserIDs || [];
             const attendeeReminders: Record<number, number | null> = {};
@@ -221,8 +257,12 @@ export default function EventFormModal({
                 RecurrenceType: values.RecurrenceType,
                 RecurrenceInterval: values.RecurrenceInterval || 1,
                 RecurrenceEndDate: values.RecurrenceType !== 'NONE' ? values.RecurrenceEndDate : null,
-                OwnerUserID: canForOthers ? values.OwnerUserID || currentUserId : currentUserId,
-                AttendeeUserIDs: canForOthers ? attendees : [],
+                OwnerUserID: canForOthers ? values.OwnerUserID || currentUserId : original ? original.owner : currentUserId,
+                AttendeeUserIDs: canForOthers ? attendees : original ? original.attendees : [],
+                // همیشه فرستاده می‌شود: ویرایش از فرم رویدادِ واحد را به تقویمِ شخصی منتقل نکند
+                OrganizationalUnitID: values.OrganizationalUnitID ? Number(values.OrganizationalUnitID) : null,
+                // رویدادِ واحد خصوصی نمی‌شود (سرور هم رد می‌کند)
+                IsPrivate: values.OrganizationalUnitID && Number(values.OrganizationalUnitID) !== PERSONAL_CALENDAR ? false : !!values.IsPrivate,
                 AttendeeReminders: attendeeReminders,
                 ReminderOffsetMinutes:
                     (values.ReminderOffsetMinutes as unknown as string) === NO_REMINDER
@@ -325,6 +365,31 @@ export default function EventFormModal({
                             </Col>
                         </Row>
 
+                        {(manageableUnits.length > 0 || !!original?.unitId) && (
+                            <Form.Item name="OrganizationalUnitID" label="تقویم" extra="رویدادِ تقویمِ واحد برایِ همهٔ اعضایِ مستقیمِ آن واحد دیده می‌شود.">
+                                <Select
+                                    size="large"
+                                    options={[
+                                        { value: PERSONAL_CALENDAR, label: 'تقویمِ شخصی' },
+                                        ...manageableUnits.map((u) => ({ value: Number(u.UnitID), label: `تقویمِ واحد: ${u.UnitName}` })),
+                                        // واحدِ فعلیِ رویداد اگر کاربر مدیرِ آن نیست (ویرایش همان را نگه می‌دارد)
+                                        ...(original?.unitId && !manageableUnits.some((u) => Number(u.UnitID) === original.unitId)
+                                            ? [{ value: original.unitId, label: 'تقویمِ واحدِ فعلیِ رویداد' }]
+                                            : []),
+                                    ]}
+                                />
+                            </Form.Item>
+                        )}
+
+                        <Form.Item
+                            name="IsPrivate"
+                            label="خصوصی"
+                            valuePropName="checked"
+                            extra={isUnitEvent ? 'رویدادِ تقویمِ واحد نمی‌تواند خصوصی باشد.' : 'دیگران (حتی مدیرِ سیستم) فقط بازهٔ «مشغول» را می‌بینند؛ جزئیات فقط برایِ مالک و شرکت‌کنندگان.'}
+                        >
+                            <Switch disabled={isUnitEvent} />
+                        </Form.Item>
+
                         {canForOthers && (
                             <Form.Item name="OwnerUserID" label="این رویداد برای چه کسی است؟ (مالک)">
                                 <Select
@@ -405,7 +470,7 @@ export default function EventFormModal({
                             {recurrenceType && recurrenceType !== 'NONE' && (
                                 <>
                                     <Col xs={24} sm={8}>
-                                        <Form.Item name="RecurrenceInterval" label="هر چند واحد یک‌بار">
+                                        <Form.Item name="RecurrenceInterval" label={recurrenceIntervalLabel(recurrenceType)}>
                                             <InputNumber min={1} max={365} style={{ width: '100%' }} size="large" />
                                         </Form.Item>
                                     </Col>
@@ -413,6 +478,12 @@ export default function EventFormModal({
                                         <Form.Item name="RecurrenceEndDate" label="پایان تکرار">
                                             <PersianDateInput value={null as any} onChange={() => {}} />
                                         </Form.Item>
+                                    </Col>
+                                    <Col xs={24}>
+                                        <div style={{ fontSize: 12, color: '#6B7280', marginTop: -8 }}>
+                                            {recurrenceSummary(recurrenceType, recurrenceInterval, seriesStart)} — بر اساسِ تقویمِ شمسی.
+                                            {eventId ? ' ویرایش روی همهٔ وقوع‌هایِ این سری اعمال می‌شود.' : ''}
+                                        </div>
                                     </Col>
                                 </>
                             )}

@@ -51,9 +51,16 @@ export interface CalendarEvent {
     OwnerName: string;
     OrganizationalUnitID: number | null;
     CanManage: boolean | number;
-    MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'NONE';
+    MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'UNIT' | 'NONE';
+    /** فقط وضعیتِ «مشغول» (اشتراکِ FREEBUSY) — بدونِ جزئیات، غیرقابلِ کلیک */
+    IsBusyOnly?: boolean;
+    /** رویدادِ خصوصی (پچِ ۱۱۱): غیرِ شرکت‌کنندگان فقط «مشغول» می‌بینند */
+    IsPrivate?: boolean | number;
     MyResponseStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'TENTATIVE' | null;
     MyReminderOffsetMinutes: number | null;
+    /** تقویمِ هم‌زمانی که رویداد از آن آمده (اشتراکی/واحد)؛ خالی = تقویمِ اصلیِ صفحه */
+    SourceKey?: string;
+    SourceLabel?: string;
 }
 
 export interface CalendarEventAttendee {
@@ -64,6 +71,11 @@ export interface CalendarEventAttendee {
     RelationType: 'ORGANIZER' | 'PARTICIPANT' | 'OPTIONAL' | 'RESOURCE';
     ResponseStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'TENTATIVE';
     ResponseDate: string | null;
+    /** پاسخ و زمانِ پاسخِ پیش از تغییرِ زمان/تکرارِ جلسه (پچِ ۱۱۲)؛ با پاسخِ تازه پاک می‌شود */
+    PreviousResponseStatus?: 'ACCEPTED' | 'REJECTED' | 'TENTATIVE' | null;
+    PreviousResponseDate?: string | null;
+    /** نسخهٔ فعلیِ دعوت به‌خاطرِ تغییرِ جلسه است */
+    InviteIsUpdate?: boolean | number;
     ReminderOffsetMinutes: number | null;
 }
 

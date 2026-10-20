@@ -15,9 +15,18 @@ class PushReminderTest extends PushTestCase
         $this->activate(10); // مرزِ شروع ۱۰ دقیقه قبل تا یادآورِ «یک دقیقه پیش» بعد از آن باشد
     }
 
-    public function test_due_reminder_is_pushed_once_and_is_sent_flag_is_untouched(): void
+    /** گیرندهٔ یادآوری باید کاربرِ فعالِ دارایِ CALENDAR_VIEW باشد (پچِ ۱۰۸) */
+    private function reminderUser(): int
     {
         $user = $this->createUserWithoutRoles();
+        $this->grantPermissionsTo($user, ['CALENDAR_VIEW']);
+
+        return $user;
+    }
+
+    public function test_due_reminder_is_pushed_once_and_is_sent_flag_is_untouched(): void
+    {
+        $user = $this->reminderUser();
         $endpoint = $this->subscribe($user);
         $id = $this->reminder($user);
 
@@ -29,13 +38,14 @@ class PushReminderTest extends PushTestCase
         $this->assertSame('REMINDER', $sent[0]['payload']['kind']);
         $this->assertSame('/calendar', $sent[0]['payload']['url']);
         $this->assertSame('high', $sent[0]['options']['urgency']);
-        $this->assertStringNotContainsString('محرمانه', $sent[0]['rawPayload']); // عنوانِ یادآور در اعلان نیست
+        // موضوعِ یادآوری (فقط برایِ صاحبش) در عنوانِ اعلان؛ یادآوریِ مستقل متن ندارد → متنِ عمومی
+        $this->assertSame(['یادآوری: یادآوریِ محرمانه', 'یک یادآوریِ سررسیدشده دارید.'], [$sent[0]['payload']['title'], $sent[0]['payload']['body']]);
         $this->assertSame(0, (int) DB::selectOne('SELECT IsSent FROM dbo.Reminders WHERE ReminderID = ?', [$id])->IsSent);
     }
 
     public function test_recurring_reminder_gets_a_separate_push_for_the_next_occurrence(): void
     {
-        $user = $this->createUserWithoutRoles();
+        $user = $this->reminderUser();
         $endpoint = $this->subscribe($user);
         $id = $this->reminder($user, 'DATEADD(MINUTE, -5, SYSDATETIME())');
         $this->dispatch();
@@ -52,7 +62,7 @@ class PushReminderTest extends PushTestCase
 
     public function test_reminder_acknowledged_before_push_is_not_sent(): void
     {
-        $user = $this->createUserWithoutRoles();
+        $user = $this->reminderUser();
         $endpoint = $this->subscribe($user);
         $id = $this->reminder($user);
         $this->store()->enqueue(null);
@@ -67,7 +77,7 @@ class PushReminderTest extends PushTestCase
 
     public function test_reminder_due_before_activation_and_future_reminders_are_not_pushed(): void
     {
-        $user = $this->createUserWithoutRoles();
+        $user = $this->reminderUser();
         $this->subscribe($user);
         $this->reminder($user, 'DATEADD(HOUR, -2, SYSDATETIME())');   // قبل از مرزِ شروع
         $this->reminder($user, 'DATEADD(HOUR, 2, SYSDATETIME())');    // هنوز سررسید نشده

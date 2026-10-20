@@ -191,7 +191,7 @@ class PushDispatchTest extends PushTestCase
         $this->dispatch();
         $this->assertCount(1, $this->fake->sentTo($endpoint));
         $this->assertSame("msg-{$messageId}", $this->fake->sent[0]['payload']['tag']);
-        $this->assertSame("msgx{$messageId}", $this->fake->sent[0]['options']['topic']); // اپل «-» را در Topic نمی‌پذیرد
+        $this->assertSame(md5("msg-{$messageId}"), $this->fake->sent[0]['options']['topic']); // Topicِ سازگار با اپل
         $d = DB::selectOne('SELECT Status, Attempts FROM dbo.PushDeliveries WHERE PushOutboxID = ?', [$claimed[0]->PushOutboxID]);
         $this->assertSame('SENT', $d->Status);
         $this->assertSame(2, (int) $d->Attempts);
@@ -277,23 +277,23 @@ class PushDispatchTest extends PushTestCase
         $this->assertStringNotContainsString('Push آزمون', $sent['rawPayload']); // موضوع/متنِ پیام در اعلان نیست
         $this->assertStringNotContainsString('محرمانه', $sent['rawPayload']);
         $this->assertLessThanOrEqual(\App\Services\Push\PushPayloadFactory::MAX_BYTES, strlen($sent['rawPayload']));
-        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{1,32}$/', $sent['options']['topic']);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $sent['options']['topic']);
         $this->assertSame('normal', $sent['options']['urgency']);
     }
 
     public function test_topic_is_apple_safe_alphanumeric_and_unique_for_every_tag_format(): void
     {
-        // سرویسِ اپل Topicِ دارایِ «-» را با 400 BadWebPushTopic رد می‌کند (پاسخِ واقعیِ web.push.apple.com، ۲۰۲۶-۱۰-۱۸)
+        // سرویسِ اپل با 400 BadWebPushTopic رد کرد: Topicِ دارایِ «-» (msg-1) و Topicِ کوتاه (bcx61)؛
+        // MD5ِ ۳۲نویسه‌ای پذیرفته شد (پاسخِ واقعیِ web.push.apple.com، ۲۰۲۶-۱۰-۱۸)
         $tags = ['msg-1', 'msg-12', 'rem-1-20261018170000', 'rem-12-20261018170000', 'rem-1-20261018170500',
-                 'test-7', 'bc-62', 'bc-6', 'rem-2147483647-20991231235959'];
+                 'test-1', 'test-7', 'bc-61', 'bc-6', 'rem-2147483647-20991231235959'];
         $topics = array_map([\App\Services\Push\PushPayloadFactory::class, 'topic'], $tags);
         foreach ($topics as $t) {
-            $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{1,32}$/', $t);
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $t); // طولِ ثابت، فقط حروف/ارقام
         }
         $this->assertSame(count($tags), count(array_unique($topics)));
-        $this->assertSame('bcx62', \App\Services\Push\PushPayloadFactory::topic('bc-62'));
-        // Tagِ بلند: به‌جایِ بریدن (و احتمالِ تداخل) MD5
-        $this->assertSame(md5(str_repeat('a-', 20)), \App\Services\Push\PushPayloadFactory::topic(str_repeat('a-', 20)));
+        // Tagِ یکسان → Topicِ یکسان (جایگزینیِ اعلانِ تحویل‌نشده)
+        $this->assertSame('71b381779a0d39c5e858da4b9a52fdbd', \App\Services\Push\PushPayloadFactory::topic('bc-61'));
     }
 
     public function test_cleanup_never_removes_pending_or_in_progress_records(): void

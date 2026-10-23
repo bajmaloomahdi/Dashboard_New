@@ -19,11 +19,16 @@ import InteractionsPanel from './InteractionsPanel';
 import PartyImagesPanel from './PartyImagesPanel';
 import PartyAttachmentsPanel, { PartyAttachment } from './PartyAttachmentsPanel';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
+import { CooperationEndedAction } from '../../../Components/Crm/CooperationEnded';
+import CrmLinkedUserAction from '../../../Components/Crm/CrmLinkedUser';
 import PartySupplementaryInfoPanel, { PartySupplementaryInfo, OwnershipTypeOption } from './PartySupplementaryInfoPanel';
 
 const { Text } = Typography;
 
 interface PartyDetail extends Party {
+    /** کاربرِ متصل (پچِ ۱۲۱) */
+    LinkedUserID?: number | string | null;
+    LinkedUserName?: string | null;
     DisplayName: string;
     DepartmentName: string | null;
     PartyTypeName: string | null;
@@ -172,6 +177,31 @@ export default function CrmPartyShow() {
                             <Descriptions.Item label="کدِ اقتصادی"><Text dir="ltr">{currentParty.EconomicCode || '—'}</Text></Descriptions.Item>
                         </>
                     ) : null}
+                    <Descriptions.Item label="کاربر">
+                        <CrmLinkedUserAction
+                            entity="parties"
+                            id={currentParty.PartyID}
+                            userId={currentParty.LinkedUserID}
+                            userName={currentParty.LinkedUserName}
+                            canManage={canManage}
+                            onSaved={(message, ok) => {
+                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                if (ok) router.reload({ only: ['party'] });
+                            }}
+                        />
+                    </Descriptions.Item>
+                    <Descriptions.Item label="قطعِ همکاری">
+                        <CooperationEndedAction
+                            entity="parties"
+                            id={currentParty.PartyID}
+                            at={currentParty.CooperationEndedAt}
+                            canManage={canManage}
+                            onSaved={(message, ok) => {
+                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                if (ok) router.reload({ only: ['party'] });
+                            }}
+                        />
+                    </Descriptions.Item>
                     <Descriptions.Item label="نقش‌ها" span={3}>{renderTags(partyRoles || [])}</Descriptions.Item>
                     <Descriptions.Item label="سمت‌ها" span={3}>{renderTags(partyPositions || [])}</Descriptions.Item>
                     <Descriptions.Item label="توضیحات" span={3}>{currentParty.Description || '—'}</Descriptions.Item>

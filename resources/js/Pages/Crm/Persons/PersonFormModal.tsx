@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Modal, Form, Input, Select, Row, Col, Button, Alert } from 'antd';
 import { SaveOutlined, CloseOutlined } from '@ant-design/icons';
-import { crmApi } from '../../../Components/Crm/crmApi';
+import { crmSaveWithDuplicateConfirm } from '../../../Components/Crm/duplicateNameConfirm';
 import PersianDateInput from '../../../Components/PersianDateInput';
+import CooperationEndedField, { CooperationState, cooperationError, cooperationFromServer, cooperationToApi, emptyCooperation } from '../../../Components/Crm/CooperationEnded';
 
 export interface Person {
     PersonID: number;
@@ -13,6 +14,8 @@ export interface Person {
     IdentifierDate: string | null;
     Description: string | null;
     IsActive: boolean | number | string;
+    /** قطعِ همکاری (پچِ ۱۱۹) — NULL = همکاری برقرار */
+    CooperationEndedAt?: string | null;
 }
 
 interface PersonFormModalProps {
@@ -42,6 +45,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
     const [values, setValues] = useState(emptyValues);
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [coop, setCoop] = useState<CooperationState>(emptyCooperation());
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
@@ -59,6 +63,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             : emptyValues;
 
         setValues(initial);
+        setCoop(cooperationFromServer(editingPerson?.CooperationEndedAt));
         setFormError(null);
         setFieldErrors({});
     }, [open, editingPerson]);
@@ -77,12 +82,17 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             setFormError(Object.values(missing).join(' '));
             return;
         }
+        const coopProblem = cooperationError(coop);
+        if (coopProblem) {
+            setFormError(coopProblem);
+            return;
+        }
 
         setProcessing(true);
         setFormError(null);
         setFieldErrors({});
 
-        const res = await crmApi('/crm/persons', 'POST', {
+        const res = await crmSaveWithDuplicateConfirm('/crm/persons', {
             personId: editingPerson ? editingPerson.PersonID : undefined,
             firstName: values.firstName.trim() || undefined,
             lastName: values.lastName.trim(),
@@ -90,9 +100,16 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             identifierNumber: values.identifierNumber.trim() || undefined,
             identifierDate: values.identifierDate || undefined,
             description: values.description.trim() || undefined,
+            ...cooperationToApi(coop),
         });
 
         setProcessing(false);
+
+        if (res === null) {
+            // کاربر هشدارِ نامِ تکراری را تأیید نکرد → چیزی ثبت نشد؛ فرم با همان مقادیر باز می‌ماند
+            setFormError('ثبت انجام نشد؛ نام را اصلاح کنید یا دوباره ذخیره و تأیید کنید.');
+            return;
+        }
 
         if (!res.ok || !res.success) {
             if (res.errors && typeof res.errors === 'object' && !Array.isArray(res.errors)) {
@@ -171,6 +188,10 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
                         </Form.Item>
                     </Col>
                 </Row>
+
+                <Form.Item>
+                    <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
+                </Form.Item>
 
                 <Form.Item label="توضیحات">
                     <Input.TextArea value={values.description} onChange={(e) => setValues((s) => ({ ...s, description: e.target.value }))} rows={3} maxLength={2000} showCount />

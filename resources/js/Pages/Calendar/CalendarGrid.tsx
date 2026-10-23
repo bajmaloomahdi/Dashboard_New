@@ -12,6 +12,7 @@ import {
 } from '../../Utils/jalaliCalendar';
 import { toEnglishDigits } from '../../Utils/jalali';
 import { THEME } from '../../theme';
+import { EventStatusIcon, eventStatusLabel } from './EventStatusIcon';
 import WeekdayName from './WeekdayName';
 import {
     dayDiff,
@@ -131,13 +132,14 @@ function EventChip({
                 onClick();
             }}
             onPointerDown={onPointerDown}
-            title={`${timeRangeLabel(event)} — ${event.Title}${event.SourceLabel ? `\n${event.SourceLabel}` : ''}${blockReason ? `\n(${blockReason})` : ''}`}
+            title={`${timeRangeLabel(event)} — ${event.Title}${event.IsBusyOnly ? '' : `\nوضعیت: ${eventStatusLabel(event.Status)}`}${event.SourceLabel ? `\n${event.SourceLabel}` : ''}${blockReason ? `\n(${blockReason})` : ''}`}
             style={{
                 background: event.Color || THEME.primary,
                 opacity: event.Status === 'CANCELLED' ? 0.55 : 1,
                 textDecoration: event.Status === 'CANCELLED' ? 'line-through' : 'none',
             }}
         >
+            {!event.IsBusyOnly && <EventStatusIcon status={event.Status} onColored noTooltip />}
             {!isAllDay(event) && <span className="cal-chip-time">{fmtTime(start)}</span>}
             {Number(event.IsPrivate) === 1 && <LockOutlined className="cal-chip-icon" />}
             {isRecurring(event) && <SyncOutlined className="cal-chip-icon" />}
@@ -539,9 +541,10 @@ function TimeGridView({
                                             background: event.Color || THEME.primary,
                                             opacity: event.Status === 'CANCELLED' ? 0.55 : 1,
                                         }}
-                                        title={`${timeRangeLabel(event)} — ${event.Title}${event.SourceLabel ? `\n${event.SourceLabel}` : ''}${reason ? `\n(${reason})` : ''}`}
+                                        title={`${timeRangeLabel(event)} — ${event.Title}${event.IsBusyOnly ? '' : `\nوضعیت: ${eventStatusLabel(event.Status)}`}${event.SourceLabel ? `\n${event.SourceLabel}` : ''}${reason ? `\n(${reason})` : ''}`}
                                     >
                                         <div className="cal-block-title">
+                                            {!event.IsBusyOnly && <EventStatusIcon status={event.Status} onColored noTooltip />}
                                             {Number(event.IsPrivate) === 1 && <LockOutlined className="cal-chip-icon" />}
             {isRecurring(event) && <SyncOutlined className="cal-chip-icon" />}
                                             {event.MyReminderOffsetMinutes !== null && event.MyReminderOffsetMinutes !== undefined && (
@@ -608,11 +611,11 @@ function GridStyles() {
             .cal-timegrid-daylabel.is-today .cal-timegrid-weekday { color: rgba(255,255,255,0.85); }
             .cal-timegrid-weekday { font-size: 12px; color: ${THEME.textSecondary}; line-height: 1.25; }
             .cal-timegrid-daynum { font-size: 15px; font-weight: 600; }
-            .cal-timegrid-allday-label { font-size: 10px; color: ${THEME.textSecondary}; padding: 6px 2px; text-align: center; }
+            .cal-timegrid-allday-label { font-size: 12px; font-weight: 600; color: #111827; padding: 6px 2px; text-align: center; }
             .cal-timegrid-allday-cell { min-height: 28px; padding: 2px; border-inline-start: 1px solid ${THEME.borderLight}; cursor: pointer; min-width: 0; }
             .cal-timegrid-body { display: grid; max-height: min(68vh, 720px); overflow-y: auto; overflow-x: hidden; position: relative; }
             .cal-timegrid-hours { position: relative; }
-            .cal-timegrid-hour-label { font-size: 10px; color: ${THEME.textLight}; text-align: center; border-top: 1px solid ${THEME.borderLight}; }
+            .cal-timegrid-hour-label { font-size: 12px; font-weight: 600; color: #111827; text-align: center; border-top: 1px solid ${THEME.borderLight}; }
             .cal-timegrid-daycol { position: relative; border-inline-start: 1px solid ${THEME.borderLight}; cursor: pointer; min-width: 0; }
             .cal-timegrid-daycol.is-offday { background: #FBFBFC; }
             .cal-timegrid-hour-row { border-top: 1px solid ${THEME.borderLight}; position: relative; }

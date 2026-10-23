@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm\Support;
 
+use App\Services\Crm\Exceptions\CrmDuplicateNameException;
 use App\Services\Crm\Exceptions\CrmException;
 use Illuminate\Support\Facades\DB;
 
@@ -311,12 +312,51 @@ class CrmStore
         return $this->write(
             'EXEC dbo.sp_Crm_SaveParty @PartyID = ?, @PartyNature = ?, @OfficialName = ?, @TradeName = ?, @RegistrationNumber = ?, '
             . '@EconomicCode = ?, @IdentifierNumber = ?, @IdentifierDate = ?, @Description = ?, '
-            . '@DepartmentID = ?, @PartyTypeID = ?, @ActivityID = ?, @UserID = ?',
+            . '@DepartmentID = ?, @PartyTypeID = ?, @ActivityID = ?, @UserID = ?'
+            . (! empty($p['allowDuplicateName']) ? ', @AllowDuplicateName = 1' : '')
+            . $this->cooperationSql($p),
             [
                 $p['partyId'] ?? null, $p['partyNature'], $p['officialName'], $p['tradeName'] ?? null, $p['registrationNumber'] ?? null,
                 $p['economicCode'] ?? null, $p['identifierNumber'] ?? null, $p['identifierDate'] ?? null, $p['description'] ?? null,
                 $p['departmentId'] ?? null, $p['partyTypeId'] ?? null, $p['activityId'] ?? null, $p['userId'],
+                ...$this->cooperationBindings($p),
             ]
+        );
+    }
+
+    /** پارامترهایِ «قطعِ همکاری» (پچِ ۱۱۹) فقط وقتی ارسال شده‌اند؛ در غیرِ این صورت SP مقدارِ فعلی را نگه می‌دارد */
+    private function cooperationSql(array $p): string
+    {
+        return ($p['cooperationEnded'] ?? null) === null ? '' : ', @CooperationEnded = ?, @CooperationEndedAt = ?';
+    }
+
+    private function cooperationBindings(array $p): array
+    {
+        return ($p['cooperationEnded'] ?? null) === null ? [] : [$p['cooperationEnded'] ? 1 : 0, $p['cooperationEndedAt'] ?? null];
+    }
+
+    /** تعیین/برداشتنِ کاربرِ متصل به طرف‌حساب/مخاطب (پچِ ۱۲۱) — $userId = null یعنی برداشتنِ اتصال */
+    public function setEntityUser(string $entityType, int $entityId, ?int $userId, int $actorId, ?string $userType = null): object
+    {
+        // $userType (پچِ ۱۲۲) فقط برایِ مخاطب: INTERNAL یا PERSON
+        return $this->write(
+            'EXEC dbo.sp_Crm_SetEntityUser @EntityType = ?, @EntityID = ?, @UserID = ?, @ModifyUser = ?, @UserType = ?',
+            [$entityType, $entityId, $userId, $actorId, $userType]
+        );
+    }
+
+    /** کاربرانِ فعال برایِ انتخاب در صفحهٔ طرف‌حساب/مخاطب، همراهِ نوع و اتصالِ فعلی (sp_GetUsers، پچِ ۱۲۱) */
+    public function linkableUsers(): array
+    {
+        return DB::select('EXEC dbo.sp_GetUsers @SearchText = NULL, @IsActive = 1');
+    }
+
+    /** فقط «قطعِ همکاری» (پچِ ۱۲۰) — $entityType: PARTY | PERSON */
+    public function setCooperationEnded(string $entityType, int $entityId, bool $ended, ?string $endedAt, int $userId): object
+    {
+        return $this->write(
+            'EXEC dbo.sp_Crm_SetCooperationEnded @EntityType = ?, @EntityID = ?, @CooperationEnded = ?, @CooperationEndedAt = ?, @UserID = ?',
+            [$entityType, $entityId, $ended ? 1 : 0, $endedAt, $userId]
         );
     }
 
@@ -707,10 +747,13 @@ class CrmStore
     {
         return $this->write(
             'EXEC dbo.sp_Crm_SavePerson @PersonID = ?, @FirstName = ?, @LastName = ?, @TitleID = ?, '
-            . '@IdentifierNumber = ?, @IdentifierDate = ?, @Description = ?, @UserID = ?',
+            . '@IdentifierNumber = ?, @IdentifierDate = ?, @Description = ?, @UserID = ?'
+            . (! empty($p['allowDuplicateName']) ? ', @AllowDuplicateName = 1' : '')
+            . $this->cooperationSql($p),
             [
                 $p['personId'] ?? null, $p['firstName'], $p['lastName'], $p['titleId'] ?? null,
                 $p['identifierNumber'] ?? null, $p['identifierDate'] ?? null, $p['description'] ?? null, $p['userId'],
+                ...$this->cooperationBindings($p),
             ]
         );
     }
@@ -807,6 +850,14 @@ class CrmStore
         }
 
         if (property_exists($row, 'Success') && (int) $row->Success !== 1) {
+            // پچِ ۱۱۴: نامِ تکراری = هشدار (چیزی ثبت نشده)؛ کاربر می‌تواند تأیید کند و دوباره بفرستد
+            if (($row->ErrorCode ?? null) === 'DUPLICATE_NAME') {
+                throw new CrmDuplicateNameException(
+                    (string) $row->Message,
+                    json_decode((string) ($row->Duplicates ?? '[]'), true) ?: [],
+                    (int) ($row->DuplicateCount ?? 0)
+                );
+            }
             throw new CrmException($row->Message ?? 'عملیاتِ پایگاه‌داده ناموفق بود.');
         }
 

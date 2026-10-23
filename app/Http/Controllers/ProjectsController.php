@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Crm\CrmPartyService;
 use App\Services\Crm\Exceptions\CrmException;
+use App\Services\Crm\Exceptions\CrmValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -728,15 +729,42 @@ class ProjectsController extends Controller
         $validated['partyId'] = $partyId;
         $validated['projectId'] = $id;
 
+        // پیوست‌هایِ اختیاری در همان درخواستِ multipart (مجوز = مسئولِ پروژه، نه CRM_MANAGE_PARTIES)
+        $files = $request->file('attachments');
+        $descriptions = $request->input('descriptions', []);
+        $hasFiles = is_array($files) && $files !== [];
+
         try {
+            if ($request->has('attachments') && ! $hasFiles) {
+                throw new CrmValidationException('هیچ فایلی برایِ پیوست انتخاب نشده است.');
+            }
+            if ($hasFiles) {
+                if (! is_array($descriptions)) {
+                    throw new CrmValidationException('توضیحاتِ پیوست نامعتبر است.');
+                }
+                // پیش از ثبتِ تعامل — فایلِ نامعتبر یعنی هیچ چیز ثبت نشود
+                $this->crmParties->validateInteractionAttachments($files, $descriptions);
+            }
+
             $res = $this->crmParties->saveInteraction($validated, Auth::id());
+            $interactionId = (int) $res->InteractionID;
 
             // متنِ موفقیتِ این مسیر عمداً ثابت است (نه پیامِ مشترکِ SP) — طبقِ درخواستِ کاربر، فقط برایِ
             // ثبتِ تعامل از Project→Contractor، مستقل از پیامِ عمومیِ sp_Crm_SaveInteraction.
+            $message = 'تعامل با موفقیت ثبت شد.';
+            if ($hasFiles) {
+                try {
+                    $this->crmParties->addInteractionAttachments($interactionId, $files, $descriptions, (int) Auth::id());
+                } catch (\Throwable $e) {
+                    report($e);
+                    $message = 'تعامل ثبت شد، ولی ذخیرهٔ پیوست‌ها ناموفق بود؛ از صفحهٔ طرف‌حساب دوباره پیوست کنید.';
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'تعامل با موفقیت ثبت شد.',
-                'interactionId' => (int) $res->InteractionID,
+                'message' => $message,
+                'interactionId' => $interactionId,
             ]);
         } catch (CrmException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);

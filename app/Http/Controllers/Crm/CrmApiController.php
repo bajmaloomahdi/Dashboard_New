@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Crm;
 
 use App\Http\Controllers\Controller;
+use App\Services\Crm\Exceptions\CrmDuplicateNameException;
 use App\Services\Crm\Exceptions\CrmException;
 use App\Services\Crm\Exceptions\CrmValidationException;
 use Illuminate\Http\JsonResponse;
@@ -59,6 +60,12 @@ abstract class CrmApiController extends Controller
             $data = $fn() ?? [];
 
             return response()->json(array_merge(['success' => true], $data));
+        } catch (CrmDuplicateNameException $e) {
+            // هشدارِ نامِ تکراری: چیزی ثبت نشده؛ رابطِ کاربری تأیید می‌گیرد و با allowDuplicateName دوباره می‌فرستد
+            return response()->json([
+                'success' => false, 'duplicateName' => true, 'message' => $e->getMessage(),
+                'duplicates' => $e->duplicates, 'duplicateCount' => $e->duplicateCount,
+            ], 409);
         } catch (CrmValidationException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors], 422);
         } catch (CrmException $e) {

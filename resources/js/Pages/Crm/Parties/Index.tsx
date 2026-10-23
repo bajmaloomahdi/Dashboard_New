@@ -30,7 +30,9 @@ import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
 import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
 import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
-import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, distinctOptions, filterHeaderCss } from '../../../Components/Crm/tableFilters';
+import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, distinctListOptions, filterHeaderCss } from '../../../Components/Crm/tableFilters';
+import FirstWithTooltipCell, { parseNameList } from '../../../Components/Crm/FirstWithTooltipCell';
+import { CooperationEndedTag } from '../../../Components/Crm/CooperationEnded';
 
 const { Title, Text } = Typography;
 
@@ -39,6 +41,9 @@ interface PartyRow extends Party {
     DepartmentName: string | null;
     PartyTypeName: string | null;
     ActivityName: string | null;
+    /** همهٔ نوع‌ها/فعالیت‌هایِ طبقه‌بندی‌هایِ فعال به ترتیبِ ثبت — آرایهٔ JSON (پچِ ۱۱۵) */
+    PartyTypeNames?: string | null;
+    ActivityNames?: string | null;
     ActiveBrandCount: number;
     ActiveAddressCount: number;
     ActiveContactCount: number;
@@ -51,6 +56,7 @@ interface PartyRow extends Party {
     PrimaryContactPersonName?: string | null;
     /** آدرسِ اصلی (اولین آدرسِ فعال) — نمایِ جدولی */
     PrimaryAddressProvince?: string | null;
+    PrimaryAddressCounty?: string | null;
     PrimaryAddressCity?: string | null;
     PrimaryAddressText?: string | null;
     PrimaryAddressTitle?: string | null;
@@ -80,15 +86,17 @@ export default function CrmPartiesIndex() {
     const [viewMode, setViewMode] = useListViewMode('crm.parties.viewMode');
     const [page, setPage] = useState({ current: 1, pageSize: 20 });
     // فیلترهایِ ستونیِ شبیهِ اکسل (با تایپ، همان لحظه؛ سمتِ مرورگر رویِ همین فهرستِ بارگذاری‌شده)
-    const typeText = (p: PartyRow) => [p.PartyTypeName, p.ActivityName].filter(Boolean).join(' / ');
+    const typeList = (p: PartyRow) => parseNameList(p.PartyTypeNames, p.PartyTypeName);
+    const activityList = (p: PartyRow) => parseNameList(p.ActivityNames, p.ActivityName);
     const colF = useColumnFilters<PartyRow>(items, {
         name: { get: (p) => p.DisplayName, mode: 'text' },
         nature: { get: (p) => p.PartyNature, mode: 'exact' },
         identifier: { get: (p) => p.IdentifierNumber, mode: 'text' },
-        type: { get: typeText, mode: 'exact' },
+        type: { get: typeList, mode: 'any' },
+        activity: { get: activityList, mode: 'any' },
         person: { get: (p) => p.PrimaryContactPersonName, mode: 'text' },
         contact: { get: (p) => [p.PrimaryContactValue, p.PrimaryContactType, p.PrimaryContactExtension].filter(Boolean).join(' '), mode: 'text' },
-        address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
+        address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCounty, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
         status: { get: (p) => (toBool(p.IsActive) ? '1' : '0'), mode: 'exact' },
     });
     const setColFilter = (key: string, value: string) => {
@@ -241,7 +249,12 @@ export default function CrmPartiesIndex() {
         {
             title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
             key: 'name',
-            render: (_, p) => <Text strong>{p.DisplayName || '—'}</Text>,
+            render: (_, p) => (
+                <Space size={6} wrap>
+                    <Text strong>{p.DisplayName || '—'}</Text>
+                    <CooperationEndedTag at={p.CooperationEndedAt} />
+                </Space>
+            ),
         },
         {
             title: (
@@ -260,12 +273,22 @@ export default function CrmPartiesIndex() {
         },
         {
             title: (
-                <FilterHeader label="نوع / فعالیت">
-                    <SelectFilterInput value={colF.values.type} onChange={(v) => setColFilter('type', v)} options={distinctOptions(items, typeText)} />
+                <FilterHeader label="نوع">
+                    <SelectFilterInput value={colF.values.type} onChange={(v) => setColFilter('type', v)} options={distinctListOptions(items, typeList)} />
                 </FilterHeader>
             ),
             key: 'type',
-            render: (_, p) => typeText(p) || <Text type="secondary">—</Text>,
+            // چند نوع → اولی نمایش داده می‌شود، بقیه در تولتیپ
+            render: (_, p) => <FirstWithTooltipCell items={typeList(p)} />,
+        },
+        {
+            title: (
+                <FilterHeader label="فعالیت">
+                    <SelectFilterInput value={colF.values.activity} onChange={(v) => setColFilter('activity', v)} options={distinctListOptions(items, activityList)} />
+                </FilterHeader>
+            ),
+            key: 'activity',
+            render: (_, p) => <FirstWithTooltipCell items={activityList(p)} />,
         },
         {
             title: <FilterHeader label="مخاطب"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
@@ -278,11 +301,11 @@ export default function CrmPartiesIndex() {
             render: (_, p) => <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} />,
         },
         {
-            title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهر، آدرس…" /></FilterHeader>,
+            title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهرستان، شهر، آدرس…" /></FilterHeader>,
             key: 'address',
             width: 260,
             render: (_, p) => (
-                <PrimaryAddressCell province={p.PrimaryAddressProvince} city={p.PrimaryAddressCity} text={p.PrimaryAddressText} title={p.PrimaryAddressTitle} />
+                <PrimaryAddressCell province={p.PrimaryAddressProvince} county={p.PrimaryAddressCounty} city={p.PrimaryAddressCity} text={p.PrimaryAddressText} title={p.PrimaryAddressTitle} />
             ),
         },
         {

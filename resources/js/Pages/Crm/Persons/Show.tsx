@@ -15,10 +15,17 @@ import ContactsPanel from '../Parties/ContactsPanel';
 import RelatedPartiesPanel from './RelatedPartiesPanel';
 import InteractionsPanel from '../Parties/InteractionsPanel';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
+import { CooperationEndedAction } from '../../../Components/Crm/CooperationEnded';
+import CrmLinkedUserAction from '../../../Components/Crm/CrmLinkedUser';
 
 const { Text } = Typography;
 
 interface PersonDetail extends Person {
+    /** کاربرِ متصل (پچِ ۱۲۱) */
+    LinkedUserID?: number | string | null;
+    LinkedUserName?: string | null;
+    /** پچِ ۱۲۲: INTERNAL یا PERSON */
+    LinkedUserType?: string | null;
     DisplayName: string;
     TitleName: string | null;
     CreatedByName: string | null;
@@ -113,6 +120,32 @@ export default function CrmPersonShow() {
                     </Descriptions.Item>
                     <Descriptions.Item label="تاریخِ تولد">
                         {currentPerson.IdentifierDate ? gregorianToJalaliDisplay(currentPerson.IdentifierDate) : '—'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="کاربر">
+                        <CrmLinkedUserAction
+                            entity="persons"
+                            id={currentPerson.PersonID}
+                            userId={currentPerson.LinkedUserID}
+                            userName={currentPerson.LinkedUserName}
+                            userType={currentPerson.LinkedUserType}
+                            canManage={canManage}
+                            onSaved={(message, ok) => {
+                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                if (ok) router.reload({ only: ['person'] });
+                            }}
+                        />
+                    </Descriptions.Item>
+                    <Descriptions.Item label="قطعِ همکاری">
+                        <CooperationEndedAction
+                            entity="persons"
+                            id={currentPerson.PersonID}
+                            at={currentPerson.CooperationEndedAt}
+                            canManage={canManage}
+                            onSaved={(message, ok) => {
+                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                if (ok) router.reload({ only: ['person'] });
+                            }}
+                        />
                     </Descriptions.Item>
                     <Descriptions.Item label="توضیحات" span={3}>{currentPerson.Description || '—'}</Descriptions.Item>
                     <Descriptions.Item label="ایجادکننده">

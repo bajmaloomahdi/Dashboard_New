@@ -190,6 +190,7 @@ class CrmListPrimaryContactTest extends TestCase
         $this->address(['partyId' => $partyId], $geo, 'خیابانِ دوم');
         $row = $this->partyRow($partyId, $name);
         $this->assertSame('استانِ جدول', $row['PrimaryAddressProvince']);
+        $this->assertSame('شهرستانِ جدول', $row['PrimaryAddressCounty']); // پچِ ۱۱۸
         $this->assertSame('شهرِ جدول', $row['PrimaryAddressCity']);
         $this->assertSame('خیابانِ اول', $row['PrimaryAddressText']);
         $this->assertSame('دفترِ جدول', $row['PrimaryAddressTitle']);

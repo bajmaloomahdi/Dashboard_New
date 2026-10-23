@@ -5,7 +5,6 @@ import {
     Tag,
     Button,
     Space,
-    Popconfirm,
     Spin,
     Empty,
     Typography,
@@ -15,7 +14,6 @@ import {
 } from 'antd';
 import {
     EditOutlined,
-    DeleteOutlined,
     ClockCircleOutlined,
     TeamOutlined,
     UserOutlined,
@@ -29,6 +27,7 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../Utils/jalali';
 import type { CalendarEventAttendee, CalendarPermission, ReminderOption } from '../../Types';
 import { parseDT, previousResponseText, recurrenceSummary } from './calendarUtils';
+import EventAttachmentList, { EventAttachment } from './EventAttachments';
 
 const { Text, Paragraph } = Typography;
 
@@ -40,7 +39,7 @@ interface EventDetail {
     EndDateTime: string;
     IsAllDay: boolean | number;
     Color: string;
-    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED' | 'DONE';
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
     RecurrenceInterval: number;
     RecurrenceEndDate: string | null;
@@ -66,14 +65,19 @@ interface EventDetailsModalProps {
     onClose: () => void;
     onEdit: (eventId: number) => void;
     onChanged: () => void;
-    onDeleted: () => void;
+    /** دیگر استفاده نمی‌شود (حذف از این پنجره برداشته شد) — برایِ سازگاریِ فراخوان */
+    onDeleted?: () => void;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-    CONFIRMED: { label: 'تایید شده', color: 'success' },
+    CONFIRMED: { label: 'ثبت شده', color: 'processing' },
     TENTATIVE: { label: 'موقت', color: 'warning' },
     CANCELLED: { label: 'لغو شده', color: 'default' },
+    DONE: { label: 'انجام شده', color: 'success' },
 };
+
+/** وضعیت‌هایی که از همین پنجره قابلِ انتخاب‌اند (پچِ ۱۱۶) */
+const STATUS_CHOICES = ['CONFIRMED', 'CANCELLED', 'DONE'] as const;
 
 const RECURRENCE_LABELS: Record<string, string> = {
     NONE: 'بدون تکرار',
@@ -123,12 +127,12 @@ export default function EventDetailsModal({
     onClose,
     onEdit,
     onChanged,
-    onDeleted,
 }: EventDetailsModalProps) {
     const [loading, setLoading] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+    const [changingStatus, setChangingStatus] = useState(false);
     const [event, setEvent] = useState<EventDetail | null>(null);
     const [attendees, setAttendees] = useState<CalendarEventAttendee[]>([]);
+    const [attachments, setAttachments] = useState<EventAttachment[]>([]);
     const [myReminder, setMyReminder] = useState<number | string>(NO_REMINDER);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -148,6 +152,7 @@ export default function EventDetailsModal({
             .then((data) => {
                 setEvent(data.event || null);
                 setAttendees(data.attendees || []);
+                setAttachments(data.attachments || []);
                 setMyReminder(data.reminderOffsetMinutes ?? NO_REMINDER);
             })
             .finally(() => setLoading(false));
@@ -158,14 +163,16 @@ export default function EventDetailsModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, eventId]);
 
-    const handleDelete = async () => {
-        if (!eventId) return;
-        setDeleting(true);
-        const result = await api(`/calendar/events/${eventId}`, 'DELETE');
-        setDeleting(false);
+    // تغییرِ وضعیت همین‌جا با یک کلیک (ثبت شده / لغو شده / انجام شده) — بقیهٔ اطلاعات دست نمی‌خورد
+    const handleStatusChange = async (status: string) => {
+        if (!eventId || !event || status === event.Status) return;
+        setChangingStatus(true);
+        const result = await api(`/calendar/events/${eventId}/status`, 'POST', { Status: status });
+        setChangingStatus(false);
         if (result.success) {
             notify('success', result.message);
-            setTimeout(onDeleted, 400);
+            reload();
+            onChanged();
         } else {
             notify('error', result.message);
         }
@@ -199,37 +206,18 @@ export default function EventDetailsModal({
 
     const canManage = event ? Number(event.CanManage) === 1 || event.CanManage === true : false;
     const canEdit = canManage && permissions.includes('CALENDAR_EDIT');
-    const canDelete = canManage && permissions.includes('CALENDAR_DELETE');
     const isAttendee = event?.MyRelation === 'ATTENDEE';
     // عضوِ واحد (UNIT) که شرکت‌کننده نیست یادآوریِ شخصی ندارد
     const relatedToEvent = event && event.MyRelation !== 'NONE' && event.MyRelation !== 'UNIT';
 
     const footer: React.ReactNode[] = [];
-    if (event && (canEdit || canDelete)) {
-        if (canDelete) {
-            footer.push(
-                <Popconfirm
-                    key="delete"
-                    title="حذف رویداد"
-                    description={event.RecurrenceType !== 'NONE' ? 'این رویداد تکرارشونده است؛ همهٔ وقوع‌هایِ آن حذف می‌شوند. مطمئن هستید؟' : 'آیا از حذف این رویداد مطمئن هستید؟'}
-                    okText="بله، حذف شود"
-                    cancelText="انصراف"
-                    okButtonProps={{ danger: true, loading: deleting }}
-                    onConfirm={handleDelete}
-                >
-                    <Button danger icon={<DeleteOutlined />}>
-                        حذف
-                    </Button>
-                </Popconfirm>,
-            );
-        }
-        if (canEdit) {
-            footer.push(
-                <Button key="edit" type="primary" icon={<EditOutlined />} onClick={() => eventId && onEdit(eventId)}>
-                    ویرایش
-                </Button>,
-            );
-        }
+    // حذف از این پنجره برداشته شد؛ ویرایش فقط برایِ تاریخ/ساعت و وضعیت است
+    if (event && canEdit) {
+        footer.push(
+            <Button key="edit" type="primary" icon={<EditOutlined />} onClick={() => eventId && onEdit(eventId)}>
+                ویرایشِ تاریخ و ساعت
+            </Button>,
+        );
     } else {
         footer.push(
             <Button key="close" onClick={onClose}>
@@ -250,9 +238,20 @@ export default function EventDetailsModal({
                                 <Tag color={event.Color} style={{ borderRadius: 6 }}>
                                     <span style={{ color: '#fff' }}>●</span>
                                 </Tag>
-                                <Tag color={STATUS_LABELS[event.Status]?.color} style={{ borderRadius: 6 }}>
-                                    {STATUS_LABELS[event.Status]?.label || event.Status}
-                                </Tag>
+                                {canEdit ? (
+                                    // کلیک رویِ وضعیت → همان‌جا تغییر می‌کند
+                                    <Segmented
+                                        size="small"
+                                        value={STATUS_CHOICES.includes(event.Status as (typeof STATUS_CHOICES)[number]) ? event.Status : 'CONFIRMED'}
+                                        disabled={changingStatus}
+                                        onChange={(v) => handleStatusChange(String(v))}
+                                        options={STATUS_CHOICES.map((s) => ({ value: s, label: STATUS_LABELS[s].label }))}
+                                    />
+                                ) : (
+                                    <Tag color={STATUS_LABELS[event.Status]?.color} style={{ borderRadius: 6 }}>
+                                        {STATUS_LABELS[event.Status]?.label || event.Status}
+                                    </Tag>
+                                )}
                                 {Number(event.IsPrivate) === 1 && (
                                     <Tag icon={<LockOutlined />} style={{ borderRadius: 6 }}>
                                         خصوصی
@@ -288,6 +287,11 @@ export default function EventDetailsModal({
                                         ? gregorianToJalaliDisplay(event.EndDateTime)
                                         : gregorianToJalaliDateTimeDisplay(event.EndDateTime)}
                                 </Descriptions.Item>
+                                {attachments.length > 0 && (
+                                    <Descriptions.Item label="ضمیمه‌ها">
+                                        <EventAttachmentList items={attachments} />
+                                    </Descriptions.Item>
+                                )}
                                 <Descriptions.Item label={<><UserOutlined /> ایجادکننده</>}>{event.CreatorName}</Descriptions.Item>
                                 <Descriptions.Item label={<><CrownOutlined /> مالک</>}>
                                     {event.OwnerName}

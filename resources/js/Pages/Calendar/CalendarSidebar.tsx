@@ -204,8 +204,8 @@ export default function CalendarSidebar({
                 value={filters.statuses}
                 onChange={(v) => set('statuses', v as EventStatus[])}
                 options={[
-                    { label: 'قطعی', value: 'CONFIRMED' },
-                    { label: 'موقت', value: 'TENTATIVE' },
+                    { label: 'ثبت شده', value: 'CONFIRMED' },
+                    { label: 'انجام شده', value: 'DONE' },
                     { label: 'لغو شده', value: 'CANCELLED' },
                 ]}
                 className="cal-side-checks"

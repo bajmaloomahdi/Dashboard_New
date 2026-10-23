@@ -36,6 +36,7 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import DataGrid from '../../Components/DataGrid';
 import { THEME, STYLES, columnHelpers } from '../../theme';
 import type { ColumnsType } from 'antd/es/table';
+import UserTypeTag from '../../Components/UserTypeTag';
 
 const { Title, Text } = Typography;
 
@@ -53,6 +54,10 @@ interface User {
     IsActive: boolean | number;
     Description: string | null;
     RolesCount: number;
+    UserType?: string | null;
+    CrmPersonID?: number | string | null;
+    CrmPartyID?: number | string | null;
+    CrmLinkName?: string | null;
 }
 
 export default function UsersIndex() {
@@ -186,6 +191,12 @@ export default function UsersIndex() {
                     </div>
                 </div>
             ),
+        },
+        {
+            title: 'نوع',
+            key: 'userType',
+            align: 'center',
+            render: (_, record: User) => <UserTypeTag type={record.UserType} linkName={record.CrmLinkName} />,
         },
         {
             title: 'اطلاعات تماس',

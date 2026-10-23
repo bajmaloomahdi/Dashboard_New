@@ -3,6 +3,7 @@ import { Table, Button, Select, Checkbox, Space, Tag, Popconfirm, Typography, Al
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled, UserAddOutlined, PhoneOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
+import { crmSaveWithDuplicateConfirm } from '../../../Components/Crm/duplicateNameConfirm';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import PersianDateInput from '../../../Components/PersianDateInput';
 import { toBool } from '../../../Utils/bool';
@@ -170,7 +171,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             return;
         }
         setSaving(true);
-        const res = await crmApi('/crm/persons', 'POST', {
+        const res = await crmSaveWithDuplicateConfirm('/crm/persons', {
             firstName: newPerson.firstName.trim() || undefined,
             lastName: newPerson.lastName.trim(),
             titleId: newPerson.titleId,
@@ -178,6 +179,10 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             identifierDate: newPerson.identifierDate || undefined,
         });
         setSaving(false);
+        if (res === null) {
+            setError('ثبت انجام نشد؛ نام را اصلاح کنید یا دوباره ذخیره و تأیید کنید.');
+            return;
+        }
         if (!res.ok || !res.success) {
             setError(res.message);
             return;

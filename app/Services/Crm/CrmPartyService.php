@@ -101,6 +101,8 @@ class CrmPartyService
                 'partyTypeId' => $input['partyTypeId'] ?? null,
                 'activityId' => $input['activityId'] ?? null,
                 'userId' => $userId,
+                'allowDuplicateName' => ! empty($input['allowDuplicateName']), // کاربر هشدارِ نامِ تکراری را تأیید کرده
+                ...$this->cooperationInput($input),
             ]);
 
             $partyId = (int) $res->PartyID;
@@ -186,22 +188,7 @@ class CrmPartyService
     public function addInteractionAttachments(int $interactionId, array $files, array $descriptions, int $userId): int
     {
         $files = array_values($files);
-        if (! $files) {
-            throw new CrmValidationException('هیچ فایلی برایِ پیوست انتخاب نشده است.');
-        }
-        if (count($files) > CrmInteractionAttachmentFiles::MAX_FILES) {
-            throw new CrmValidationException('در هر بار حداکثر ۱۰ فایل قابلِ پیوست است.');
-        }
-        foreach ($files as $i => $file) {
-            $this->attachmentFiles->validate($file);
-            $desc = $descriptions[$i] ?? null;
-            if ($desc !== null && ! is_string($desc)) {
-                throw new CrmValidationException('توضیحاتِ پیوست نامعتبر است.');
-            }
-            if ($desc !== null && mb_strlen(trim($desc)) > CrmInteractionAttachmentFiles::MAX_DESCRIPTION) {
-                throw new CrmValidationException('توضیحاتِ هر پیوست حداکثر ۱۰۰۰ کاراکتر است.');
-            }
-        }
+        $this->validateInteractionAttachments($files, $descriptions);
 
         $stored = [];
         try {
@@ -228,6 +215,31 @@ class CrmPartyService
         }
 
         return count($files);
+    }
+
+    /**
+     * بررسیِ تعداد/نوع/حجم/توضیحاتِ پیوست‌ها بدونِ ذخیره — تا مسیری که تعامل و پیوست را با هم می‌گیرد
+     * (ثبتِ تعامل از پروژه) پیش از ثبتِ خودِ تعامل خطا بدهد.
+     */
+    public function validateInteractionAttachments(array $files, array $descriptions): void
+    {
+        $files = array_values($files);
+        if (! $files) {
+            throw new CrmValidationException('هیچ فایلی برایِ پیوست انتخاب نشده است.');
+        }
+        if (count($files) > CrmInteractionAttachmentFiles::MAX_FILES) {
+            throw new CrmValidationException('در هر بار حداکثر ۱۰ فایل قابلِ پیوست است.');
+        }
+        foreach ($files as $i => $file) {
+            $this->attachmentFiles->validate($file);
+            $desc = $descriptions[$i] ?? null;
+            if ($desc !== null && ! is_string($desc)) {
+                throw new CrmValidationException('توضیحاتِ پیوست نامعتبر است.');
+            }
+            if ($desc !== null && mb_strlen(trim($desc)) > CrmInteractionAttachmentFiles::MAX_DESCRIPTION) {
+                throw new CrmValidationException('توضیحاتِ هر پیوست حداکثر ۱۰۰۰ کاراکتر است.');
+            }
+        }
     }
 
     /** حذفِ قطعی: اول ردیف (SP)، بعد فایلِ فیزیکی. */
@@ -756,7 +768,54 @@ class CrmPartyService
             'identifierDate' => $input['identifierDate'] ?? null,
             'description' => $input['description'] ?? null,
             'userId' => $userId,
+            'allowDuplicateName' => ! empty($input['allowDuplicateName']), // کاربر هشدارِ نامِ تکراری را تأیید کرده
+            ...$this->cooperationInput($input),
         ]);
+    }
+
+    /** کاربرِ متصل به طرف‌حساب/مخاطب (پچِ ۱۲۱) */
+    public function setEntityUser(string $entityType, int $entityId, ?int $userId, int $actorId, ?string $userType = null): object
+    {
+        return $this->store->setEntityUser($entityType, $entityId, $userId, $actorId, $userType);
+    }
+
+    /** @return array<int, array{UserID: int, Name: string, UserName: string, UserType: string, CrmLinkName: ?string}> */
+    public function linkableUsers(): array
+    {
+        return array_map(fn ($u) => [
+            'UserID' => (int) $u->UserID,
+            'Name' => trim((string) ($u->FullName ?? '')) ?: (string) $u->UserName,
+            'UserName' => (string) $u->UserName,
+            'UserType' => (string) ($u->UserType ?? 'INTERNAL'),
+            'CrmLinkName' => $u->CrmLinkName ?? null,
+        ], $this->store->linkableUsers());
+    }
+
+    /** ثبت/برداشتنِ «قطعِ همکاری» از صفحهٔ اصلیِ طرف‌حساب/مخاطب، بدونِ دست‌زدن به بقیهٔ فیلدها (پچِ ۱۲۰) */
+    public function setCooperationEnded(string $entityType, int $entityId, array $input, int $userId): object
+    {
+        $c = $this->cooperationInput(['cooperationEnded' => (bool) ($input['cooperationEnded'] ?? false)] + $input);
+
+        return $this->store->setCooperationEnded($entityType, $entityId, (bool) $c['cooperationEnded'], $c['cooperationEndedAt'], $userId);
+    }
+
+    /**
+     * «قطعِ همکاری» (پچِ ۱۱۹) برایِ طرف‌حساب و مخاطب: ارسال‌نشده = بدونِ تغییر؛ true = قطعِ همکاری در تاریخ/ساعتِ داده‌شده؛ false = برقراریِ دوباره.
+     *
+     * @return array{cooperationEnded: ?bool, cooperationEndedAt: ?string}
+     */
+    private function cooperationInput(array $input): array
+    {
+        if (! array_key_exists('cooperationEnded', $input) || $input['cooperationEnded'] === null) {
+            return ['cooperationEnded' => null, 'cooperationEndedAt' => null];
+        }
+        $ended = (bool) $input['cooperationEnded'];
+        $at = $ended ? trim((string) ($input['cooperationEndedAt'] ?? '')) : '';
+        if ($ended && $at === '') {
+            throw new CrmValidationException('تاریخ و ساعتِ قطعِ همکاری الزامی است.');
+        }
+
+        return ['cooperationEnded' => $ended, 'cooperationEndedAt' => $ended ? date('Y-m-d H:i:s', strtotime($at)) : null];
     }
 
     public function togglePersonActive(int $personId, int $userId): object

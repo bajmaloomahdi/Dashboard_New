@@ -107,6 +107,7 @@ Route::middleware('auth')->group(function () {
     // کاربران
     Route::prefix('users')->name('users.')->group(function () {
         Route::get('/', [UserController::class, 'index'])->name('index');
+        Route::get('/crm-options', [UserController::class, 'crmOptions'])->name('crm-options');
         Route::post('/', [UserController::class, 'store'])->name('store');
         Route::put('/{id}', [UserController::class, 'update'])->name('update');
         Route::post('/{id}/toggle', [UserController::class, 'toggleActive'])->name('toggle');
@@ -266,6 +267,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/calendar/reminders/due', [CalendarController::class, 'dueReminders'])->name('calendar.reminders.due');
     Route::get('/calendar/invitations', [CalendarController::class, 'pendingInvitations'])->name('calendar.invitations.index');
     Route::get('/calendar/notices', [CalendarController::class, 'notices'])->name('calendar.notices.index');
+    Route::post('/calendar/events/{id}/status', [CalendarController::class, 'setStatus'])->whereNumber('id')->name('calendar.events.status');
+    Route::post('/calendar/events/{id}/attachments', [CalendarController::class, 'storeAttachments'])->whereNumber('id')->name('calendar.events.attachments.store');
+    Route::get('/calendar/event-attachments/{attachmentId}/download', [CalendarController::class, 'downloadAttachment'])->whereNumber('attachmentId')->name('calendar.event-attachments.download');
     // تقویمِ مشترک: منابع (اشتراک‌گذاشته‌شده با من + واحدهایِ من)، تقویمِ واحد، اشتراکِ تقویمِ شخصی
     Route::get('/calendar/sources', [CalendarController::class, 'sources'])->name('calendar.sources');
     Route::get('/calendar/units/{unitId}/events', [CalendarController::class, 'unitEvents'])->whereNumber('unitId')->name('calendar.units.events');
@@ -491,6 +495,11 @@ Route::middleware('auth')->group(function () {
         Route::post('parties', [CrmPartyController::class, 'store'])->name('parties.store');
         Route::post('parties/{partyId}/toggle', [CrmPartyController::class, 'toggleActive'])
             ->whereNumber('partyId')->name('parties.toggle');
+        Route::post('parties/{partyId}/cooperation', [CrmPartyController::class, 'setCooperation'])
+            ->whereNumber('partyId')->name('parties.cooperation');
+        Route::post('parties/{partyId}/user', [CrmPartyController::class, 'setUser'])
+            ->whereNumber('partyId')->name('parties.user');
+        Route::get('linkable-users', [CrmPartyController::class, 'linkableUsers'])->name('linkable-users');
         Route::get('parties/{partyId}/roles-positions', [CrmPartyController::class, 'rolesPositions'])
             ->whereNumber('partyId')->name('parties.roles-positions');
 
@@ -583,6 +592,10 @@ Route::middleware('auth')->group(function () {
         Route::post('persons', [CrmPersonController::class, 'store'])->name('persons.store');
         Route::post('persons/{personId}/toggle', [CrmPersonController::class, 'toggleActive'])
             ->whereNumber('personId')->name('persons.toggle');
+        Route::post('persons/{personId}/cooperation', [CrmPersonController::class, 'setCooperation'])
+            ->whereNumber('personId')->name('persons.cooperation');
+        Route::post('persons/{personId}/user', [CrmPersonController::class, 'setUser'])
+            ->whereNumber('personId')->name('persons.user');
 
         Route::get('relations', [CrmPersonController::class, 'relationsIndex'])->name('relations.index'); // ?partyId=
         Route::get('relations/{relationId}/roles', [CrmPersonController::class, 'relationRoles'])

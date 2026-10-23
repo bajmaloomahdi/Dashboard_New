@@ -197,6 +197,9 @@ export default function Login() {
                             {modalMessage}
                         </Text>
                     </div>
+                    <Button type="primary" autoFocus onClick={() => setModalOpen(false)} style={{ marginTop: 24, minWidth: 120 }}>
+                        متوجه شدم
+                    </Button>
                 </div>
             </Modal>
 

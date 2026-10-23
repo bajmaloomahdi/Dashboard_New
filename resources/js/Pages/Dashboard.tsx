@@ -436,7 +436,7 @@ interface TodayEvent {
     EndDateTime: string;
     IsAllDay: boolean | number;
     Color: string;
-    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED' | 'DONE';
     MyRelation: 'CREATOR' | 'OWNER' | 'ATTENDEE' | 'NONE';
 }
 
@@ -558,6 +558,11 @@ function TodayEventsContent() {
                         {ev.Status === 'TENTATIVE' && (
                             <Tag color="warning" style={{ borderRadius: 6, fontSize: 10 }}>
                                 موقت
+                            </Tag>
+                        )}
+                        {ev.Status === 'DONE' && (
+                            <Tag color="success" style={{ borderRadius: 6, fontSize: 10 }}>
+                                انجام شده
                             </Tag>
                         )}
                         <ArrowLeftOutlined style={{ color: THEME.primary, fontSize: 12 }} />

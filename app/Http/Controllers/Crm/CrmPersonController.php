@@ -97,6 +97,9 @@ class CrmPersonController extends CrmApiController
             'identifierNumber' => 'nullable|string|max:20',
             'identifierDate' => 'nullable|date',
             'description' => 'nullable|string',
+            'allowDuplicateName' => 'sometimes|boolean', // تأییدِ ثبت با وجودِ نامِ تکراری (پچِ ۱۱۴)
+            'cooperationEnded' => 'sometimes|nullable|boolean', // قطعِ همکاری (پچِ ۱۱۹)
+            'cooperationEndedAt' => 'nullable|date', // الزامی‌بودن با قطعِ همکاری در سرویس (پیامِ فارسی)
         ], [
             'lastName.required' => 'نامِ خانوادگی الزامی است.',
             'titleId.required' => 'عنوان الزامی است.',
@@ -107,6 +110,33 @@ class CrmPersonController extends CrmApiController
             $res = $this->parties->savePerson($validated, $this->actorId());
 
             return ['message' => $res->Message ?? 'شخص ذخیره شد.', 'personId' => (int) $res->PersonID];
+        });
+    }
+
+    /** POST crm/persons/{personId}/user — تعیین/برداشتنِ کاربرِ این مخاطب (پچِ ۱۲۱) */
+    public function setUser(Request $request, int $personId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+        // userType (پچِ ۱۲۲): کاربرِ داخلی‌ای که این مخاطب را برایِ آدرس/تلفن دارد، یا کاربرِ از نوعِ مخاطب
+        $validated = $request->validate(['userId' => 'nullable|integer', 'userType' => 'nullable|in:INTERNAL,PERSON']);
+
+        return $this->runCrm(function () use ($validated, $personId) {
+            $res = $this->parties->setEntityUser('PERSON', $personId, isset($validated['userId']) ? (int) $validated['userId'] : null, $this->actorId(), $validated['userType'] ?? null);
+
+            return ['message' => $res->Message ?? 'ذخیره شد.'];
+        });
+    }
+
+    /** POST crm/persons/{personId}/cooperation — ثبت/برداشتنِ قطعِ همکاری از صفحهٔ اصلی (پچِ ۱۲۰) */
+    public function setCooperation(Request $request, int $personId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+        $validated = $request->validate(['cooperationEnded' => 'required|boolean', 'cooperationEndedAt' => 'nullable|date']);
+
+        return $this->runCrm(function () use ($validated, $personId) {
+            $res = $this->parties->setCooperationEnded('PERSON', $personId, $validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'ذخیره شد.', 'cooperationEndedAt' => $res->CooperationEndedAt ?? null];
         });
     }
 

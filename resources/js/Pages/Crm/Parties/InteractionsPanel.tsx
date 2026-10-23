@@ -138,15 +138,15 @@ const splitDateTime = (v: string) => {
 
 /** همان قیودِ Backend (CrmInteractionAttachmentFiles) — بررسیِ اولیه در مرورگر؛ بررسیِ قطعی در سرور */
 const ATTACH_MAX_BYTES = 10240 * 1024;
-const ATTACH_MAX_FILES = 10;
-const ATTACH_MAX_DESCRIPTION = 1000;
+export const ATTACH_MAX_FILES = 10;
+export const ATTACH_MAX_DESCRIPTION = 1000;
 const ATTACH_BLOCKED = new Set([
     'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps', 'pht', 'exe', 'com', 'bat', 'cmd', 'msi', 'msp', 'scr', 'dll', 'cpl', 'sys',
     'sh', 'bash', 'ps1', 'psm1', 'vbs', 'vbe', 'js', 'mjs', 'jse', 'wsf', 'wsh', 'hta', 'jar', 'html', 'htm', 'xhtml', 'shtml', 'svg', 'svgz', 'xml',
     'asp', 'aspx', 'jsp', 'cgi', 'pl', 'py', 'htaccess', 'htpasswd', 'lnk', 'reg',
 ]);
 
-const checkAttachment = (file: File): string | null => {
+export const checkAttachment = (file: File): string | null => {
     const parts = file.name.toLowerCase().split('.').slice(1);
     if (!file.name || file.name.startsWith('.') || parts.some((p) => ATTACH_BLOCKED.has(p))) return `نوعِ فایلِ «${file.name}» مجاز نیست (فایل‌هایِ اجرایی/اسکریپتی قابلِ پیوست نیستند).`;
     if (file.size === 0) return `فایلِ «${file.name}» خالی است.`;
@@ -154,7 +154,7 @@ const checkAttachment = (file: File): string | null => {
     return null;
 };
 
-const formatSize = (bytes: number | string) => {
+export const formatSize = (bytes: number | string) => {
     const b = Number(bytes) || 0;
     if (b < 1024) return `${b} بایت`;
     if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} کیلوبایت`;

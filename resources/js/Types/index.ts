@@ -41,7 +41,7 @@ export interface CalendarEvent {
     EndDateTime: string;
     IsAllDay: boolean | number;
     Color: string;
-    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+    Status: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED' | 'DONE';
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
     RecurrenceInterval: number;
     RecurrenceEndDate: string | null;

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Modal, Form, Input, Row, Col, Button, Typography } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, Form, Input, Row, Col, Button, Typography, Select, Alert, Spin } from 'antd';
 import {
     UserOutlined,
     LockOutlined,
@@ -10,6 +10,7 @@ import {
     CloseOutlined,
 } from '@ant-design/icons';
 import { useForm } from '@inertiajs/react';
+import { USER_TYPE_OPTIONS, UserType, normalizeUserType } from '../../Components/UserTypeTag';
 
 const { Text } = Typography;
 
@@ -22,6 +23,17 @@ interface User {
     Email: string | null;
     Mobile: string | null;
     Description: string | null;
+    UserType?: string | null;
+    CrmPersonID?: number | string | null;
+    CrmPartyID?: number | string | null;
+    CrmLinkName?: string | null;
+}
+
+interface CrmOption {
+    id: number;
+    name: string;
+    linkedUserId: number | null;
+    linkedUserName: string | null;
 }
 
 interface UserFormModalProps {
@@ -42,7 +54,35 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
         Email: '',
         Mobile: '',
         Description: '',
+        UserType: 'INTERNAL' as UserType,
+        CrmPersonID: null as number | null,
+        CrmPartyID: null as number | null,
     });
+
+    // جست‌وجویِ مخاطب/طرف‌حساب برایِ نوعِ «مخاطب»/«طرف‌حساب» (پچِ ۱۲۱)
+    const [crmOptions, setCrmOptions] = useState<CrmOption[]>([]);
+    const [crmLoading, setCrmLoading] = useState(false);
+    const [crmLinkError, setCrmLinkError] = useState<string | null>(null);
+    const searchTimer = useRef<number | undefined>(undefined);
+    const searchSeq = useRef(0);
+    // پچِ ۱۲۲: داخلی و مخاطب → فهرستِ مخاطبان (برایِ داخلی اختیاری)؛ طرف‌حساب → فهرستِ طرف‌حساب‌ها
+    const linkKind = (type: UserType) => (type === 'PARTY' ? 'PARTY' : 'PERSON');
+    const loadCrmOptions = (type: UserType, search: string) => {
+        window.clearTimeout(searchTimer.current);
+        searchTimer.current = window.setTimeout(async () => {
+            const seq = ++searchSeq.current;
+            setCrmLoading(true);
+            try {
+                const res = await fetch(`/users/crm-options?type=${linkKind(type)}&search=${encodeURIComponent(search)}`, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                const json = res.ok ? await res.json() : { items: [] };
+                if (seq === searchSeq.current) {
+                    setCrmOptions((json.items || []).map((i: any) => ({ ...i, id: Number(i.id), linkedUserId: i.linkedUserId == null ? null : Number(i.linkedUserId) })));
+                }
+            } finally {
+                if (seq === searchSeq.current) setCrmLoading(false);
+            }
+        }, 300);
+    };
 
     // پر کردن فرم هنگام ویرایش
     useEffect(() => {
@@ -56,13 +96,22 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     Email: editingUser.Email || '',
                     Mobile: editingUser.Mobile || '',
                     Description: editingUser.Description || '',
+                    UserType: normalizeUserType(editingUser.UserType),
+                    CrmPersonID: editingUser.CrmPersonID ? Number(editingUser.CrmPersonID) : null,
+                    CrmPartyID: editingUser.CrmPartyID ? Number(editingUser.CrmPartyID) : null,
                 };
                 setData(formData);
                 form.setFieldsValue(formData);
+                const linkedId = formData.UserType === 'PARTY' ? formData.CrmPartyID : formData.CrmPersonID;
+                setCrmOptions(linkedId && editingUser.CrmLinkName ? [{ id: linkedId, name: editingUser.CrmLinkName, linkedUserId: editingUser.UserID, linkedUserName: null }] : []);
+                loadCrmOptions(formData.UserType, '');
             } else {
                 reset();
                 form.resetFields();
+                setCrmOptions([]);
+                loadCrmOptions('INTERNAL', '');
             }
+            setCrmLinkError(null);
             clearErrors();
         }
     }, [open, editingUser]);
@@ -72,6 +121,8 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
      */
     const handleSubmit = () => {
         form.validateFields().then(() => {
+            if (data.UserType === 'PERSON' && !data.CrmPersonID) return setCrmLinkError('مخاطبِ این کاربر را انتخاب کنید.');
+            if (data.UserType === 'PARTY' && !data.CrmPartyID) return setCrmLinkError('طرف‌حسابِ این کاربر را انتخاب کنید.');
             const options = {
                 preserveScroll: true,
                 onSuccess: () => {
@@ -137,6 +188,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
             ]}
             styles={{ body: { paddingTop: 24 } }}
         >
+            {errors.UserType ? <Alert type="error" showIcon message={errors.UserType} style={{ marginBottom: 16, borderRadius: 8 }} /> : null}
             <Form
                 form={form}
                 layout="vertical"
@@ -281,6 +333,55 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                                 onChange={(e) => setData('Mobile', e.target.value)}
                                 size="large"
                                 maxLength={11}
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    {/* نوعِ کاربر (پچِ ۱۲۱) — جدا از رکوردِ متصل (پچِ ۱۲۲) */}
+                    <Col xs={24} md={12}>
+                        <Form.Item label="نوعِ کاربر">
+                            <Select
+                                size="large"
+                                value={data.UserType}
+                                options={USER_TYPE_OPTIONS}
+                                onChange={(t: UserType) => {
+                                    const kindChanged = linkKind(t) !== linkKind(data.UserType);
+                                    // داخلی ↔ مخاطب: مخاطبِ انتخاب‌شده می‌ماند؛ رفتن به/از طرف‌حساب: انتخاب پاک می‌شود
+                                    setData((d) => ({ ...d, UserType: t, CrmPersonID: t === 'PARTY' ? null : d.CrmPersonID, CrmPartyID: t === 'PARTY' ? d.CrmPartyID : null }));
+                                    setCrmLinkError(null);
+                                    if (kindChanged) {
+                                        setCrmOptions([]);
+                                        loadCrmOptions(t, '');
+                                    }
+                                }}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} md={12}>
+                        <Form.Item
+                            label={data.UserType === 'PARTY' ? 'طرف‌حساب' : data.UserType === 'PERSON' ? 'مخاطب' : 'مخاطب (اختیاری، برایِ آدرس و تلفن)'}
+                            required={data.UserType !== 'INTERNAL'}
+                            validateStatus={crmLinkError ? 'error' : ''}
+                            help={crmLinkError}
+                        >
+                            <Select
+                                showSearch
+                                allowClear
+                                filterOption={false}
+                                placeholder={data.UserType === 'PARTY' ? 'جست‌وجو و انتخابِ طرف‌حساب…' : 'جست‌وجو و انتخابِ مخاطب…'}
+                                value={(data.UserType === 'PARTY' ? data.CrmPartyID : data.CrmPersonID) ?? undefined}
+                                onSearch={(s) => loadCrmOptions(data.UserType, s)}
+                                onChange={(v) => {
+                                    const id = v == null ? null : Number(v);
+                                    setData((d) => (d.UserType === 'PARTY' ? { ...d, CrmPartyID: id } : { ...d, CrmPersonID: id }));
+                                    setCrmLinkError(null);
+                                }}
+                                notFoundContent={crmLoading ? <Spin size="small" /> : 'موردی پیدا نشد'}
+                                options={crmOptions.map((o) => {
+                                    const takenByOther = o.linkedUserId !== null && o.linkedUserId !== editingUser?.UserID;
+                                    return { value: o.id, label: takenByOther ? `${o.name} (متصل به ${o.linkedUserName})` : o.name, disabled: takenByOther };
+                                })}
+                                size="large"
                             />
                         </Form.Item>
                     </Col>

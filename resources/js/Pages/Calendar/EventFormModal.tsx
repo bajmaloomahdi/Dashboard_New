@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Select, Switch, InputNumber, Row, Col, TimePicker, Divider, Spin } from 'antd';
+import { Modal, Form, Input, Select, Switch, InputNumber, Row, Col, Divider, Spin, Upload, Button } from 'antd';
+import { PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import PersianDateInput from '../../Components/PersianDateInput';
+import TimeInput from '../../Components/TimeInput';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
 import { toApiDateTime } from '../../Utils/jalaliCalendar';
+import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
 import { recurrenceIntervalLabel, recurrenceSummary } from './calendarUtils';
+import EventAttachmentList, { EventAttachment, uploadEventAttachments } from './EventAttachments';
 
 const { TextArea } = Input;
 
@@ -34,9 +38,9 @@ const COLOR_PRESETS = ['#1677ff', '#722ed1', '#13a8a8', '#52c41a', '#fa8c16', '#
 const NO_REMINDER = '__none__';
 
 const STATUS_OPTIONS = [
-    { value: 'CONFIRMED', label: 'تایید شده' },
-    { value: 'TENTATIVE', label: 'موقت' },
+    { value: 'CONFIRMED', label: 'ثبت شده' },
     { value: 'CANCELLED', label: 'لغو شده' },
+    { value: 'DONE', label: 'انجام شده' },
 ];
 
 const RECURRENCE_OPTIONS = [
@@ -107,6 +111,9 @@ export default function EventFormModal({
     const [form] = Form.useForm<FormValues>();
     const [saving, setSaving] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    // ضمیمه‌ها (پچِ ۱۱۷): فایل‌هایِ قبلیِ رویداد + فایل‌هایِ تازه که پس از ذخیره بارگذاری می‌شوند
+    const [existingFiles, setExistingFiles] = useState<EventAttachment[]>([]);
+    const [newFiles, setNewFiles] = useState<File[]>([]);
     const isAllDay = Form.useWatch('IsAllDay', form);
     const selectedUnit = Form.useWatch('OrganizationalUnitID', form);
     const isUnitEvent = !!selectedUnit && Number(selectedUnit) !== PERSONAL_CALENDAR;
@@ -125,20 +132,37 @@ export default function EventFormModal({
         message: '',
     });
     const showNotification = (type: NotificationType, message: string) => setNotification({ open: true, type, message });
+    // پس از ثبت فقط تاریخ، ساعت و وضعیت قابلِ ویرایش است (متن و موضوع ثابت است)
+    const isEdit = !!eventId;
+
+    /** با تغییرِ تاریخ یا ساعتِ شروع: پایان = همان لحظه + ۳۰ دقیقه (تمام‌روز: همان روز) */
+    const syncEndWithStart = (changed: Partial<FormValues>) => {
+        if (!('StartDate' in changed) && !('StartTime' in changed)) return;
+        const v = form.getFieldsValue(['StartDate', 'StartTime', 'IsAllDay']) as Partial<FormValues>;
+        if (!v.StartDate) return;
+        if (v.IsAllDay || !v.StartTime) {
+            form.setFieldsValue({ EndDate: v.StartDate });
+            return;
+        }
+        const end = dayjs(`${v.StartDate}T${v.StartTime.format('HH:mm')}:00`).add(30, 'minute');
+        form.setFieldsValue({ EndDate: end.format('YYYY-MM-DD'), EndTime: end });
+    };
 
     useEffect(() => {
         if (!open) return;
 
         if (!eventId) {
             const base = defaultDate ? new Date(defaultDate) : new Date();
-            const startTime = dayjs(base);
+            let startTime = dayjs(base).second(0).millisecond(0);
+            if (!defaultDate && startTime.minute() % 15 !== 0) startTime = startTime.add(15 - (startTime.minute() % 15), 'minute');
+            const endTime = startTime.add(30, 'minute');
             form.setFieldsValue({
                 Title: '',
                 Description: '',
-                StartDate: toDateOnly(base),
+                StartDate: startTime.format('YYYY-MM-DD'),
                 StartTime: startTime,
-                EndDate: toDateOnly(base),
-                EndTime: startTime.add(1, 'hour'),
+                EndDate: endTime.format('YYYY-MM-DD'),
+                EndTime: endTime,
                 IsAllDay: false,
                 Color: COLOR_PRESETS[0],
                 Status: 'CONFIRMED',
@@ -153,6 +177,8 @@ export default function EventFormModal({
                 IsPrivate: false,
             });
             setOriginal(null);
+            setExistingFiles([]);
+            setNewFiles([]);
             return;
         }
 
@@ -192,6 +218,8 @@ export default function EventFormModal({
                             .map((a: any) => [a.UserID, a.ReminderOffsetMinutes]),
                     ),
                 });
+                setExistingFiles(data.attachments || []);
+                setNewFiles([]);
                 setOriginal({
                     owner: Number(ev.OwnerUserID) || currentUserId,
                     attendees: (data.attendees || []).filter((a: any) => a.RelationType !== 'ORGANIZER').map((a: any) => Number(a.UserID)),
@@ -230,6 +258,25 @@ export default function EventFormModal({
                 setSaving(false);
                 return;
             }
+            // شروعِ گذشته (مثلاً اشتباه در ساعت): یادآوری برایش ارسال نمی‌شود — اول تأیید
+            const startsInPast = values.IsAllDay ? endDate < new Date() : startDate < new Date();
+            if (startsInPast && (values.RecurrenceType ?? 'NONE') === 'NONE') {
+                const proceed = await new Promise<boolean>((resolve) =>
+                    Modal.confirm({
+                        title: 'زمانِ رویداد گذشته است',
+                        centered: true,
+                        content: <div dir="rtl">زمانِ شروع ({gregorianToJalaliDateTimeDisplay(startDate)}) قبل از الان است و برایش یادآوری ارسال نمی‌شود. با همین زمان ذخیره شود؟</div>,
+                        okText: 'بله، ذخیره شود',
+                        cancelText: 'اصلاحِ زمان',
+                        onOk: () => resolve(true),
+                        onCancel: () => resolve(false),
+                    }),
+                );
+                if (!proceed) {
+                    setSaving(false);
+                    return;
+                }
+            }
             if (values.RecurrenceType !== 'NONE' && values.RecurrenceEndDate && values.StartDate && values.RecurrenceEndDate < values.StartDate) {
                 showNotification('error', 'پایانِ تکرار نمی‌تواند پیش از تاریخِ شروعِ رویداد باشد.');
                 setSaving(false);
@@ -246,7 +293,10 @@ export default function EventFormModal({
                 });
             }
 
-            const payload = {
+            // ویرایش: فقط تاریخ/ساعت، تمام‌روز و وضعیت (بقیه در سرور همان مقدارِ فعلی می‌ماند)
+            const payload = isEdit
+                ? { StartDateTime: toApiDateTime(startDate), EndDateTime: toApiDateTime(endDate), IsAllDay: !!values.IsAllDay, Status: values.Status }
+                : {
                 Title: values.Title,
                 Description: values.Description || null,
                 StartDateTime: toApiDateTime(startDate),
@@ -268,14 +318,24 @@ export default function EventFormModal({
                     (values.ReminderOffsetMinutes as unknown as string) === NO_REMINDER
                         ? null
                         : values.ReminderOffsetMinutes,
-            };
+                };
 
             const result = eventId
                 ? await api(`/calendar/events/${eventId}`, 'PUT', payload)
                 : await api('/calendar/events', 'POST', payload);
 
             if (result.success) {
-                showNotification('success', result.message);
+                // فایل‌هایِ ضمیمه پس از ثبت/ویرایشِ رویداد (همان رویداد)
+                const targetId = eventId || Number(result.eventId);
+                if (newFiles.length && targetId) {
+                    const up = await uploadEventAttachments(targetId, newFiles);
+                    if (!up.success) {
+                        showNotification('warning', `رویداد ذخیره شد، ولی ضمیمهٔ فایل ناموفق بود: ${up.message}`);
+                        setTimeout(() => onClose(true), 2500);
+                        return;
+                    }
+                }
+                showNotification('success', newFiles.length ? `${result.message} ${newFiles.length} فایل ضمیمه شد.` : result.message);
                 setTimeout(() => onClose(true), 500);
             } else {
                 showNotification('error', result.message);
@@ -291,7 +351,7 @@ export default function EventFormModal({
         <>
             <Modal
                 open={open}
-                title={eventId ? 'ویرایش رویداد' : 'رویداد جدید'}
+                title={eventId ? 'ویرایشِ تاریخ، ساعت و وضعیت' : 'رویداد جدید'}
                 onCancel={() => onClose(false)}
                 onOk={handleSubmit}
                 confirmLoading={saving}
@@ -299,15 +359,16 @@ export default function EventFormModal({
                 cancelText="انصراف"
                 width={640}
                 destroyOnClose
+                maskClosable={false}
             >
                 <Spin spinning={loadingDetail}>
-                    <Form form={form} layout="vertical" requiredMark={false}>
-                        <Form.Item name="Title" label="عنوان رویداد" rules={[{ required: true, message: 'عنوان الزامی است' }]}>
-                            <Input placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
+                    <Form form={form} layout="vertical" requiredMark={false} onValuesChange={syncEndWithStart}>
+                        <Form.Item name="Title" label="عنوان رویداد" rules={[{ required: true, message: 'عنوان الزامی است' }]} extra={isEdit ? 'موضوع و متن پس از ثبت قابلِ تغییر نیست.' : undefined}>
+                            <Input disabled={isEdit} placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
                         </Form.Item>
 
                         <Form.Item name="Description" label="توضیحات">
-                            <TextArea rows={3} placeholder="توضیحات تکمیلی (اختیاری)" maxLength={2000} />
+                            <TextArea disabled={isEdit} rows={3} placeholder="توضیحات تکمیلی (اختیاری)" maxLength={2000} />
                         </Form.Item>
 
                         <Form.Item name="IsAllDay" label="تمام‌روز" valuePropName="checked">
@@ -323,7 +384,7 @@ export default function EventFormModal({
                             {!isAllDay && (
                                 <Col xs={24} sm={8}>
                                     <Form.Item name="StartTime" label="ساعت شروع" rules={[{ required: true, message: 'الزامی است' }]}>
-                                        <TimePicker format="HH:mm" style={{ width: '100%' }} size="large" />
+                                        <TimeInput />
                                     </Form.Item>
                                 </Col>
                             )}
@@ -335,18 +396,19 @@ export default function EventFormModal({
                             {!isAllDay && (
                                 <Col xs={24} sm={8}>
                                     <Form.Item name="EndTime" label="ساعت پایان" rules={[{ required: true, message: 'الزامی است' }]}>
-                                        <TimePicker format="HH:mm" style={{ width: '100%' }} size="large" />
+                                        <TimeInput />
                                     </Form.Item>
                                 </Col>
                             )}
                         </Row>
 
                         <Row gutter={12}>
-                            <Col xs={24} sm={12}>
+                            <Col xs={24} sm={isEdit ? 24 : 12}>
                                 <Form.Item name="Status" label="وضعیت">
                                     <Select options={STATUS_OPTIONS} size="large" />
                                 </Form.Item>
                             </Col>
+                            {!isEdit && (
                             <Col xs={24} sm={12}>
                                 <Form.Item name="Color" label="رنگ رویداد">
                                     <Select
@@ -363,8 +425,27 @@ export default function EventFormModal({
                                     />
                                 </Form.Item>
                             </Col>
+                            )}
                         </Row>
 
+                        {/* ضمیمه‌ها — هم در ثبت، هم در ویرایش */}
+                        <Form.Item label={<><PaperClipOutlined /> فایل‌هایِ ضمیمه</>} extra="حداکثر ۱۰ فایل در هر بار، هر فایل تا ۱۰ مگابایت؛ پس از ذخیره ثبت می‌شوند.">
+                            {existingFiles.length > 0 && <EventAttachmentList items={existingFiles} />}
+                            <Upload
+                                multiple
+                                beforeUpload={(file) => {
+                                    setNewFiles((list) => (list.length >= 10 ? list : [...list, file as unknown as File]));
+                                    return false; // بارگذاری پس از ذخیرهٔ رویداد
+                                }}
+                                onRemove={(file) => setNewFiles((list) => list.filter((f) => (f as any).uid !== file.uid))}
+                                fileList={newFiles.map((f) => ({ uid: (f as any).uid, name: f.name, status: 'done' as const, size: f.size }))}
+                            >
+                                <Button icon={<UploadOutlined />}>انتخابِ فایل</Button>
+                            </Upload>
+                        </Form.Item>
+
+                        {!isEdit && (
+                        <>
                         {(manageableUnits.length > 0 || !!original?.unitId) && (
                             <Form.Item name="OrganizationalUnitID" label="تقویم" extra="رویدادِ تقویمِ واحد برایِ همهٔ اعضایِ مستقیمِ آن واحد دیده می‌شود.">
                                 <Select
@@ -488,6 +569,8 @@ export default function EventFormModal({
                                 </>
                             )}
                         </Row>
+                        </>
+                        )}
                     </Form>
                 </Spin>
             </Modal>

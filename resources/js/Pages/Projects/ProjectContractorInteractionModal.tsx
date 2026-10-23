@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Modal, Select, Button, Input, Space, Typography, Alert, TimePicker, Checkbox } from 'antd';
-import { SaveOutlined, CloseOutlined } from '@ant-design/icons';
+import { Modal, Select, Button, Input, Space, Typography, Alert, TimePicker, Checkbox, Upload, Tooltip } from 'antd';
+import { SaveOutlined, CloseOutlined, PaperClipOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { crmApi } from '../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import PersianDateInput from '../../Components/PersianDateInput';
+import { ATTACH_MAX_DESCRIPTION, ATTACH_MAX_FILES, checkAttachment, formatSize } from '../Crm/Parties/InteractionsPanel';
 
 const { Text } = Typography;
 
@@ -64,6 +65,8 @@ export default function ProjectContractorInteractionModal({
     const [draft, setDraft] = useState(emptyDraft(defaultTypeId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // پیوست‌هایِ در انتظار — همراهِ «ذخیره» در همان درخواست ارسال می‌شوند
+    const [pending, setPending] = useState<{ uid: string; file: File; description: string }[]>([]);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
 
     const draftTypeCode = interactionTypes.find((t) => t.InteractionTypeID === draft.interactionTypeId)?.Code;
@@ -71,6 +74,13 @@ export default function ProjectContractorInteractionModal({
     const reset = () => {
         setDraft(emptyDraft(defaultTypeId));
         setError(null);
+        setPending([]);
+    };
+
+    const addPending = (file: File) => {
+        const problem = checkAttachment(file);
+        if (problem) return setError(problem);
+        setPending((list) => [...list, { uid: `${Date.now()}-${Math.random().toString(36).slice(2)}`, file, description: '' }]);
     };
 
     const handleClose = () => {
@@ -86,22 +96,39 @@ export default function ProjectContractorInteractionModal({
     const handleSave = async () => {
         if (!draft.subject.trim()) return setError('موضوع الزامی است.');
         if (!draft.date) return setError('تاریخ الزامی است.');
+        if (pending.length > ATTACH_MAX_FILES) return setError('در هر بار حداکثر ۱۰ فایل قابلِ پیوست است.');
+        if (pending.some((p) => p.description.trim().length > ATTACH_MAX_DESCRIPTION)) return setError('توضیحاتِ هر پیوست حداکثر ۱۰۰۰ کاراکتر است.');
 
-        setSaving(true);
-        setError(null);
-        const res = await crmApi(`/projects/${projectId}/contractors/${partyId}/interactions`, 'POST', {
-            interactionTypeId: draft.interactionTypeId,
+        const fields: Record<string, string | number | undefined> = {
+            interactionTypeId: draft.interactionTypeId ?? undefined,
             subject: draft.subject.trim(),
             description: draft.description.trim() || undefined,
             outcome: draft.outcome.trim() || undefined,
             interactionDate: toApiDateTime(draft.date, draft.time),
             status: draft.status,
             ownerUserId: draft.ownerUserId ?? undefined,
-        });
+        };
+        // با پیوست → multipart (تعامل و فایل‌ها در یک درخواست؛ فایلِ نامعتبر یعنی تعامل هم ثبت نشود)
+        let body: Record<string, unknown> | FormData = fields;
+        if (pending.length) {
+            const form = new FormData();
+            Object.entries(fields).forEach(([k, v]) => {
+                if (v !== undefined) form.append(k, String(v));
+            });
+            pending.forEach((p, i) => {
+                form.append(`attachments[${i}]`, p.file);
+                form.append(`descriptions[${i}]`, p.description.trim());
+            });
+            body = form;
+        }
+
+        setSaving(true);
+        setError(null);
+        const res = await crmApi(`/projects/${projectId}/contractors/${partyId}/interactions`, 'POST', body);
         setSaving(false);
 
         if (!res.ok || !res.success) {
-            return setError(res.message);
+            return setError(res.status === 413 ? 'حجمِ مجموعِ فایل‌ها از سقفِ مجازِ سرور بیشتر است.' : res.message);
         }
 
         reset();
@@ -194,6 +221,43 @@ export default function ProjectContractorInteractionModal({
                             </div>
                         ) : null}
                     </Space>
+
+                    <div>
+                        <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>پیوست‌ها</Text>
+                        {pending.map((p) => (
+                            <div key={p.uid} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '4px 8px', background: '#f6ffed', border: '1px solid #d9f7be', borderRadius: 6 }}>
+                                <PaperClipOutlined />
+                                <span style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.file.name}>{p.file.name}</span>
+                                <Text type="secondary" style={{ fontSize: 12, flex: 'none' }}>{formatSize(p.file.size)}</Text>
+                                <Input
+                                    size="small"
+                                    style={{ flex: '1 1 120px', minWidth: 0 }}
+                                    placeholder="توضیحاتِ پیوست (اختیاری)"
+                                    maxLength={ATTACH_MAX_DESCRIPTION}
+                                    value={p.description}
+                                    disabled={saving}
+                                    onChange={(e) => setPending((list) => list.map((x) => (x.uid === p.uid ? { ...x, description: e.target.value } : x)))}
+                                />
+                                <Tooltip title="حذف از فهرست">
+                                    <Button type="text" size="small" danger icon={<CloseOutlined />} disabled={saving} onClick={() => setPending((list) => list.filter((x) => x.uid !== p.uid))} />
+                                </Tooltip>
+                            </div>
+                        ))}
+                        <Upload
+                            multiple
+                            showUploadList={false}
+                            disabled={saving}
+                            beforeUpload={(file) => {
+                                addPending(file);
+                                return false; // ارسال فقط همراهِ «ذخیره»
+                            }}
+                        >
+                            <Button size="small" icon={<PaperClipOutlined />} disabled={saving}>افزودنِ فایل</Button>
+                        </Upload>
+                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                            هر فایل حداکثر ۱۰ مگابایت، در هر بار حداکثر ۱۰ فایل؛ فایل‌هایِ اجرایی/اسکریپتی مجاز نیستند.
+                        </Text>
+                    </div>
                 </Space>
             </Modal>
 

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, message } from 'antd';
+import { Alert, Badge, Button, Card, Checkbox, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, message } from 'antd';
 import {
-    BellOutlined,
     MailOutlined,
     CalendarOutlined,
     CloseOutlined,
@@ -20,7 +19,6 @@ import AgendaView from './AgendaView';
 import CalendarSidebar from './CalendarSidebar';
 import EventFormModal from './EventFormModal';
 import EventDetailsModal from './EventDetailsModal';
-import RemindersDrawer from './RemindersDrawer';
 import InvitationsDrawer, { fetchPendingInvitations } from './InvitationsDrawer';
 import ShareCalendarModal from './ShareCalendarModal';
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
@@ -35,6 +33,7 @@ import {
     toApiDate,
 } from '../../Utils/jalaliCalendar';
 import { toEnglishDigits } from '../../Utils/jalali';
+import PersianDateInput from '../../Components/PersianDateInput';
 import { NOTIFY_DURATION_SECONDS, NOTIFY_HOOK_CONFIG } from '../../Utils/notify';
 import { STYLES, THEME } from '../../theme';
 import {
@@ -50,6 +49,7 @@ import {
     parseDT,
     saveView,
     saveWorkWeek,
+    matchesSearch,
     startOfDay,
     toServerDateTime,
     type CalendarFilterState,
@@ -68,16 +68,31 @@ interface UserOption {
     FullName: string;
 }
 
+/** بازهٔ دستورکار نسبت به ماهِ انتخابی (ماه) */
+const AGENDA_PAST_MONTHS = 12;
+const AGENDA_FUTURE_MONTHS = 12;
+
 /** بازهٔ جست‌وجو: شش ماهِ گذشته تا یک سالِ آینده */
 const SEARCH_PAST_DAYS = 180;
 const SEARCH_FUTURE_DAYS = 365;
 
-function computeRange(view: ViewMode, referenceDate: Date, workWeek: WorkWeekSettings): { from: Date; to: Date } {
+function computeRange(view: ViewMode, referenceDate: Date, workWeek: WorkWeekSettings, agendaFrom: string | null = null): { from: Date; to: Date } {
     if (view === 'month') {
         const cells = buildMonthGrid(referenceDate);
         return { from: cells[0].date, to: cells[cells.length - 1].date };
     }
-    if (view === 'agenda') return jalaliMonthBounds(referenceDate);
+    if (view === 'agenda') {
+        // «از تاریخ»: از همان روز تا یک سال بعد
+        if (agendaFrom) {
+            const start = startOfDay(new Date(`${agendaFrom}T00:00:00`));
+            return { from: start, to: jalaliMonthBounds(addJalaliMonths(start, AGENDA_FUTURE_MONTHS)).to };
+        }
+        // بدونِ فیلتر: همهٔ رویدادها (حتی گذشته) از ابتدا — یک سالِ قبل تا یک سالِ بعد از ماهِ انتخابی
+        return {
+            from: jalaliMonthBounds(addJalaliMonths(referenceDate, -AGENDA_PAST_MONTHS)).from,
+            to: jalaliMonthBounds(addJalaliMonths(referenceDate, AGENDA_FUTURE_MONTHS)).to,
+        };
+    }
     if (view === 'week' || view === 'workweek') {
         let cells = buildWeekDays(referenceDate);
         if (view === 'workweek') {
@@ -132,6 +147,9 @@ async function moveEventApi(eventId: number, start: Date, end: Date): Promise<{ 
     }
 }
 
+/** وضعیت‌هایِ انتخاب‌شدهٔ دستورکار (در همین مرورگر) */
+const AGENDA_STATUSES_KEY = 'raga360.calendar.agendaStatuses';
+
 export default function CalendarIndex() {
     const props = usePage().props as unknown as {
         initialEvents: CalendarEvent[];
@@ -185,7 +203,6 @@ export default function CalendarIndex() {
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [detailsEventId, setDetailsEventId] = useState<number | null>(null);
     const [detailsOccurrence, setDetailsOccurrence] = useState<{ start: string; end: string } | null>(null);
-    const [remindersOpen, setRemindersOpen] = useState(false);
 
     // دعوت‌هایِ در انتظار: پنلِ مستقلِ «دعوت‌ها» (لینکِ Push: /calendar?invites=1)
     const [invitesOpen, setInvitesOpen] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('invites') === '1');
@@ -255,7 +272,10 @@ export default function CalendarIndex() {
         saveSelectedSources(currentUserId, next);
     };
 
-    const range = useMemo(() => computeRange(view, referenceDate, workWeek), [view, referenceDate, workWeek]);
+    // دستورکار: «از تاریخ» و جست‌وجو در موضوع و متن
+    const [agendaFrom, setAgendaFrom] = useState<string | null>(null);
+    const [agendaQuery, setAgendaQuery] = useState('');
+    const range = useMemo(() => computeRange(view, referenceDate, workWeek, agendaFrom), [view, referenceDate, workWeek, agendaFrom]);
     const requestSeq = useRef(0);
 
     /**
@@ -342,7 +362,36 @@ export default function CalendarIndex() {
     }, [viewingUserId]);
 
     const searching = query !== '';
+    // دستورکار جست‌وجویِ خودش را دارد (کنارِ «از تاریخ»)؛ جست‌وجویِ سراسری با رفتن به دستورکار پاک می‌شود
+    useEffect(() => {
+        if (view === 'agenda' && searchInput) setSearchInput('');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view]);
     const visibleEvents = useMemo(() => applyFilters(events, filters, ''), [events, filters]);
+
+    // وضعیت‌هایِ دستورکار (چک‌باکس بالایِ فهرست) — پیش‌فرض «ثبت شده»؛ انتخاب در همین مرورگر می‌ماند
+    const [agendaStatuses, setAgendaStatuses] = useState<string[]>(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(AGENDA_STATUSES_KEY) || 'null');
+            if (Array.isArray(saved)) return saved;
+        } catch {
+            /* پیش‌فرض */
+        }
+        return ['CONFIRMED'];
+    });
+    const changeAgendaStatuses = (v: string[]) => {
+        setAgendaStatuses(v);
+        try {
+            localStorage.setItem(AGENDA_STATUSES_KEY, JSON.stringify(v));
+        } catch {
+            /* بی‌اهمیت */
+        }
+    };
+    // «موقت» (دادهٔ قدیمی) هم‌ردهٔ «ثبت شده»
+    const agendaEvents = useMemo(
+        () => visibleEvents.filter((ev) => agendaStatuses.includes(ev.Status === 'TENTATIVE' ? 'CONFIRMED' : ev.Status) && matchesSearch(ev, agendaQuery)),
+        [visibleEvents, agendaStatuses, agendaQuery],
+    );
     const searchResults = useMemo(() => (searching && searchEvents ? applyFilters(searchEvents, filters, query) : []), [searching, searchEvents, filters, query]);
 
     const eventDays = useMemo(() => {
@@ -512,9 +561,6 @@ export default function CalendarIndex() {
                                 دعوت‌ها
                             </Button>
                         </Badge>
-                        <Button icon={<BellOutlined />} size="large" onClick={() => setRemindersOpen(true)}>
-                            یادآوری‌های من
-                        </Button>
                         {canCreate && !isMobile && (
                             <Button type="primary" icon={<PlusOutlined />} size="large" style={STYLES.primaryButton} onClick={handleCreate}>
                                 رویداد جدید
@@ -558,7 +604,7 @@ export default function CalendarIndex() {
                             </Space>
                             {isMobile ? (
                                 <div className="cal-toolbar-mobile">
-                                    {searchBox}
+                                    {view !== 'agenda' && searchBox}
                                     <Badge count={filterCount} size="small">
                                         <Button icon={<FilterOutlined />} onClick={() => setSideOpen(true)} aria-label="فیلترها" />
                                     </Badge>
@@ -566,7 +612,7 @@ export default function CalendarIndex() {
                                 </div>
                             ) : (
                                 <Space wrap size={8}>
-                                    {searchBox}
+                                    {view !== 'agenda' && searchBox}
                                     <Segmented value={view} onChange={(v) => setView(v as ViewMode)} options={VIEW_OPTIONS} />
                                 </Space>
                             )}
@@ -598,13 +644,49 @@ export default function CalendarIndex() {
                         ) : (
                             <Spin spinning={loading}>
                                 {view === 'agenda' ? (
+                                    <>
+                                    <div className="cal-agenda-filters">
+                                        <div className="cal-agenda-from">
+                                            <span>از تاریخ:</span>
+                                            <PersianDateInput value={agendaFrom} onChange={setAgendaFrom} size="middle" placeholder="همهٔ رویدادها" />
+                                            {agendaFrom && (
+                                                <Button size="small" type="link" onClick={() => setAgendaFrom(null)}>
+                                                    همه
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <Input
+                                            allowClear
+                                            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                                            placeholder="جستجو در موضوع و متن…"
+                                            value={agendaQuery}
+                                            onChange={(e) => setAgendaQuery(e.target.value)}
+                                            className="cal-agenda-search"
+                                        />
+                                    </div>
+                                    <div className="cal-agenda-statuses">
+                                        <span>وضعیت:</span>
+                                        <Checkbox.Group
+                                            value={agendaStatuses}
+                                            onChange={(v) => changeAgendaStatuses(v as string[])}
+                                            options={[
+                                                { label: 'ثبت شده', value: 'CONFIRMED' },
+                                                { label: 'انجام شده', value: 'DONE' },
+                                                { label: 'لغو شده', value: 'CANCELLED' },
+                                            ]}
+                                        />
+                                    </div>
                                     <AgendaView
-                                        events={visibleEvents}
+                                        events={agendaEvents}
                                         from={range.from}
+                                        anchorNow
+                                        scrollToAnchor={!agendaFrom}
+                                        emptyText={!agendaStatuses.length ? 'هیچ وضعیتی انتخاب نشده است.' : agendaQuery.trim() ? 'رویدادی با این عبارت پیدا نشد.' : 'در این بازه رویدادی نیست.'}
                                         to={range.to}
                                         onSelectEvent={handleSelectEvent}
                                         onCreate={canCreate ? handleCreate : undefined}
                                     />
+                                    </>
                                 ) : (
                                     <CalendarGrid
                                         view={view}
@@ -683,15 +765,11 @@ export default function CalendarIndex() {
                 onChanged={handleInvitesChanged}
             />
 
-            <RemindersDrawer
-                open={remindersOpen}
-                onClose={() => setRemindersOpen(false)}
-                users={users || []}
-                permissions={permissions}
-                currentUserId={currentUserId}
-            />
-
             <style>{`
+                .cal-agenda-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+                .cal-agenda-from { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+                .cal-agenda-search { flex: 1; min-width: 200px; max-width: 360px; }
+                .cal-agenda-statuses { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
                 .cal-toolbar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; }
                 .cal-toolbar-title { font-weight: 700; font-size: 16px; margin-inline-start: 4px; }
                 .cal-toolbar-mobile { display: flex; gap: 8px; width: 100%; align-items: center; }

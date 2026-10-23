@@ -25,6 +25,7 @@ import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
 import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
+import { CooperationEndedTag } from '../../../Components/Crm/CooperationEnded';
 import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
 import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, filterHeaderCss } from '../../../Components/Crm/tableFilters';
 
@@ -206,7 +207,12 @@ export default function CrmPersonsIndex() {
         {
             title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
             key: 'name',
-            render: (_, p) => <Text strong>{fullName(p)}</Text>,
+            render: (_, p) => (
+                <Space size={6} wrap>
+                    <Text strong>{fullName(p)}</Text>
+                    <CooperationEndedTag at={p.CooperationEndedAt} />
+                </Space>
+            ),
         },
         {
             title: <FilterHeader label="کدِ ملی"><TextFilterInput value={colF.values.identifier} onChange={(v) => setColFilter('identifier', v)} /></FilterHeader>,

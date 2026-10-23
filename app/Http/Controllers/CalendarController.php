@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Calendar\CalendarAttachmentFiles;
 use App\Services\Calendar\CalendarReminderRoller;
 use App\Services\Calendar\JalaliRecurrence;
 use App\Services\Calendar\ReminderContent;
@@ -18,6 +19,8 @@ class CalendarController extends Controller
     private const UNRELATED_REMINDER_MESSAGE = 'یادآوری فقط برایِ مالک و شرکت‌کنندگانِ همین رویداد قابلِ تنظیم است.';
     private const UNIT_FORBIDDEN_MESSAGE = 'اجازهٔ ثبتِ رویداد در تقویمِ این واحد را ندارید.';
     private const RECURRENCE_END_MESSAGE = 'پایانِ تکرار نمی‌تواند پیش از تاریخِ شروعِ رویداد باشد.';
+    /** وضعیت‌هایِ رویداد: ثبت شده، لغو شده، انجام شده (پچِ ۱۱۶)؛ TENTATIVE فقط برایِ سازگاریِ داده‌هایِ قدیمی */
+    private const EVENT_STATUSES = 'CONFIRMED,TENTATIVE,CANCELLED,DONE';
     private const UNIT_PRIVATE_MESSAGE = 'رویدادِ تقویمِ واحد نمی‌تواند خصوصی باشد.';
 
     /**
@@ -222,6 +225,109 @@ class CalendarController extends Controller
             'event'                 => $event,
             'attendees'             => $attendees,
             'reminderOffsetMinutes' => $reminder,
+            'attachments'           => $this->eventAttachments($id),
+        ]);
+    }
+
+    // ================= ضمیمه‌هایِ رویداد (پچِ ۱۱۷) =================
+
+    /** ضمیمه‌هایِ فعالِ رویداد با آدرسِ دانلود (مسیرِ فیزیکی هرگز به مرورگر نمی‌رود) */
+    private function eventAttachments(int $eventId): array
+    {
+        $files = app(CalendarAttachmentFiles::class);
+
+        return array_map(fn ($row) => $files->present($row), DB::select('EXEC sp_Calendar_GetEventAttachments @EventID = ?', [$eventId]));
+    }
+
+    /** همان قاعدهٔ «جزئیاتِ رویداد» (show): مرتبط، CALENDAR_VIEW_OTHERS یا اشتراکِ READ؛ خصوصی فقط شرکت‌کنندگان؛ FREEBUSY نه */
+    private function canViewEventDetails(int $eventId): bool
+    {
+        $event = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$eventId, Auth::id()])[0] ?? null;
+        if (!$event || ((int) ($event->IsPrivate ?? 0) === 1 && !in_array($event->MyRelation ?? 'NONE', ['CREATOR', 'OWNER', 'ATTENDEE'], true))) {
+            return false;
+        }
+        if (($event->MyRelation ?? 'NONE') !== 'NONE' || $this->userCan('CALENDAR_VIEW_OTHERS')) {
+            return true;
+        }
+
+        return $this->hasReadShareFor($event, DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$eventId]));
+    }
+
+    /**
+     * POST /calendar/events/{id}/attachments — multipart: files[] (هم پس از ثبتِ رویدادِ تازه، هم در ویرایش).
+     * فقط سازنده/مالک/مدیرِ رویدادِ واحد (در SP هم کنترل می‌شود). همه یا هیچ: خطا → Rollbackِ ردیف‌ها و حذفِ فایل‌هایِ همین درخواست.
+     */
+    public function storeAttachments(Request $request, int $id)
+    {
+        if (!$this->userCan('CALENDAR_CREATE') && !$this->userCan('CALENDAR_EDIT')) {
+            abort(403, 'شما دسترسیِ لازم را ندارید.');
+        }
+        $files = $request->file('files');
+        $files = is_array($files) ? array_values($files) : ($files ? [$files] : []);
+        if (!$files) {
+            return response()->json(['success' => false, 'message' => 'هیچ فایلی انتخاب نشده است.'], 422);
+        }
+        if (count($files) > CalendarAttachmentFiles::MAX_FILES) {
+            return response()->json(['success' => false, 'message' => 'در هر بار حداکثر ۱۰ فایل قابلِ ضمیمه است.'], 422);
+        }
+        $event = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()])[0] ?? null;
+        if (!$event) {
+            return response()->json(['success' => false, 'message' => 'رویداد یافت نشد.'], 404);
+        }
+        if ((int) $event->CanManage !== 1) {
+            return response()->json(['success' => false, 'message' => 'فقط ایجادکننده یا مالکِ رویداد می‌تواند فایل ضمیمه کند.'], 403);
+        }
+
+        $store = app(CalendarAttachmentFiles::class);
+        foreach ($files as $file) {
+            $store->validate($file);
+        }
+        $saved = [];
+        try {
+            DB::transaction(function () use ($files, $id, $store, &$saved) {
+                foreach ($files as $file) {
+                    $s = $store->store($file, $id);
+                    $saved[] = $s['path'];
+                    $res = (array) (DB::select(
+                        'EXEC sp_Calendar_AddEventAttachment @EventID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @UserID = ?',
+                        [$id, $s['name'], $s['extension'], $s['size'], $s['path'], Auth::id()]
+                    )[0] ?? []);
+                    if (empty($res['Success'])) {
+                        throw new \RuntimeException($res['Message'] ?? 'ثبتِ فایل ناموفق بود.');
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            foreach ($saved as $path) {
+                $store->delete($path);
+            }
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                throw $e;
+            }
+
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => count($files) > 1 ? count($files) . ' فایل ضمیمه شد.' : 'فایل ضمیمه شد.',
+            'attachments' => $this->eventAttachments($id),
+        ]);
+    }
+
+    /** GET /calendar/event-attachments/{attachmentId}/download — فقط با دسترسیِ مشاهدهٔ جزئیاتِ همان رویداد؛ همیشه attachment */
+    public function downloadAttachment(int $attachmentId)
+    {
+        $this->authorizeCalendar('CALENDAR_VIEW');
+        $row = DB::select('EXEC sp_Calendar_GetEventAttachment @AttachmentID = ?', [$attachmentId])[0] ?? null;
+        $store = app(CalendarAttachmentFiles::class);
+        abort_if(!$row || !$this->canViewEventDetails((int) $row->EventID) || !$store->exists($row->FilePath), 404, 'فایل یافت نشد.');
+
+        return \Illuminate\Support\Facades\Storage::disk(CalendarAttachmentFiles::DISK)->download($row->FilePath, $row->FileName, [
+            'Content-Type' => 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+            'Content-Security-Policy' => "default-src 'none'",
         ]);
     }
 
@@ -313,12 +419,23 @@ class CalendarController extends Controller
     public function update(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_EDIT');
-        $validated = $this->validateEvent($request);
+        $validated = $this->validateEvent($request, true);
         $selfId = Auth::id();
 
         $current = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, $selfId])[0] ?? null;
         if (!$current) {
             return response()->json(['success' => false, 'message' => 'رویداد یافت نشد.'], 404);
+        }
+        // پس از ثبت، متن و موضوع ثابت است (ویرایش برایِ تاریخ/ساعت و وضعیت)؛ فیلدی که ارسال نشده مقدارِ فعلی را نگه می‌دارد
+        $validated['Title'] = $current->Title;
+        $validated['Description'] = $current->Description;
+        foreach (['Color', 'Status', 'RecurrenceType', 'RecurrenceInterval', 'RecurrenceEndDate'] as $keep) {
+            if (!$request->exists($keep)) {
+                $validated[$keep] = $current->$keep;
+            }
+        }
+        if (!$request->exists('IsAllDay')) {
+            $validated['IsAllDay'] = (int) $current->IsAllDay === 1;
         }
         $currentAttendeeIds = collect(DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$id]))
             ->filter(fn ($a) => $a->RelationType !== 'ORGANIZER')->map(fn ($a) => (int) $a->UserID)->values()->all();
@@ -402,9 +519,12 @@ class CalendarController extends Controller
         }
 
         $recurrence = $this->recurrenceContext($validated);
-        $this->saveReminderFor($id, $selfId, $validated['StartDateTime'], $validated['ReminderOffsetMinutes'] ?? null, $selfId, $recurrence);
-
-        $saved = [$selfId];
+        // یادآوریِ خودِ ویرایشگر فقط اگر در درخواست آمده عوض می‌شود؛ وگرنه مثلِ بقیه با زمانِ تازه جابه‌جا می‌شود
+        $saved = [];
+        if ($request->exists('ReminderOffsetMinutes')) {
+            $this->saveReminderFor($id, $selfId, $validated['StartDateTime'], $validated['ReminderOffsetMinutes'] ?? null, $selfId, $recurrence);
+            $saved[] = $selfId;
+        }
         if ($this->userCan('CALENDAR_CREATE_FOR_OTHERS')) {
             foreach ($attendeeReminders as $uid => $offset) {
                 $this->saveReminderFor($id, (int) $uid, $validated['StartDateTime'], $offset === null ? null : (int) $offset, $selfId, $recurrence);
@@ -522,6 +642,55 @@ class CalendarController extends Controller
         }
 
         return $this->updatedResponse('زمانِ رویداد تغییر کرد.', $response);
+    }
+
+    /**
+     * تغییرِ وضعیتِ رویداد از پنجرهٔ جزئیات (ثبت شده / لغو شده / انجام شده) — فقط وضعیت عوض می‌شود؛ بقیهٔ اطلاعات،
+     * شرکت‌کنندگان و یادآوری‌ها دست نمی‌خورند. همان دسترسیِ ویرایش: CALENDAR_EDIT + سازنده/مالک/مدیرِ رویدادِ واحد.
+     * لغو → اطلاعِ لغو به شرکت‌کنندگان (پچِ ۱۱۳)؛ انجام شده → یادآوری و دعوتِ بعدی ندارد (پچِ ۱۱۶).
+     */
+    public function setStatus(Request $request, int $id)
+    {
+        $this->authorizeCalendar('CALENDAR_EDIT');
+        $validated = $request->validate(['Status' => 'required|in:CONFIRMED,CANCELLED,DONE']);
+        $selfId = Auth::id();
+
+        $event = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, $selfId])[0] ?? null;
+        if (!$event) {
+            return response()->json(['success' => false, 'message' => 'رویداد یافت نشد.'], 404);
+        }
+        if ((int) $event->CanManage !== 1) {
+            return response()->json(['success' => false, 'message' => 'فقط ایجادکننده یا مالکِ رویداد می‌تواند وضعیتِ آن را تغییر دهد.'], 403);
+        }
+        if ($event->Status === $validated['Status']) {
+            return response()->json(['success' => true, 'message' => 'وضعیت تغییری نکرد.', 'responsesReset' => 0]);
+        }
+
+        $attendees = DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$id]);
+        $creatorId = (int) $event->CreatedByUserID;
+        $attendeeIds = collect($attendees)
+            ->filter(fn ($a) => $a->RelationType !== 'ORGANIZER' && (int) $a->UserID !== $creatorId)
+            ->map(fn ($a) => (int) $a->UserID)->unique()->values()->all();
+
+        $result = DB::select(
+            'EXEC sp_UpdateCalendarEvent
+                @EventID = ?, @Title = ?, @Description = ?, @StartDateTime = ?, @EndDateTime = ?, @IsAllDay = ?,
+                @Color = ?, @Status = ?, @RecurrenceType = ?, @RecurrenceInterval = ?, @RecurrenceEndDate = ?,
+                @OwnerUserID = ?, @OrganizationalUnitID = ?, @AttendeeUserIDs = ?, @ModifyUser = ?',
+            [
+                $id, $event->Title, $event->Description,
+                Carbon::parse($event->StartDateTime)->toDateTimeString(), Carbon::parse($event->EndDateTime)->toDateTimeString(),
+                (int) $event->IsAllDay, $event->Color, $validated['Status'], $event->RecurrenceType, (int) $event->RecurrenceInterval,
+                $event->RecurrenceEndDate, (int) $event->OwnerUserID, $event->OrganizationalUnitID, implode(',', $attendeeIds), $selfId,
+            ]
+        );
+        $response = (array) ($result[0] ?? []);
+        if (empty($response['Success'])) {
+            return response()->json(['success' => false, 'message' => $response['Message'] ?? 'خطا در تغییرِ وضعیت'], 422);
+        }
+        $labels = ['CONFIRMED' => 'ثبت شده', 'CANCELLED' => 'لغو شده', 'DONE' => 'انجام شده'];
+
+        return $this->updatedResponse("وضعیتِ رویداد «{$labels[$validated['Status']]}» شد.", $response);
     }
 
     public function destroy(int $id)
@@ -1125,16 +1294,16 @@ class CalendarController extends Controller
         ];
     }
 
-    private function validateEvent(Request $request): array
+    private function validateEvent(Request $request, bool $forUpdate = false): array
     {
         return $request->validate([
-            'Title'                 => 'required|string|max:250',
+            'Title'                 => ($forUpdate ? 'sometimes|nullable' : 'required') . '|string|max:250', // در ویرایش ثابت است
             'Description'           => 'nullable|string',
             'StartDateTime'         => 'required|date',
             'EndDateTime'           => 'required|date|after_or_equal:StartDateTime',
             'IsAllDay'              => 'boolean',
             'Color'                 => 'nullable|string|max:20',
-            'Status'                => 'nullable|in:CONFIRMED,TENTATIVE,CANCELLED',
+            'Status'                => 'nullable|in:' . self::EVENT_STATUSES,
             'RecurrenceType'        => 'nullable|in:NONE,DAILY,WEEKLY,MONTHLY,YEARLY',
             'RecurrenceInterval'    => 'nullable|integer|min:1|max:365',
             'RecurrenceEndDate'     => 'nullable|date',

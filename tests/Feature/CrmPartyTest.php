@@ -200,6 +200,34 @@ class CrmPartyTest extends TestCase
         $this->assertSame(2, (int) $found['ClassificationCount']);
     }
 
+    /** پچِ ۱۱۵: فهرستِ طرف‌حساب‌ها همهٔ نوع‌ها/فعالیت‌هایِ طبقه‌بندی‌هایِ فعال را (متمایز، به ترتیبِ ثبت) برایِ دو ستونِ جدا برمی‌گرداند */
+    public function test_party_list_returns_all_types_and_activities_in_order(): void
+    {
+        $party = $this->createParty();
+        $tag = (string) random_int(10000, 99999);
+        $typeA = $this->as(self::USER_FULL)->postJson('/crm/classification/party-types', ['displayName' => "نوع‌الف {$tag}"])->assertOk()->json('partyTypeId');
+        $typeB = $this->as(self::USER_FULL)->postJson('/crm/classification/party-types', ['displayName' => "نوع‌ب {$tag}"])->assertOk()->json('partyTypeId');
+        $act1 = $this->as(self::USER_FULL)->postJson('/crm/classification/activities', ['partyTypeId' => $typeA, 'displayName' => "فعالیت۱ {$tag}"])->assertOk()->json('activityId');
+        $act2 = $this->as(self::USER_FULL)->postJson('/crm/classification/activities', ['partyTypeId' => $typeA, 'displayName' => "فعالیت۲ {$tag}"])->assertOk()->json('activityId');
+        $act3 = $this->as(self::USER_FULL)->postJson('/crm/classification/activities', ['partyTypeId' => $typeB, 'displayName' => "فعالیت۳ {$tag}"])->assertOk()->json('activityId');
+
+        $add = fn (array $c) => $this->as(self::USER_FULL)->postJson('/crm/classifications', ['partyId' => $party['partyId']] + $c)->assertOk()->json('classificationId');
+        $add(['partyTypeId' => $typeA, 'activityId' => $act1]);
+        $add(['partyTypeId' => $typeA, 'activityId' => $act2]); // نوعِ تکراری → یک‌بار
+        $off = $add(['partyTypeId' => $typeB, 'activityId' => $act3]);
+        $this->as(self::USER_FULL)->postJson("/crm/classifications/{$off}/toggle")->assertOk(); // غیرفعال → در فهرست نیست
+
+        $row = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list')->json('items'))->firstWhere('PartyID', $party['partyId']);
+        $this->assertSame(["نوع‌الف {$tag}"], json_decode($row['PartyTypeNames'], true));
+        $this->assertSame(["فعالیت۱ {$tag}", "فعالیت۲ {$tag}"], json_decode($row['ActivityNames'], true));
+
+        // بدونِ طبقه‌بندیِ فعال → NULL (ستون «—»)
+        $emptyId = $this->createParty()['partyId'];
+        $empty = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list')->json('items'))->firstWhere('PartyID', $emptyId);
+        $this->assertNull($empty['PartyTypeNames']);
+        $this->assertNull($empty['ActivityNames']);
+    }
+
     public function test_classification_requires_at_least_one_dimension(): void
     {
         $party = $this->createParty();

@@ -15,8 +15,11 @@ export const normalizeForFilter = (value: unknown): string =>
         .trim()
         .toLowerCase();
 
-/** تعریفِ فیلترِ یک ستون: text = «شامل بودن» (یکسان‌شده)، exact = برابریِ کامل (برایِ فهرستِ کشویی) */
-export type ColumnFilterSpec<T> = { get: (row: T) => unknown; mode: 'text' | 'exact' };
+/**
+ * تعریفِ فیلترِ یک ستون: text = «شامل بودن» (یکسان‌شده)، exact = برابریِ کامل (برایِ فهرستِ کشویی)،
+ * any = ستونِ چندمقداری (get آرایه برمی‌گرداند)؛ ردیف وقتی می‌ماند که یکی از مقدارهایش برابر باشد
+ */
+export type ColumnFilterSpec<T> = { get: (row: T) => unknown; mode: 'text' | 'exact' | 'any' };
 
 /**
  * فیلترِ ستونیِ شبیهِ اکسل: هر ستون یک مقدار؛ ردیف‌ها همان لحظهٔ تایپ فیلتر می‌شوند (سمتِ مرورگر، رویِ فهرستِ بارگذاری‌شده).
@@ -31,6 +34,10 @@ export function useColumnFilters<T>(rows: T[], specs: Record<string, ColumnFilte
             active.every(([key, v]) => {
                 const spec = specs[key];
                 const cell = spec.get(row);
+                if (spec.mode === 'any') {
+                    const list = (Array.isArray(cell) ? cell : []).map((x) => String(x ?? '').trim()).filter(Boolean);
+                    return v === '\u0000' ? list.length === 0 : list.includes(v);
+                }
                 if (spec.mode === 'exact') {
                     const c = String(cell ?? '').trim();
                     return v === '\u0000' ? c === '' : c === v;
@@ -96,6 +103,19 @@ export function distinctOptions<T>(rows: T[], get: (row: T) => string | null | u
     const values = Array.from(new Set(rows.map((r) => (get(r) || '').trim()))).sort((a, b) => a.localeCompare(b, 'fa'));
     // مقدارِ خالی با «\u0000» نمایندگی می‌شود تا با «بدونِ فیلتر» ('') قاطی نشود
     return values.map((v) => ({ value: v === '' ? '\u0000' : v, label: v || emptyLabel }));
+}
+
+/** گزینه‌هایِ متمایز برایِ ستونِ چندمقداری (همهٔ مقدارهایِ همهٔ ردیف‌ها) — همراهِ mode: 'any' */
+export function distinctListOptions<T>(rows: T[], getList: (row: T) => string[], emptyLabel = '— (خالی)') {
+    const all = new Set<string>();
+    let hasEmpty = false;
+    rows.forEach((r) => {
+        const list = getList(r).map((x) => x.trim()).filter(Boolean);
+        if (!list.length) hasEmpty = true;
+        list.forEach((x) => all.add(x));
+    });
+    const options = Array.from(all).sort((a, b) => a.localeCompare(b, 'fa')).map((v) => ({ value: v, label: v }));
+    return hasEmpty ? [{ value: '\u0000', label: emptyLabel }, ...options] : options;
 }
 
 /** CSSِ مشترکِ سرستون‌هایِ فیلتردار */

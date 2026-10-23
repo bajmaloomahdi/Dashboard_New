@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Modal, Form, Input, Segmented, Row, Col, Button, Typography, Alert, Select } from 'antd';
 import { UserOutlined, BankOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import { crmApi } from '../../../Components/Crm/crmApi';
+import { crmSaveWithDuplicateConfirm } from '../../../Components/Crm/duplicateNameConfirm';
 import PersianDateInput from '../../../Components/PersianDateInput';
 import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import CooperationEndedField, { CooperationState, cooperationError, cooperationFromServer, cooperationToApi, emptyCooperation } from '../../../Components/Crm/CooperationEnded';
 
 const { Text } = Typography;
 
@@ -23,6 +25,8 @@ export interface Party {
     IsActive: boolean | number | string;
     /** تاریخِ ثبتِ اولیهٔ رکورد (SYSDATETIME در SP) — «تاریخِ ایجاد» فقط نمایشِ همین مقدار است */
     Date_InsertFirst?: string | null;
+    /** قطعِ همکاری (پچِ ۱۱۹) — NULL = همکاری برقرار */
+    CooperationEndedAt?: string | null;
 }
 
 /** گزینه‌هایِ Master Data («نقش» = CrmContactRoles، «سمت» = CrmPositions) — همان فهرست‌هایِ صفحهٔ «فهرست‌هایِ CRM» */
@@ -72,6 +76,7 @@ export default function PartyFormModal({
     const [values, setValues] = useState(emptyValues);
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [coop, setCoop] = useState<CooperationState>(emptyCooperation());
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     // نقش‌ها و سمت‌هایِ خودِ طرف‌حساب (چندگانه، مستقل از هم)
     const [roleIds, setRoleIds] = useState<number[]>([]);
@@ -150,6 +155,7 @@ export default function PartyFormModal({
             : emptyValues;
 
         setValues(initial);
+        setCoop(cooperationFromServer(editingParty?.CooperationEndedAt));
         setFormError(null);
         setFieldErrors({});
     }, [open, editingParty]);
@@ -178,12 +184,17 @@ export default function PartyFormModal({
             setFormError(`${identifierLabel} الزامی است.`);
             return;
         }
+        const coopProblem = cooperationError(coop);
+        if (coopProblem) {
+            setFormError(coopProblem);
+            return;
+        }
 
         setProcessing(true);
         setFormError(null);
         setFieldErrors({});
 
-        const res = await crmApi('/crm/parties', 'POST', {
+        const res = await crmSaveWithDuplicateConfirm('/crm/parties', {
             partyId: editingParty ? editingParty.PartyID : undefined,
             partyNature: values.partyNature,
             officialName: values.officialName.trim(),
@@ -193,10 +204,18 @@ export default function PartyFormModal({
             identifierNumber: !isIndividual ? values.identifierNumber.trim() : undefined,
             identifierDate: values.identifierDate || undefined,
             description: values.description.trim() || undefined,
-            ...(selectionReady ? { roleIds, positionIds } : {}),
+            ...cooperationToApi(coop),
+            // نقش/سمت فقط در ویرایش (در تعریفِ طرف‌حسابِ جدید نمایش داده و ارسال نمی‌شود)
+            ...(isEdit && selectionReady ? { roleIds, positionIds } : {}),
         });
 
         setProcessing(false);
+
+        if (res === null) {
+            // کاربر هشدارِ نامِ تکراری را تأیید نکرد → چیزی ثبت نشد؛ فرم با همان مقادیر باز می‌ماند
+            setFormError('ثبت انجام نشد؛ نام را اصلاح کنید یا دوباره ذخیره و تأیید کنید.');
+            return;
+        }
 
         if (!res.ok || !res.success) {
             if (res.errors && typeof res.errors === 'object' && !Array.isArray(res.errors)) {
@@ -306,6 +325,7 @@ export default function PartyFormModal({
                     </Col>
                 </Row>
 
+                {isEdit ? (
                 <Row gutter={16}>
                     <Col xs={24} md={12}>
                         <Form.Item label="نقش‌ها" tooltip="چند نقش قابلِ انتخاب است؛ فهرست از «فهرست‌هایِ مخاطبین و ارتباطات ← نقش» مدیریت می‌شود.">
@@ -344,6 +364,11 @@ export default function PartyFormModal({
                         </Form.Item>
                     </Col>
                 </Row>
+                ) : null}
+
+                <Form.Item>
+                    <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
+                </Form.Item>
 
                 <Form.Item label="توضیحات">
                     <Input.TextArea value={values.description} onChange={(e) => setValues((s) => ({ ...s, description: e.target.value }))} rows={3} maxLength={2000} showCount />

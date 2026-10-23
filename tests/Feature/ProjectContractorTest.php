@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -228,6 +230,34 @@ class ProjectContractorTest extends TestCase
         $this->assertEquals(self::PARTY_A, (int) $row->PartyID);
         $this->assertEquals($projectId, (int) $row->ProjectID);
         $this->assertSame('تعاملِ ثبت‌شده از پروژه', $row->Subject);
+    }
+
+    public function test_project_interaction_saves_attachments_in_the_same_request(): void
+    {
+        Storage::fake('local');
+        $projectId = $this->createProject();
+        $this->as(self::RESPONSIBLE)->postJson("/projects/{$projectId}/contractors", ['PartyID' => self::PARTY_A])->assertOk();
+        $url = "/projects/{$projectId}/contractors/" . self::PARTY_A . '/interactions';
+        $fields = ['interactionTypeId' => $this->typeId('CALL'), 'interactionDate' => '2026-10-01 10:00:00'];
+
+        $res = $this->as(self::RESPONSIBLE)->post($url, $fields + [
+            'subject' => 'تعاملِ پروژه با پیوست',
+            'attachments' => [UploadedFile::fake()->create('صورت‌جلسه.pdf', 50), UploadedFile::fake()->create('عکس.jpg', 20)],
+            'descriptions' => ['امضاشده', ''],
+        ], ['Accept' => 'application/json']);
+        $res->assertOk()->assertJson(['success' => true, 'message' => 'تعامل با موفقیت ثبت شد.']);
+
+        $rows = DB::select('SELECT FileName, Description, FilePath FROM dbo.CrmInteractionAttachments WHERE InteractionID = ? ORDER BY InteractionAttachmentID', [$res->json('interactionId')]);
+        $this->assertSame(['صورت‌جلسه.pdf', 'عکس.jpg'], array_column($rows, 'FileName'));
+        $this->assertSame('امضاشده', $rows[0]->Description);
+        Storage::disk('local')->assertExists($rows[0]->FilePath);
+
+        // فایلِ نامعتبر → خودِ تعامل هم ثبت نمی‌شود
+        $this->as(self::RESPONSIBLE)->post($url, $fields + [
+            'subject' => 'نباید ثبت شود — پیوستِ اجرایی',
+            'attachments' => [UploadedFile::fake()->create('ok.pdf', 10), UploadedFile::fake()->create('virus.exe', 10)],
+        ], ['Accept' => 'application/json'])->assertStatus(422)->assertJson(['success' => false]);
+        $this->assertNull(DB::selectOne('SELECT 1 AS x FROM dbo.CrmInteractions WHERE Subject = ?', ['نباید ثبت شود — پیوستِ اجرایی']));
     }
 
     public function test_project_interaction_rejected_when_party_not_a_contractor(): void

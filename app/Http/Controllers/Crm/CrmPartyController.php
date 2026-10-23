@@ -148,12 +148,49 @@ class CrmPartyController extends CrmApiController
             'roleIds.*' => 'integer|distinct|exists:CrmContactRoles,ContactRoleID',
             'positionIds' => 'sometimes|nullable|array',
             'positionIds.*' => 'integer|distinct|exists:CrmPositions,PositionID',
+            'allowDuplicateName' => 'sometimes|boolean', // تأییدِ ثبت با وجودِ نامِ تکراری (پچِ ۱۱۴)
+            'cooperationEnded' => 'sometimes|nullable|boolean', // قطعِ همکاری (پچِ ۱۱۹)
+            'cooperationEndedAt' => 'nullable|date', // الزامی‌بودن با قطعِ همکاری در سرویس (پیامِ فارسی)
         ]);
 
         return $this->runCrm(function () use ($validated) {
             $res = $this->parties->saveParty($validated, $this->actorId());
 
             return ['message' => $res->Message ?? 'طرف‌حساب ذخیره شد.', 'partyId' => (int) $res->PartyID];
+        });
+    }
+
+    /** POST crm/parties/{partyId}/user — تعیین/برداشتنِ کاربرِ این طرف‌حساب (پچِ ۱۲۱) */
+    public function setUser(Request $request, int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+        $validated = $request->validate(['userId' => 'nullable|integer']);
+
+        return $this->runCrm(function () use ($validated, $partyId) {
+            $res = $this->parties->setEntityUser('PARTY', $partyId, isset($validated['userId']) ? (int) $validated['userId'] : null, $this->actorId());
+
+            return ['message' => $res->Message ?? 'ذخیره شد.'];
+        });
+    }
+
+    /** GET crm/linkable-users — کاربرانِ فعال برایِ انتخاب در صفحهٔ طرف‌حساب/مخاطب (پچِ ۱۲۱) */
+    public function linkableUsers()
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+
+        return response()->json(['success' => true, 'users' => $this->parties->linkableUsers()]);
+    }
+
+    /** POST crm/parties/{partyId}/cooperation — ثبت/برداشتنِ قطعِ همکاری از صفحهٔ اصلی (پچِ ۱۲۰) */
+    public function setCooperation(Request $request, int $partyId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+        $validated = $request->validate(['cooperationEnded' => 'required|boolean', 'cooperationEndedAt' => 'nullable|date']);
+
+        return $this->runCrm(function () use ($validated, $partyId) {
+            $res = $this->parties->setCooperationEnded('PARTY', $partyId, $validated, $this->actorId());
+
+            return ['message' => $res->Message ?? 'ذخیره شد.', 'cooperationEndedAt' => $res->CooperationEndedAt ?? null];
         });
     }
 

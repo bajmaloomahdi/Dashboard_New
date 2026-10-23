@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Modal, Typography } from 'antd';
+import { Button, Modal, Typography } from 'antd';
 import {
     CheckCircleFilled,
     CloseCircleFilled,
@@ -83,6 +83,10 @@ export default function NotificationModal({
                         {message}
                     </Text>
                 </div>
+                {/* بستنِ فوری بدونِ انتظار تا پایانِ زمانِ خودکار */}
+                <Button type="primary" autoFocus onClick={onClose} style={{ marginTop: 24, minWidth: 120 }}>
+                    متوجه شدم
+                </Button>
             </div>
 
             <style>{`

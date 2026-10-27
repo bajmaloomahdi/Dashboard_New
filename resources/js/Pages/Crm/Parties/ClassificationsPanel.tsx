@@ -92,7 +92,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
 
     const handleSaveType = async () => {
         if (!typeDraft.partyTypeId && !typeDraft.activityId) {
-            setTypeError('حداقل انتخابِ نوع الزامی است.');
+            setTypeError('حداقل انتخابِ گروه الزامی است.');
             return;
         }
         setTypeSaving(true);
@@ -169,8 +169,8 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
     ];
 
     const typeColumns: ColumnsType<Classification> = [
-        { title: 'نوع', dataIndex: 'PartyTypeName', key: 'PartyTypeName', render: (v) => v || <Text type="secondary">—</Text> },
-        { title: 'فعالیت', dataIndex: 'ActivityName', key: 'ActivityName', render: (v) => v || <Text type="secondary">—</Text> },
+        { title: 'گروه', dataIndex: 'PartyTypeName', key: 'PartyTypeName', render: (v) => v || <Text type="secondary">—</Text> },
+        { title: 'زیرگروه', dataIndex: 'ActivityName', key: 'ActivityName', render: (v) => v || <Text type="secondary">—</Text> },
         statusColumn,
         actionsColumn((r) => {
             setTypeDraft({ id: r.ClassificationID, partyTypeId: r.PartyTypeID, activityId: r.ActivityID });
@@ -216,11 +216,11 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
 
             <Divider />
 
-            <Title level={5}>نوع و فعالیت</Title>
+            <Title level={5}>گروه و زیرگروه</Title>
             {canManage ? (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                     <Button type="primary" icon={<PlusOutlined />} onClick={() => { setTypeDraft({ id: null, partyTypeId: null, activityId: null }); setTypeError(null); setTypeFormOpen(true); }}>
-                        نوعِ جدید
+                        گروهِ جدید
                     </Button>
                 </div>
             ) : null}
@@ -232,22 +232,22 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                     {typeError ? <Alert type="error" showIcon message={typeError} style={{ borderRadius: 8 }} /> : null}
                     <Space style={{ width: '100%' }} wrap>
                         <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>نوع</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>گروه</Text>
                             <Select
                                 style={{ width: 200 }}
-                                placeholder="نوع"
+                                placeholder="گروه"
                                 value={typeDraft.partyTypeId ?? undefined}
                                 onChange={(v) => setTypeDraft((d) => ({ ...d, partyTypeId: v, activityId: null }))}
                                 options={(partyTypes || []).map((t) => ({ value: t.PartyTypeID, label: t.DisplayName }))}
                             />
                         </div>
                         <div>
-                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>فعالیت</Text>
+                            <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>زیرگروه</Text>
                             <Select
                                 allowClear
                                 disabled={!typeDraft.partyTypeId}
                                 style={{ width: 200 }}
-                                placeholder="فعالیت"
+                                placeholder="زیرگروه"
                                 value={typeDraft.activityId ?? undefined}
                                 onChange={(v) => setTypeDraft((d) => ({ ...d, activityId: v ?? null }))}
                                 options={filteredActivities.map((a) => ({ value: a.ActivityID, label: a.DisplayName }))}
@@ -261,7 +261,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                 </Space>
             ) : null}
 
-            <Table rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="نوعی ثبت نشده است" /> }} />
+            <Table rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="گروهی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

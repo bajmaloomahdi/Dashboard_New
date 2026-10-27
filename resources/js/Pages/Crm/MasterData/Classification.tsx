@@ -19,7 +19,7 @@ interface PageProps {
 type TabKey = 'departments' | 'partyTypes' | 'activities';
 
 /**
- * طبقه‌بندیِ طرف‌حساب: دپارتمان (مستقل)، نوع (مستقل)، فعالیت (زیرمجموعهٔ نوع).
+ * طبقه‌بندیِ طرف‌حساب: دپارتمان (مستقل)، گروه (= PartyType، مستقل)، زیرگروه (= Activity، زیرمجموعهٔ گروه).
  */
 export default function CrmClassificationPage() {
     const { departments, partyTypes, activities, canManage, canDelete = false } = usePage().props as unknown as PageProps;
@@ -27,8 +27,8 @@ export default function CrmClassificationPage() {
 
     const tabDefs = [
         { key: 'departments' as const, label: 'دپارتمان', icon: <BankOutlined />, count: (departments || []).length },
-        { key: 'partyTypes' as const, label: 'نوع', icon: <TagOutlined />, count: (partyTypes || []).length },
-        { key: 'activities' as const, label: 'فعالیت', icon: <ApartmentOutlined />, count: (activities || []).length },
+        { key: 'partyTypes' as const, label: 'گروه', icon: <TagOutlined />, count: (partyTypes || []).length },
+        { key: 'activities' as const, label: 'زیرگروه', icon: <ApartmentOutlined />, count: (activities || []).length },
     ];
 
     return (
@@ -36,7 +36,7 @@ export default function CrmClassificationPage() {
             <PageHeader
                 icon={<ApartmentOutlined />}
                 title="طبقه‌بندیِ طرف‌حساب"
-                subtitle="دپارتمان، نوع و فعالیت — Master Dataهایِ «مخاطبین و ارتباطات»"
+                subtitle="دپارتمان، گروه و زیرگروه — Master Dataهایِ «مخاطبین و ارتباطات»"
                 backHref="/crm/directory"
                 backLabel="بازگشت"
             />
@@ -67,7 +67,7 @@ export default function CrmClassificationPage() {
                         canManage={canManage}
                         canDelete={canDelete}
                         deleteEntity="party-type"
-                        entityLabel="نوع"
+                        entityLabel="گروه"
                         namePlaceholder="مشتری"
                     />
                 </Card>
@@ -82,14 +82,14 @@ export default function CrmClassificationPage() {
                         canManage={canManage}
                         canDelete={canDelete}
                         deleteEntity="activity"
-                        entityLabel="فعالیت"
+                        entityLabel="زیرگروه"
                         namePlaceholder="خرده‌فروشی"
                         parentSelect={{
-                            label: 'نوع',
+                            label: 'گروه',
                             paramName: 'partyTypeId',
                             idField: 'PartyTypeID',
                             apiBase: '/crm/classification/party-types',
-                            displayColumn: { title: 'نوع', dataIndex: 'PartyTypeName' },
+                            displayColumn: { title: 'گروه', dataIndex: 'PartyTypeName' },
                         }}
                     />
                 </Card>

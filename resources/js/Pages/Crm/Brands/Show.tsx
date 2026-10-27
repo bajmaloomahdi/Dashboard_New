@@ -55,7 +55,7 @@ export default function CrmBrandShow() {
     const [logoPreview, setLogoPreview] = useState<number | null>(null);
     useEffect(() => setLogoFailed(false), [currentBrand.LogoUrl]);
 
-    const tabDefs = [{ key: 'parties' as const, label: 'طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (parties || []).length }];
+    const tabDefs = [{ key: 'parties' as const, label: 'مخاطبین / طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (parties || []).length }];
 
     const handleEditSuccess = (message: string) => {
         setEditOpen(false);

@@ -6,7 +6,7 @@ export type UserType = 'INTERNAL' | 'PERSON' | 'PARTY';
 
 export const USER_TYPE_META: Record<UserType, { label: string; color: string; icon: JSX.Element }> = {
     INTERNAL: { label: 'کاربرِ داخلی', color: 'blue', icon: <HomeOutlined /> },
-    PERSON: { label: 'مخاطب', color: 'purple', icon: <ContactsOutlined /> },
+    PERSON: { label: 'فرد مرتبط', color: 'purple', icon: <ContactsOutlined /> },
     PARTY: { label: 'طرف‌حساب', color: 'gold', icon: <BankOutlined /> },
 };
 

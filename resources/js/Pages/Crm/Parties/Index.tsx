@@ -41,7 +41,7 @@ interface PartyRow extends Party {
     DepartmentName: string | null;
     PartyTypeName: string | null;
     ActivityName: string | null;
-    /** همهٔ نوع‌ها/فعالیت‌هایِ طبقه‌بندی‌هایِ فعال به ترتیبِ ثبت — آرایهٔ JSON (پچِ ۱۱۵) */
+    /** همهٔ گروه‌ها (نوع‌ها)/زیرگروه‌ها (فعالیت‌ها)یِ طبقه‌بندی‌هایِ فعال به ترتیبِ ثبت — آرایهٔ JSON (پچِ ۱۱۵) */
     PartyTypeNames?: string | null;
     ActivityNames?: string | null;
     ActiveBrandCount: number;
@@ -63,13 +63,16 @@ interface PartyRow extends Party {
 }
 
 export default function CrmPartiesIndex() {
-    const { parties, filters, canManage, canDelete = false, positions, contactRoles } = usePage().props as unknown as {
+    const { parties, filters, canManage, canDelete = false, positions, contactRoles, partyTypes, activities } = usePage().props as unknown as {
         parties: PartyRow[];
         filters: { search: string | null; isActive: boolean | null; partyNature: string | null };
         canManage: boolean;
         canDelete?: boolean;
         positions: PositionOption[];
         contactRoles: RoleOption[];
+        /** گروه و زیرگروهِ فرمِ تعریفِ جدید */
+        partyTypes?: { PartyTypeID: number | string; DisplayName: string }[];
+        activities?: { ActivityID: number | string; PartyTypeID: number | string; DisplayName: string }[];
     };
 
     const [items, setItems] = useState<PartyRow[]>(parties || []);
@@ -273,17 +276,17 @@ export default function CrmPartiesIndex() {
         },
         {
             title: (
-                <FilterHeader label="نوع">
+                <FilterHeader label="گروه">
                     <SelectFilterInput value={colF.values.type} onChange={(v) => setColFilter('type', v)} options={distinctListOptions(items, typeList)} />
                 </FilterHeader>
             ),
             key: 'type',
-            // چند نوع → اولی نمایش داده می‌شود، بقیه در تولتیپ
+            // چند گروه → اولی نمایش داده می‌شود، بقیه در تولتیپ
             render: (_, p) => <FirstWithTooltipCell items={typeList(p)} />,
         },
         {
             title: (
-                <FilterHeader label="فعالیت">
+                <FilterHeader label="زیرگروه">
                     <SelectFilterInput value={colF.values.activity} onChange={(v) => setColFilter('activity', v)} options={distinctListOptions(items, activityList)} />
                 </FilterHeader>
             ),
@@ -291,7 +294,7 @@ export default function CrmPartiesIndex() {
             render: (_, p) => <FirstWithTooltipCell items={activityList(p)} />,
         },
         {
-            title: <FilterHeader label="مخاطب"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
+            title: <FilterHeader label="فرد مرتبط"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
             key: 'person',
             render: (_, p) => p.PrimaryContactPersonName || <Text type="secondary">—</Text>,
         },
@@ -338,7 +341,7 @@ export default function CrmPartiesIndex() {
         <MainLayout>
             <PageHeader
                 icon={<TeamOutlined />}
-                title="طرف‌حساب‌ها"
+                title="مخاطبین / طرف‌حساب‌ها"
                 subtitle="مدیریتِ فروشگاه‌ها، شرکت‌ها و کارخانه‌هایِ «مخاطبین و ارتباطات»"
                 stats={[
                     { icon: <TeamOutlined />, label: 'کل', value: `${totalCount} طرف‌حساب` },
@@ -569,6 +572,8 @@ export default function CrmPartiesIndex() {
                 onSuccess={handleModalSuccess}
                 contactRoles={contactRoles || []}
                 positions={positions || []}
+                partyTypes={partyTypes || []}
+                activities={activities || []}
             />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />

@@ -48,6 +48,9 @@ class CrmPartyController extends CrmApiController
             // گزینه‌هایِ «نقش» و «سمت»ِ فرمِ ایجاد/ویرایشِ طرف‌حساب (فقط فعال‌ها؛ انتخابِ غیرفعالِ قبلی از خودِ طرف‌حساب می‌آید)
             'positions' => $this->masterData->listPositions(null, true),
             'contactRoles' => $this->masterData->listContactRoles(null, true),
+            // گروه و زیرگروهِ اختیاریِ فرمِ تعریفِ طرف‌حسابِ جدید (فقط فعال‌ها)
+            'partyTypes' => $this->masterData->listPartyTypes(null, true),
+            'activities' => $this->masterData->listActivities(null, null, true),
         ]);
     }
 
@@ -149,6 +152,11 @@ class CrmPartyController extends CrmApiController
             'positionIds' => 'sometimes|nullable|array',
             'positionIds.*' => 'integer|distinct|exists:CrmPositions,PositionID',
             'allowDuplicateName' => 'sometimes|boolean', // تأییدِ ثبت با وجودِ نامِ تکراری (پچِ ۱۱۴)
+            'identifier1' => 'nullable|string|max:100', // شناسه ۱ و ۲ (پچِ ۱۲۴)
+            'identifier2' => 'nullable|string|max:100',
+            // گروه (= نوع) و زیرگروه (= فعالیت)ِ اختیاری فقط هنگامِ تعریفِ طرف‌حسابِ جدید
+            'groupId' => 'nullable|integer|exists:CrmPartyTypes,PartyTypeID',
+            'subGroupId' => 'nullable|integer|exists:CrmActivities,ActivityID',
             'cooperationEnded' => 'sometimes|nullable|boolean', // قطعِ همکاری (پچِ ۱۱۹)
             'cooperationEndedAt' => 'nullable|date', // الزامی‌بودن با قطعِ همکاری در سرویس (پیامِ فارسی)
         ]);

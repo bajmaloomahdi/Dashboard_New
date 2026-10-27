@@ -44,7 +44,7 @@ class CrmPartyService
         $hasParty = ! empty($input['partyId']);
         $hasPerson = ! empty($input['personId']);
         if ($hasParty === $hasPerson) {
-            throw new CrmValidationException('دقیقاً یکی از طرف‌حساب یا مخاطب باید مشخص باشد.');
+            throw new CrmValidationException('دقیقاً یکی از طرف‌حساب یا فرد مرتبط باید مشخص باشد.');
         }
     }
 
@@ -81,12 +81,25 @@ class CrmPartyService
             if (strlen($identifierNumber) !== 11) {
                 throw new CrmValidationException('شناسه ملی باید دقیقاً ۱۱ رقم باشد.');
             }
+        } else {
+            // حقیقی (پچِ ۱۲۳): کدِ ملیِ اختیاری، ۱۰ رقم
+            $identifierNumber = preg_replace('/\D/', '', (string) ($input['identifierNumber'] ?? '')) ?: null;
+            if ($identifierNumber !== null && strlen($identifierNumber) !== 10) {
+                throw new CrmValidationException('کد ملی باید دقیقاً ۱۰ رقم باشد.');
+            }
+        }
+
+        // گروه/زیرگروهِ اختیاری هنگامِ تعریفِ طرف‌حسابِ جدید → یک ردیفِ طبقه‌بندی (همان تبِ «گروه و زیرگروه»)
+        $groupId = ! empty($input['groupId']) ? (int) $input['groupId'] : null;
+        $subGroupId = ! empty($input['subGroupId']) ? (int) $input['subGroupId'] : null;
+        if ($subGroupId !== null && $groupId === null) {
+            throw new CrmValidationException('برایِ انتخابِ زیرگروه، ابتدا گروه را انتخاب کنید.');
         }
 
         // برندِ طرف‌حساب اینجا ثبت نمی‌شود؛ فقط از تبِ «برندها»ی جزئیاتِ طرف‌حساب (savePartyBrandCategory).
         // نقش‌ها/سمت‌هایِ خودِ طرف‌حساب در همان تراکنشِ ذخیره Sync می‌شوند — فقط اگر کلیدشان ارسال شده باشد،
         // تا مسیرهایِ دیگری که همین ذخیره را صدا می‌زنند (بدونِ این دو کلید) انتخاب‌هایِ قبلی را پاک نکنند.
-        return DB::transaction(function () use ($input, $nature, $identifierNumber, $userId) {
+        return DB::transaction(function () use ($input, $nature, $identifierNumber, $userId, $groupId, $subGroupId) {
             $res = $this->store->saveParty([
                 'partyId' => $input['partyId'] ?? null,
                 'partyNature' => $nature,
@@ -94,6 +107,9 @@ class CrmPartyService
                 'tradeName' => trim($input['tradeName'] ?? '') ?: null,
                 'registrationNumber' => trim($input['registrationNumber'] ?? '') ?: null,
                 'economicCode' => trim($input['economicCode'] ?? '') ?: null,
+                // شناسه ۱ و ۲ (متنی، پچِ ۱۲۴) — فقط طرف‌حسابِ حقیقی
+                'identifier1' => $nature === 'INDIVIDUAL' ? (trim((string) ($input['identifier1'] ?? '')) ?: null) : null,
+                'identifier2' => $nature === 'INDIVIDUAL' ? (trim((string) ($input['identifier2'] ?? '')) ?: null) : null,
                 'identifierNumber' => $identifierNumber,
                 'identifierDate' => $input['identifierDate'] ?? null,
                 'description' => $input['description'] ?? null,
@@ -111,6 +127,9 @@ class CrmPartyService
             }
             if (array_key_exists('positionIds', $input)) {
                 $this->store->savePartyPositions($partyId, array_map('intval', $input['positionIds'] ?? []), $userId);
+            }
+            if ($groupId !== null && empty($input['partyId'])) {
+                $this->store->savePartyClassification(['partyId' => $partyId, 'partyTypeId' => $groupId, 'activityId' => $subGroupId, 'userId' => $userId]);
             }
 
             return $res;

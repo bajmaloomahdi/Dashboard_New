@@ -312,13 +312,14 @@ class CrmStore
         return $this->write(
             'EXEC dbo.sp_Crm_SaveParty @PartyID = ?, @PartyNature = ?, @OfficialName = ?, @TradeName = ?, @RegistrationNumber = ?, '
             . '@EconomicCode = ?, @IdentifierNumber = ?, @IdentifierDate = ?, @Description = ?, '
-            . '@DepartmentID = ?, @PartyTypeID = ?, @ActivityID = ?, @UserID = ?'
+            . '@DepartmentID = ?, @PartyTypeID = ?, @ActivityID = ?, @UserID = ?, @Identifier1 = ?, @Identifier2 = ?'
             . (! empty($p['allowDuplicateName']) ? ', @AllowDuplicateName = 1' : '')
             . $this->cooperationSql($p),
             [
                 $p['partyId'] ?? null, $p['partyNature'], $p['officialName'], $p['tradeName'] ?? null, $p['registrationNumber'] ?? null,
                 $p['economicCode'] ?? null, $p['identifierNumber'] ?? null, $p['identifierDate'] ?? null, $p['description'] ?? null,
                 $p['departmentId'] ?? null, $p['partyTypeId'] ?? null, $p['activityId'] ?? null, $p['userId'],
+                $p['identifier1'] ?? null, $p['identifier2'] ?? null, // پچِ ۱۲۴
                 ...$this->cooperationBindings($p),
             ]
         );

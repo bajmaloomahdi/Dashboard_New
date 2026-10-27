@@ -31,7 +31,7 @@ export default function PrimaryContactLine({ value, type, extension, personName 
 
     return (
         <div className="crm-primary-contact-block">
-            <Space size={6} style={{ display: 'flex' }} title="مخاطب">
+            <Space size={6} style={{ display: 'flex' }} title="فرد مرتبط">
                 <UserOutlined style={{ color: '#6B7280' }} />
                 <Text style={{ fontSize: 13 }} strong>{name}</Text>
             </Space>

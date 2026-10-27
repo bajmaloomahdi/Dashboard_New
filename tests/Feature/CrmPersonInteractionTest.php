@@ -76,7 +76,7 @@ class CrmPersonInteractionTest extends TestCase
     {
         $res = $this->save([]);
         $res->assertStatus(422);
-        $this->assertStringContainsString('طرف‌حساب یا مخاطبِ تعامل باید مشخص باشد', (string) $res->json('message'));
+        $this->assertStringContainsString('طرف‌حساب یا فردِ مرتبطِ تعامل باید مشخص باشد', (string) $res->json('message'));
 
         // همان قاعده در خودِ رویه و جدول
         $sp = DB::selectOne('EXEC dbo.sp_Crm_SaveInteraction @InteractionTypeID = ?, @PartyID = NULL, @PersonID = NULL, @Subject = N\'x\', @InteractionDate = \'2026-10-17 10:00\', @UserID = 2', [$this->typeId('CALL')]);

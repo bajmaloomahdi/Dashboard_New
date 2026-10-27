@@ -11,6 +11,7 @@ import {
     Select,
     Segmented,
     Divider,
+    Checkbox,
 } from 'antd';
 import {
     EditOutlined,
@@ -28,6 +29,7 @@ import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../.
 import type { CalendarEventAttendee, CalendarPermission, ReminderOption } from '../../Types';
 import { parseDT, previousResponseText, recurrenceSummary } from './calendarUtils';
 import EventAttachmentList, { EventAttachment } from './EventAttachments';
+import { EventDetailTabs } from './EventComments';
 
 const { Text, Paragraph } = Typography;
 
@@ -43,6 +45,7 @@ interface EventDetail {
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
     RecurrenceInterval: number;
     RecurrenceEndDate: string | null;
+    RecurrenceWeekDays?: string | null;
     CreatedByUserID: number;
     OwnerUserID: number;
     CreatorName: string;
@@ -130,6 +133,11 @@ export default function EventDetailsModal({
 }: EventDetailsModalProps) {
     const [loading, setLoading] = useState(false);
     const [changingStatus, setChangingStatus] = useState(false);
+    // پچِ ۱۲۷: وضعیتِ همین وقوع (رویدادِ تکرارشونده) و گزینهٔ «اعمال به همهٔ تکرارها»
+    const [occurrenceStatus, setOccurrenceStatus] = useState<string | null>(null);
+    const [allOccurrences, setAllOccurrences] = useState(false);
+    // تبِ فعال (جزئیات / توضیحات) — برایِ دکمه‌هایِ پایینِ پنجره
+    const [activeTab, setActiveTab] = useState('details');
     const [event, setEvent] = useState<EventDetail | null>(null);
     const [attendees, setAttendees] = useState<CalendarEventAttendee[]>([]);
     const [attachments, setAttachments] = useState<EventAttachment[]>([]);
@@ -144,13 +152,14 @@ export default function EventDetailsModal({
     const reload = () => {
         if (!eventId) return;
         setLoading(true);
-        fetch(`/calendar/events/${eventId}`, {
+        fetch(`/calendar/events/${eventId}${occurrence?.start ? `?occurrence=${encodeURIComponent(occurrence.start.slice(0, 19))}` : ''}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
             credentials: 'same-origin',
         })
             .then((r) => r.json())
             .then((data) => {
                 setEvent(data.event || null);
+                setOccurrenceStatus(data.occurrenceStatus ?? null);
                 setAttendees(data.attendees || []);
                 setAttachments(data.attachments || []);
                 setMyReminder(data.reminderOffsetMinutes ?? NO_REMINDER);
@@ -160,14 +169,19 @@ export default function EventDetailsModal({
 
     useEffect(() => {
         if (open && eventId) reload();
+        setAllOccurrences(false);
+        setActiveTab('details');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, eventId]);
+    }, [open, eventId, occurrence?.start]);
 
     // تغییرِ وضعیت همین‌جا با یک کلیک (ثبت شده / لغو شده / انجام شده) — بقیهٔ اطلاعات دست نمی‌خورد
     const handleStatusChange = async (status: string) => {
-        if (!eventId || !event || status === event.Status) return;
+        if (!eventId || !event || status === shownStatus) return;
         setChangingStatus(true);
-        const result = await api(`/calendar/events/${eventId}/status`, 'POST', { Status: status });
+        // تکرارشونده: فقط همین وقوع، مگر «همهٔ تکرارها» تیک خورده باشد
+        const result = await api(`/calendar/events/${eventId}/status`, 'POST', isRecurringEvent
+            ? { Status: status, OccurrenceStart: (occurrence?.start ?? String(event.StartDateTime)).slice(0, 19), AllOccurrences: allOccurrences }
+            : { Status: status });
         setChangingStatus(false);
         if (result.success) {
             notify('success', result.message);
@@ -204,6 +218,9 @@ export default function EventDetailsModal({
         }
     };
 
+    const isRecurringEvent = !!event && event.RecurrenceType !== 'NONE';
+    // وضعیتِ نمایشی: برایِ رویدادِ تکرارشونده وضعیتِ همین وقوع
+    const shownStatus = (isRecurringEvent && occurrenceStatus) || event?.Status || 'CONFIRMED';
     const canManage = event ? Number(event.CanManage) === 1 || event.CanManage === true : false;
     const canEdit = canManage && permissions.includes('CALENDAR_EDIT');
     const isAttendee = event?.MyRelation === 'ATTENDEE';
@@ -211,11 +228,14 @@ export default function EventDetailsModal({
     const relatedToEvent = event && event.MyRelation !== 'NONE' && event.MyRelation !== 'UNIT';
 
     const footer: React.ReactNode[] = [];
-    // حذف از این پنجره برداشته شد؛ ویرایش فقط برایِ تاریخ/ساعت و وضعیت است
-    if (event && canEdit) {
+    // حذف از این پنجره برداشته شد؛ ویرایش فقط برایِ تاریخ/ساعت و وضعیت است.
+    // تبِ «توضیحات»: دکمهٔ ویرایش نمایش داده نمی‌شود — دکمهٔ «ثبتِ توضیح» پایینِ همان تب است
+    if (activeTab === 'comments') {
+        // بدونِ دکمهٔ پایینِ پنجره
+    } else if (event && canEdit) {
         footer.push(
             <Button key="edit" type="primary" icon={<EditOutlined />} onClick={() => eventId && onEdit(eventId)}>
-                ویرایشِ تاریخ و ساعت
+                ویرایشِ تاریخ، ساعت و رنگ
             </Button>,
         );
     } else {
@@ -228,11 +248,18 @@ export default function EventDetailsModal({
 
     return (
         <>
-            <Modal open={open} onCancel={onClose} title={event?.Title || 'جزئیات رویداد'} width={580} footer={footer}>
+            <Modal open={open} onCancel={onClose} title={event?.Title || 'جزئیات رویداد'} width={580} footer={footer.length ? footer : null}>
                 <Spin spinning={loading}>
                     {!event && !loading ? (
                         <Empty description="رویداد یافت نشد" />
                     ) : event ? (
+                        // پچِ ۱۲۹: «توضیحات» (با نویسنده و زمان) در تبِ جدا — فقط با دسترسیِ دیدن/ثبت
+                        <EventDetailTabs
+                            onTabChange={setActiveTab}
+                            eventId={Number(event.EventID)}
+                            canView={permissions.includes('CALENDAR_COMMENT_VIEW')}
+                            canAdd={permissions.includes('CALENDAR_COMMENT_ADD')}
+                        >
                         <div>
                             <Space wrap style={{ marginBottom: 12 }}>
                                 <Tag color={event.Color} style={{ borderRadius: 6 }}>
@@ -242,15 +269,20 @@ export default function EventDetailsModal({
                                     // کلیک رویِ وضعیت → همان‌جا تغییر می‌کند
                                     <Segmented
                                         size="small"
-                                        value={STATUS_CHOICES.includes(event.Status as (typeof STATUS_CHOICES)[number]) ? event.Status : 'CONFIRMED'}
+                                        value={STATUS_CHOICES.includes(shownStatus as (typeof STATUS_CHOICES)[number]) ? shownStatus : 'CONFIRMED'}
                                         disabled={changingStatus}
                                         onChange={(v) => handleStatusChange(String(v))}
                                         options={STATUS_CHOICES.map((s) => ({ value: s, label: STATUS_LABELS[s].label }))}
                                     />
                                 ) : (
-                                    <Tag color={STATUS_LABELS[event.Status]?.color} style={{ borderRadius: 6 }}>
-                                        {STATUS_LABELS[event.Status]?.label || event.Status}
+                                    <Tag color={STATUS_LABELS[shownStatus]?.color} style={{ borderRadius: 6 }}>
+                                        {STATUS_LABELS[shownStatus]?.label || shownStatus}
                                     </Tag>
+                                )}
+                                {canEdit && isRecurringEvent && (
+                                    <Checkbox checked={allOccurrences} disabled={changingStatus} onChange={(e) => setAllOccurrences(e.target.checked)} style={{ fontSize: 12 }}>
+                                        اعمال به همهٔ تکرارها
+                                    </Checkbox>
                                 )}
                                 {Number(event.IsPrivate) === 1 && (
                                     <Tag icon={<LockOutlined />} style={{ borderRadius: 6 }}>
@@ -259,7 +291,7 @@ export default function EventDetailsModal({
                                 )}
                                 {event.RecurrenceType !== 'NONE' && (
                                     <Tag icon={<RetweetOutlined />} color="purple" style={{ borderRadius: 6 }}>
-                                        {recurrenceSummary(event.RecurrenceType, event.RecurrenceInterval, parseDT(event.StartDateTime)) || RECURRENCE_LABELS[event.RecurrenceType]}
+                                        {recurrenceSummary(event.RecurrenceType, event.RecurrenceInterval, parseDT(event.StartDateTime), event.RecurrenceWeekDays) || RECURRENCE_LABELS[event.RecurrenceType]}
                                         {event.RecurrenceEndDate ? ` تا ${gregorianToJalaliDisplay(event.RecurrenceEndDate)}` : ''}
                                     </Tag>
                                 )}
@@ -368,6 +400,7 @@ export default function EventDetailsModal({
                                 </Text>
                             )}
                         </div>
+                        </EventDetailTabs>
                     ) : null}
                 </Spin>
             </Modal>

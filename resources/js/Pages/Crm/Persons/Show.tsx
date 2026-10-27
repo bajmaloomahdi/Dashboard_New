@@ -67,7 +67,7 @@ export default function CrmPersonShow() {
     const tabDefs = [
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
-        { key: 'relations' as const, label: 'طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
+        { key: 'relations' as const, label: 'مخاطبین / طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
         { key: 'interactions' as const, label: 'تعاملات', icon: <MessageOutlined />, count: (interactions || []).length },
     ];
 
@@ -82,16 +82,16 @@ export default function CrmPersonShow() {
             <PageHeader
                 icon={<TeamOutlined />}
                 title={currentPerson.DisplayName || '—'}
-                subtitle="مخاطب"
+                subtitle="فرد مرتبط"
                 backHref="/crm/persons-page"
-                backLabel="بازگشت به مخاطبین"
+                backLabel="بازگشت به افراد مرتبط"
                 tags={[{ label: isActive ? 'فعال' : 'غیرفعال' }]}
                 actions={
                     canManage || canDelete ? (
                         <Space wrap>
                             {canManage ? (
                                 <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-                                    ویرایشِ مخاطب
+                                    ویرایشِ فرد مرتبط
                                 </Button>
                             ) : null}
                             {canDelete ? (

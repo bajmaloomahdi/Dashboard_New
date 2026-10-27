@@ -45,6 +45,8 @@ export interface CalendarEvent {
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
     RecurrenceInterval: number;
     RecurrenceEndDate: string | null;
+    /** روزهایِ هفتهٔ تکرارِ هفتگی «1,3» (۰=شنبه … ۶=جمعه) — پچِ ۱۲۷ */
+    RecurrenceWeekDays?: string | null;
     CreatedByUserID: number;
     CreatorName: string;
     OwnerUserID: number;
@@ -103,7 +105,10 @@ export type CalendarPermission =
     | 'CALENDAR_EDIT'
     | 'CALENDAR_DELETE'
     | 'CALENDAR_CREATE_FOR_OTHERS'
-    | 'CALENDAR_VIEW_OTHERS';
+    | 'CALENDAR_VIEW_OTHERS'
+    // توضیحاتِ رویداد (پچِ ۱۲۹)
+    | 'CALENDAR_COMMENT_VIEW'
+    | 'CALENDAR_COMMENT_ADD';
 
 // Props مشترک تمام صفحات
 export interface PageProps {

@@ -180,7 +180,7 @@ export default function CrmPersonsIndex() {
                             <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(p, e)} />
                         </Tooltip>
                         <Popconfirm
-                            title={active ? 'غیرفعال‌کردنِ مخاطب' : 'فعال‌کردنِ مخاطب'}
+                            title={active ? 'غیرفعال‌کردنِ فرد مرتبط' : 'فعال‌کردنِ فرد مرتبط'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggle(p)}
                             okText="بله"
@@ -225,7 +225,7 @@ export default function CrmPersonsIndex() {
             render: (_, p) => (p.IdentifierDate ? gregorianToJalaliDisplay(p.IdentifierDate) : <Text type="secondary">—</Text>),
         },
         {
-            title: <FilterHeader label="طرف‌حساب‌هایِ مرتبط"><TextFilterInput value={colF.values.parties} onChange={(v) => setColFilter('parties', v)} /></FilterHeader>,
+            title: <FilterHeader label="مخاطبین / طرف‌حساب‌هایِ مرتبط"><TextFilterInput value={colF.values.parties} onChange={(v) => setColFilter('parties', v)} /></FilterHeader>,
             key: 'parties',
             width: 220,
             render: (_, p) => (p.RelatedPartyNames ? <Text ellipsis={{ tooltip: p.RelatedPartyNames }} style={{ maxWidth: 220 }}>{p.RelatedPartyNames}</Text> : <Text type="secondary">—</Text>),
@@ -280,16 +280,16 @@ export default function CrmPersonsIndex() {
         <MainLayout>
             <PageHeader
                 icon={<TeamOutlined />}
-                title="مخاطبین"
-                subtitle="مدیریتِ اشخاصِ حقیقیِ «مخاطبین و ارتباطات» —مخاطبینِ مرتبط با طرف‌حساب‌ها"
+                title="افراد مرتبط"
+                subtitle="مدیریتِ اشخاصِ حقیقیِ «مخاطبین و ارتباطات» — افرادِ مرتبط با مخاطبین / طرف‌حساب‌ها"
                 stats={[
-                    { icon: <TeamOutlined />, label: 'کل', value: `${totalCount} مخاطب` },
-                    { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} مخاطب` },
+                    { icon: <TeamOutlined />, label: 'کل', value: `${totalCount} فرد مرتبط` },
+                    { icon: <CheckCircleOutlined />, label: 'فعال', value: `${activeCount} فرد مرتبط` },
                 ]}
                 actions={
                     canManage ? (
                         <Button type="primary" icon={<PlusOutlined />} size="large" style={STYLES.primaryButton} onClick={handleCreate}>
-                            مخاطبِ جدید
+                            فردِ مرتبطِ جدید
                         </Button>
                     ) : undefined
                 }
@@ -342,7 +342,7 @@ export default function CrmPersonsIndex() {
                         <LoadingOutlined style={{ fontSize: 20, color: THEME.primary }} />
                     </div>
                 ) : (items || []).length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>هیچ مخاطبی یافت نشد</div>
+                    <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>هیچ فرد مرتبطی یافت نشد</div>
                 ) : viewMode === 'grid' ? (
                     <>
                     <Space size={8} wrap style={{ marginBottom: 8 }}>
@@ -366,7 +366,7 @@ export default function CrmPersonsIndex() {
                             pageSize: page.pageSize,
                             showSizeChanger: true,
                             pageSizeOptions: [10, 20, 50, 100],
-                            showTotal: (total) => (colF.hasAny ? `${total} از ${items.length} مخاطب` : `${total} مخاطب`),
+                            showTotal: (total) => (colF.hasAny ? `${total} از ${items.length} فرد مرتبط` : `${total} فرد مرتبط`),
                         }}
                     />
                     </>
@@ -378,7 +378,7 @@ export default function CrmPersonsIndex() {
                                 <div className="person-card" key={p.PersonID} onClick={() => router.visit(`/crm/persons/${p.PersonID}`)}>
                                     <div className="person-card-header">
                                         <Tag color="purple" style={{ borderRadius: 6, margin: 0 }} icon={<TeamOutlined />}>
-                                            مخاطب
+                                            فرد مرتبط
                                         </Tag>
                                         <Tag icon={active ? <CheckCircleOutlined /> : <StopOutlined />} color={active ? 'success' : 'default'} style={{ borderRadius: 6, margin: 0 }}>
                                             {active ? 'فعال' : 'غیرفعال'}

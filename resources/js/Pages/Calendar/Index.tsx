@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Checkbox, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, message } from 'antd';
+import { Alert, Badge, Button, Card, Checkbox, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, Tooltip, message } from 'antd';
 import {
     MailOutlined,
     CalendarOutlined,
@@ -7,6 +7,8 @@ import {
     EyeOutlined,
     FilterOutlined,
     LeftOutlined,
+    MenuFoldOutlined,
+    MenuUnfoldOutlined,
     PlusOutlined,
     RightOutlined,
     SearchOutlined,
@@ -149,6 +151,8 @@ async function moveEventApi(eventId: number, start: Date, end: Date): Promise<{ 
 
 /** وضعیت‌هایِ انتخاب‌شدهٔ دستورکار (در همین مرورگر) */
 const AGENDA_STATUSES_KEY = 'raga360.calendar.agendaStatuses';
+/** پنلِ کناریِ تقویم (دسکتاپ) جمع شده است؟ (در همین مرورگر) */
+const SIDE_COLLAPSED_KEY = 'raga360.calendar.sideCollapsed';
 
 export default function CalendarIndex() {
     const props = usePage().props as unknown as {
@@ -196,6 +200,22 @@ export default function CalendarIndex() {
     const [searchEvents, setSearchEvents] = useState<CalendarEvent[] | null>(null);
     const [searchLoading, setSearchLoading] = useState(false);
     const [sideOpen, setSideOpen] = useState(false);
+    // دسکتاپ: پنلِ کناری مثلِ منو جمع/باز می‌شود تا جدولِ تقویم پهن‌تر شود
+    const [sideCollapsed, setSideCollapsedState] = useState<boolean>(() => {
+        try {
+            return localStorage.getItem(SIDE_COLLAPSED_KEY) === '1';
+        } catch {
+            return false;
+        }
+    });
+    const setSideCollapsed = (v: boolean) => {
+        setSideCollapsedState(v);
+        try {
+            localStorage.setItem(SIDE_COLLAPSED_KEY, v ? '1' : '0');
+        } catch {
+            /* بی‌اهمیت */
+        }
+    };
 
     const [formOpen, setFormOpen] = useState(false);
     const [editingEventId, setEditingEventId] = useState<number | null>(null);
@@ -587,10 +607,29 @@ export default function CalendarIndex() {
 
             <Row gutter={16} wrap={false}>
                 {!isMobile && (
-                    <Col flex="264px">
-                        <Card style={{ ...STYLES.card, position: 'sticky', top: 16 }} styles={{ body: { padding: 14 } }}>
-                            {sidebar}
-                        </Card>
+                    <Col flex={sideCollapsed ? '52px' : '264px'} style={{ transition: 'flex-basis 0.2s ease' }}>
+                        {sideCollapsed ? (
+                            // جمع‌شده: فقط دکمهٔ باز کردن و نشانِ فیلترهایِ فعال
+                            <Card style={{ ...STYLES.card, position: 'sticky', top: 16 }} styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 } }}>
+                                <Tooltip title="باز کردنِ پنل" placement="left">
+                                    <Button type="text" icon={<MenuUnfoldOutlined />} onClick={() => setSideCollapsed(false)} aria-label="باز کردنِ پنل" />
+                                </Tooltip>
+                                <Tooltip title="فیلترها" placement="left">
+                                    <Badge count={filterCount} size="small">
+                                        <Button type="text" icon={<FilterOutlined />} onClick={() => setSideCollapsed(false)} aria-label="فیلترها" />
+                                    </Badge>
+                                </Tooltip>
+                            </Card>
+                        ) : (
+                            <Card style={{ ...STYLES.card, position: 'sticky', top: 16 }} styles={{ body: { padding: 14 } }}>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -6, marginBottom: 2 }}>
+                                    <Tooltip title="جمع کردنِ پنل (تقویم پهن‌تر می‌شود)" placement="left">
+                                        <Button type="text" size="small" icon={<MenuFoldOutlined />} onClick={() => setSideCollapsed(true)} aria-label="جمع کردنِ پنل" />
+                                    </Tooltip>
+                                </div>
+                                {sidebar}
+                            </Card>
+                        )}
                     </Col>
                 )}
                 <Col flex="auto" style={{ minWidth: 0 }}>

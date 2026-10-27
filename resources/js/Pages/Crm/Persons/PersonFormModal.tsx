@@ -82,7 +82,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             setFormError(Object.values(missing).join(' '));
             return;
         }
-        const coopProblem = cooperationError(coop);
+        const coopProblem = isEdit ? cooperationError(coop) : null;
         if (coopProblem) {
             setFormError(coopProblem);
             return;
@@ -100,7 +100,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
             identifierNumber: values.identifierNumber.trim() || undefined,
             identifierDate: values.identifierDate || undefined,
             description: values.description.trim() || undefined,
-            ...cooperationToApi(coop),
+            ...(isEdit ? cooperationToApi(coop) : {}),
         });
 
         setProcessing(false);
@@ -128,7 +128,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
 
     return (
         <Modal
-            title={isEdit ? 'ویرایشِ مخاطب' : 'مخاطبِ جدید'}
+            title={isEdit ? 'ویرایشِ فرد مرتبط' : 'فردِ مرتبطِ جدید'}
             open={open}
             onCancel={handleClose}
             width={600}
@@ -137,7 +137,7 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
                     انصراف
                 </Button>,
                 <Button key="submit" type="primary" icon={<SaveOutlined />} loading={processing} onClick={handleSubmit}>
-                    {isEdit ? 'ذخیرهٔ تغییرات' : 'ایجادِ مخاطب'}
+                    {isEdit ? 'ذخیرهٔ تغییرات' : 'ایجادِ فرد مرتبط'}
                 </Button>,
             ]}
             destroyOnClose
@@ -189,9 +189,12 @@ export default function PersonFormModal({ open, onClose, editingPerson, titles, 
                     </Col>
                 </Row>
 
-                <Form.Item>
-                    <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
-                </Form.Item>
+                {/* قطعِ همکاری فقط در ویرایش (و از صفحهٔ اصلیِ مخاطب)، نه هنگامِ تعریف */}
+                {isEdit ? (
+                    <Form.Item>
+                        <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
+                    </Form.Item>
+                ) : null}
 
                 <Form.Item label="توضیحات">
                     <Input.TextArea value={values.description} onChange={(e) => setValues((s) => ({ ...s, description: e.target.value }))} rows={3} maxLength={2000} showCount />

@@ -88,7 +88,7 @@ export default function CrmLinkedUserAction({ entity, id, userId, userName, user
             ) : null}
 
             <Modal
-                title={entity === 'parties' ? 'کاربرِ این طرف‌حساب' : 'کاربرِ این مخاطب'}
+                title={entity === 'parties' ? 'کاربرِ این طرف‌حساب' : 'کاربرِ این فرد مرتبط'}
                 open={open}
                 onCancel={() => !saving && setOpen(false)}
                 maskClosable={false}
@@ -109,8 +109,8 @@ export default function CrmLinkedUserAction({ entity, id, userId, userName, user
                             value={type}
                             onChange={(v) => setType(v)}
                             options={[
-                                { value: 'INTERNAL', label: 'کاربرِ داخلی (این مخاطب برایِ آدرس و تلفنِ اوست)' },
-                                { value: 'PERSON', label: 'مخاطب' },
+                                { value: 'INTERNAL', label: 'کاربرِ داخلی (این فرد مرتبط برایِ آدرس و تلفنِ اوست)' },
+                                { value: 'PERSON', label: 'فرد مرتبط' },
                             ]}
                         />
                     </div>

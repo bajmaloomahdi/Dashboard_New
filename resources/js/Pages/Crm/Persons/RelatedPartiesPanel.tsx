@@ -76,7 +76,7 @@ export default function RelatedPartiesPanel({ items }: RelatedPartiesPanelProps)
             columns={columns}
             dataSource={items}
             pagination={false}
-            locale={{ emptyText: <Empty description="این مخاطب به هیچ طرف‌حسابی مرتبط نیست" /> }}
+            locale={{ emptyText: <Empty description="این فرد به هیچ طرف‌حسابی مرتبط نیست" /> }}
         />
     );
 }

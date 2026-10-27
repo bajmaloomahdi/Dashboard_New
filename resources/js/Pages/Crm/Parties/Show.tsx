@@ -89,7 +89,7 @@ export default function CrmPartyShow() {
 
     const tabDefs = [
         { key: 'classifications' as const, label: 'دسته‌بندی‌ها', icon: <ApartmentOutlined />, count: (classifications || []).length },
-        { key: 'relations' as const, label: 'مخاطبین', icon: <TeamOutlined />, count: (relations || []).length },
+        { key: 'relations' as const, label: 'افراد مرتبط', icon: <TeamOutlined />, count: (relations || []).length },
         { key: 'interactions' as const, label: 'تعاملات', icon: <CommentOutlined />, count: (interactions || []).length },
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
@@ -126,7 +126,7 @@ export default function CrmPartyShow() {
                 title={currentParty.DisplayName || '—'}
                 subtitle={isLegal ? 'طرف‌حسابِ حقوقی' : 'طرف‌حسابِ حقیقی'}
                 backHref="/crm/parties"
-                backLabel="بازگشت به طرف‌حساب‌ها"
+                backLabel="بازگشت به مخاطبین / طرف‌حساب‌ها"
                 tags={[
                     { label: isActive ? 'فعال' : 'غیرفعال' },
                     ...(Number(currentParty.ClassificationCount) > 0 ? [{ label: `${currentParty.ClassificationCount} دسته‌بندی` }] : []),
@@ -159,11 +159,9 @@ export default function CrmPartyShow() {
 
             <Card style={{ marginBottom: 16, ...STYLES.card }}>
                 <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
-                    {isLegal ? (
-                        <Descriptions.Item label="شناسهٔ ملی">
-                            <Text dir="ltr">{currentParty.IdentifierNumber}</Text>
-                        </Descriptions.Item>
-                    ) : null}
+                    <Descriptions.Item label={isLegal ? 'شناسهٔ ملی' : 'کدِ ملی'}>
+                        {currentParty.IdentifierNumber ? <Text dir="ltr">{currentParty.IdentifierNumber}</Text> : '—'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="تاریخِ ایجاد">
                         {currentParty.Date_InsertFirst ? gregorianToJalaliDisplay(currentParty.Date_InsertFirst) : '—'}
                     </Descriptions.Item>
@@ -176,7 +174,13 @@ export default function CrmPartyShow() {
                             <Descriptions.Item label="شمارهٔ ثبت"><Text dir="ltr">{currentParty.RegistrationNumber || '—'}</Text></Descriptions.Item>
                             <Descriptions.Item label="کدِ اقتصادی"><Text dir="ltr">{currentParty.EconomicCode || '—'}</Text></Descriptions.Item>
                         </>
-                    ) : null}
+                    ) : (
+                        // حقیقی: شناسه ۱ و ۲ (متنی، پچِ ۱۲۴)
+                        <>
+                            <Descriptions.Item label="شناسه ۱">{currentParty.Identifier1 || '—'}</Descriptions.Item>
+                            <Descriptions.Item label="شناسه ۲">{currentParty.Identifier2 || '—'}</Descriptions.Item>
+                        </>
+                    )}
                     <Descriptions.Item label="کاربر">
                         <CrmLinkedUserAction
                             entity="parties"

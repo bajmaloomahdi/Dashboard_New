@@ -165,7 +165,7 @@ class CrmDeleteTest extends TestCase
             'partyId' => $partyId, 'personId' => $personId, 'roleIds' => [$r1], 'positionIds' => [$p1],
         ])->assertOk()->json('relationId');
 
-        $this->assertStringContainsString('نقش‌هایِ مخاطب', $this->crmDelete('contact-role', $r1)->assertStatus(422)->json('message'));
+        $this->assertStringContainsString('نقش‌هایِ فرد مرتبط', $this->crmDelete('contact-role', $r1)->assertStatus(422)->json('message'));
         $this->crmDelete('person', $personId)->assertStatus(422);
 
         $this->crmDelete('relation', $relationId)->assertOk();

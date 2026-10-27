@@ -269,6 +269,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/calendar/notices', [CalendarController::class, 'notices'])->name('calendar.notices.index');
     Route::post('/calendar/events/{id}/status', [CalendarController::class, 'setStatus'])->whereNumber('id')->name('calendar.events.status');
     Route::post('/calendar/events/{id}/attachments', [CalendarController::class, 'storeAttachments'])->whereNumber('id')->name('calendar.events.attachments.store');
+    // توضیحاتِ رویداد (پچِ ۱۲۹)
+    Route::get('/calendar/events/{id}/comments', [CalendarController::class, 'comments'])->whereNumber('id')->name('calendar.events.comments.index');
+    Route::post('/calendar/events/{id}/comments', [CalendarController::class, 'storeComment'])->whereNumber('id')->name('calendar.events.comments.store');
     Route::get('/calendar/event-attachments/{attachmentId}/download', [CalendarController::class, 'downloadAttachment'])->whereNumber('attachmentId')->name('calendar.event-attachments.download');
     // تقویمِ مشترک: منابع (اشتراک‌گذاشته‌شده با من + واحدهایِ من)، تقویمِ واحد، اشتراکِ تقویمِ شخصی
     Route::get('/calendar/sources', [CalendarController::class, 'sources'])->name('calendar.sources');

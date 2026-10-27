@@ -610,20 +610,20 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                                     onChange={(v) => setDraft((d) => ({ ...d, partyId: v ?? null, linkedToProject: false, projectId: null }))}
                                     options={(personParties || []).map((p) => ({ value: p.PartyID, label: p.DisplayName }))}
                                     filterOption={(input, option) => (option?.label as string)?.includes(input)}
-                                    notFoundContent="این مخاطب با هیچ طرف‌حسابی رابطهٔ فعال ندارد"
+                                    notFoundContent="این فرد مرتبط با هیچ طرف‌حسابی رابطهٔ فعال ندارد"
                                 />
                             </div>
                         ) : (
                             <div>
-                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخاطب</Text>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>فرد مرتبط</Text>
                                 <Select
                                     allowClear
                                     style={{ width: 190 }}
-                                    placeholder="با کدام مخاطب؟"
+                                    placeholder="با کدام فرد مرتبط؟"
                                     value={draft.personId ?? undefined}
                                     onChange={(v) => setDraft((d) => ({ ...d, personId: v ?? null }))}
                                     options={(relatedPersons || []).map((p) => ({ value: p.PersonID, label: p.DisplayName }))}
-                                    notFoundContent="ابتدا از تبِ «مخاطبین» یک نفر را به این طرف‌حساب مرتبط کنید"
+                                    notFoundContent="ابتدا از تبِ «افراد مرتبط» یک نفر را به این طرف‌حساب مرتبط کنید"
                                 />
                             </div>
                         )}

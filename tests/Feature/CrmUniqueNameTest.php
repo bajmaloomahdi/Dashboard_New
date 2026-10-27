@@ -137,7 +137,7 @@ class CrmUniqueNameTest extends TestCase
             ->assertOk()->json('titleId');
         $res = $this->savePerson('مريم', $last, ['titleId' => $otherTitle]);
         $this->assertDuplicateWarning($res, "مریم {$last}");
-        $this->assertStringContainsString('مخاطبی با نامِ', (string) $res->json('message'));
+        $this->assertStringContainsString('فرد مرتبطی با نامِ', (string) $res->json('message'));
         $this->assertSame(1, DB::table('CrmPersons')->where('LastName', $last)->count());
 
         // با تأیید ثبت می‌شود

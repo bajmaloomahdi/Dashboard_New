@@ -129,7 +129,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
         },
         { title: 'توضیحات', dataIndex: 'Description', key: 'Description', render: (v) => v || <Text type="secondary">—</Text> },
         ...(partyId ? [{
-            title: 'مخاطب',
+            title: 'فرد مرتبط',
             key: 'relatedPerson',
             dataIndex: 'RelatedPersonName',
             render: (v: string | null) => v || <Text type="secondary">—</Text>,
@@ -199,15 +199,15 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                     <Space style={{ width: '100%' }} wrap>
                         {partyId ? (
                             <div>
-                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخاطب</Text>
+                                <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>فرد مرتبط</Text>
                                 <Select
                                     allowClear
                                     style={{ width: 200 }}
-                                    placeholder="این تماس مالِ کدام مخاطب است؟"
+                                    placeholder="این تماس مالِ کدام فرد مرتبط است؟"
                                     value={draft.relatedPersonId ?? undefined}
                                     onChange={(v) => setDraft((d) => ({ ...d, relatedPersonId: v ?? null }))}
                                     options={(relatedPersons || []).map((p) => ({ value: p.PersonID, label: p.DisplayName }))}
-                                    notFoundContent="ابتدا از تبِ «مخاطبین» یک نفر را به این طرف‌حساب مرتبط کنید"
+                                    notFoundContent="ابتدا از تبِ «افراد مرتبط» یک نفر را به این طرف‌حساب مرتبط کنید"
                                 />
                             </div>
                         ) : null}

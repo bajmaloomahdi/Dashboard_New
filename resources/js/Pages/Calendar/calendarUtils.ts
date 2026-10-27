@@ -1,7 +1,7 @@
 import type { CalendarEvent, CalendarPermission } from '../../Types';
 import { normalizeForSearch } from '../../Utils/persianSearch';
 import { gregorianToJalaliDateTimeDisplay, parseServerDateTime, toEnglishDigits } from '../../Utils/jalali';
-import { jalaliParts } from '../../Utils/jalaliCalendar';
+import { WEEKDAY_LABELS_FA, jalaliParts } from '../../Utils/jalaliCalendar';
 
 /**
  * ابزارهای مشترکِ صفحهٔ تقویم: تاریخ، فیلتر و جست‌وجو، هفتهٔ کاری و قواعدِ جابه‌جایی (Drag & Drop).
@@ -270,10 +270,29 @@ export function recurrenceIntervalLabel(type: string | null | undefined): string
  * توضیحِ فارسیِ قاعدهٔ تکرار بر اساسِ تاریخِ شروعِ سری، مثلاً «هر ماه، روزِ 31 ماهِ شمسی (…: آخرین روزِ ماه)».
  * ماهانه/سالانه بر پایهٔ ماهِ شمسی است؛ 30 اسفند در سالِ غیرکبیسه ← 29 اسفند.
  */
-export function recurrenceSummary(type: string | null | undefined, interval: number | null | undefined, start: Date | null): string {
+/** «1,3» یا [1,3] → اندیس‌هایِ مرتبِ روزِ هفتهٔ شمسی (۰=شنبه … ۶=جمعه) — پچِ ۱۲۷ */
+export function parseWeekDays(value: string | number[] | null | undefined): number[] {
+    const items = Array.isArray(value) ? value : String(value ?? '').split(',');
+    return Array.from(new Set(items.map((v) => Number(String(v).trim())).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))).sort((a, b) => a - b);
+}
+
+export function recurrenceSummary(
+    type: string | null | undefined,
+    interval: number | null | undefined,
+    start: Date | null,
+    weekDays?: string | number[] | null,
+): string {
     if (!type || type === 'NONE') return 'بدون تکرار';
     const n = Math.max(1, Number(interval) || 1);
     const every = n === 1 ? `هر ${RECURRENCE_UNIT[type]}` : `هر ${n} ${RECURRENCE_UNIT[type]}`;
+    const days = parseWeekDays(weekDays);
+    if (type === 'WEEKLY' && days.length) return `${every}: ${days.map((d) => WEEKDAY_LABELS_FA[d]).join('، ')}`;
+    // پچِ ۱۲۸: روزانه/ماهانه/سالانه با فیلترِ روزهایِ هفته
+    const only = type !== 'WEEKLY' && days.length > 0 && days.length < 7 ? ` — فقط ${days.map((d) => WEEKDAY_LABELS_FA[d]).join('، ')}` : '';
+    return baseRecurrenceSummary(type, every, start) + only;
+}
+
+function baseRecurrenceSummary(type: string, every: string, start: Date | null): string {
     if (!start) return every;
     const j = jalaliParts(start);
     switch (type) {

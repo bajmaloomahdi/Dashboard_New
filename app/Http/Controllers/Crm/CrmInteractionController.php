@@ -59,8 +59,8 @@ class CrmInteractionController extends CrmApiController
             'followUpOfId' => 'nullable|integer|exists:CrmInteractions,InteractionID',
             'ownerUserId' => 'nullable|integer|exists:Users,UserID',
         ], [
-            'partyId.required_without' => 'طرف‌حساب یا مخاطبِ تعامل باید مشخص باشد.',
-            'personId.required_without' => 'طرف‌حساب یا مخاطبِ تعامل باید مشخص باشد.',
+            'partyId.required_without' => 'طرف‌حساب یا فردِ مرتبطِ تعامل باید مشخص باشد.',
+            'personId.required_without' => 'طرف‌حساب یا فردِ مرتبطِ تعامل باید مشخص باشد.',
         ]);
 
         return $this->runCrm(function () use ($validated) {

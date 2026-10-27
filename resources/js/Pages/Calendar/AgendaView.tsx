@@ -6,7 +6,7 @@ import { addDays, jalaliFullDayTitle } from '../../Utils/jalaliCalendar';
 import { toEnglishDigits } from '../../Utils/jalali';
 import { THEME } from '../../theme';
 import { EventStatusIcon, EventStatusTag } from './EventStatusIcon';
-import { eventsForDay, isAllDay, isRecurring, parseDT, sameDay, sortEvents, startOfDay, timeRangeLabel } from './calendarUtils';
+import { dayDiff, eventsForDay, isAllDay, isRecurring, parseDT, sameDay, sortEvents, startOfDay, timeRangeLabel } from './calendarUtils';
 
 const RESPONSE_TAG: Record<string, { label: string; color: string }> = {
     PENDING: { label: 'بدونِ پاسخ', color: 'processing' },
@@ -63,7 +63,7 @@ export default function AgendaView({
     }, [events, from, to]);
 
     /**
-     * نقطهٔ «همین لحظه»: در روزِ جاری اولین رویدادی که هنوز تمام نشده، وگرنه اولین رویدادِ روزهایِ بعد.
+     * نقطهٔ «همین لحظه»: در روزِ جاری اولین رویدادِ ساعت‌داری که هنوز تمام نشده، وگرنه اولین رویدادِ روزهایِ بعد.
      * اگر همهٔ رویدادهایِ امروز تمام شده باشد، خطِ «اکنون» انتهایِ امروز کشیده می‌شود.
      */
     const anchorDay = anchorDate ? startOfDay(anchorDate).getTime() : null;
@@ -77,7 +77,8 @@ export default function AgendaView({
         for (const g of groups) {
             if (g.day < today) continue;
             if (sameDay(g.day, today)) {
-                const idx = g.items.findIndex((ev) => parseDT(ev.EndDateTime) >= now);
+                // رویدادِ تمام‌روز (اولِ فهرستِ روز) معیار نیست — خط بالایِ اولین رویدادِ ساعت‌دارِ تمام‌نشده می‌آید
+                const idx = g.items.findIndex((ev) => !isAllDay(ev) && parseDT(ev.EndDateTime) >= now);
                 if (idx >= 0) return { dayKey: g.day.toISOString(), index: idx, nowLine: true };
                 continue;
             }
@@ -135,6 +136,9 @@ export default function AgendaView({
                             const isAnchor = !!anchor && anchor.dayKey === dayKey && anchor.index === idx;
                             const start = parseDT(ev.StartDateTime);
                             const continues = !isAllDay(ev) && !sameDay(start, day);
+                            // تمام‌روزِ چندروزه: «روزِ n از m» زیرِ «تمام‌روز»
+                            const spanDays = isAllDay(ev) ? dayDiff(start, parseDT(ev.EndDateTime)) + 1 : 1;
+                            const spanLabel = spanDays > 1 ? `روزِ ${toEnglishDigits(String(dayDiff(start, day) + 1))} از ${toEnglishDigits(String(spanDays))}` : null;
                             return (
                                 <Fragment key={`${ev.OccurrenceKey}-${dayKey}`}>
                                 {isAnchor && anchor?.nowLine && nowLine}
@@ -142,14 +146,34 @@ export default function AgendaView({
                                     ref={isAnchor ? anchorRef : undefined}
                                     className="cal-agenda-item"
                                     onClick={() => onSelectEvent(ev)}
-                                    style={{ opacity: ev.Status === 'CANCELLED' ? 0.6 : 1 }}
+                                    // لغوشده با یک نگاه: زمینهٔ خاکستریِ راه‌راه، نوارِ رنگِ کنار راه‌راه، برچسبِ «لغو شد» و خط رویِ عنوان و ساعت؛
+                                    // انجام‌شده: هاشورِ سبزِ کم‌رنگ و برچسبِ «انجام شد» (بدونِ خط رویِ عنوان)
+                                    style={
+                                        ev.Status === 'CANCELLED'
+                                            ? { background: 'repeating-linear-gradient(135deg, #F3F4F6 0 8px, #E5E7EB 8px 16px)', color: '#6B7280' }
+                                            : ev.Status === 'DONE'
+                                              ? { background: 'repeating-linear-gradient(135deg, #F0FBE7 0 8px, #E2F6D2 8px 16px)' }
+                                              : undefined
+                                    }
                                 >
-                                    <div className="cal-agenda-bar" style={{ background: ev.Color || THEME.primary }} />
-                                    <div className="cal-agenda-time">{continues ? 'ادامه' : timeRangeLabel(ev)}</div>
+                                    <div
+                                        className="cal-agenda-bar"
+                                        style={{ background: ev.Status === 'CANCELLED' || ev.Status === 'DONE' ? `repeating-linear-gradient(180deg, ${ev.Color || THEME.primary} 0 4px, transparent 4px 7px)` : ev.Color || THEME.primary }}
+                                    />
+                                    <div className="cal-agenda-time" style={ev.Status === 'CANCELLED' ? { textDecoration: 'line-through', color: '#9CA3AF' } : undefined}>
+                                        {continues ? 'ادامه' : timeRangeLabel(ev)}
+                                        {spanLabel && <div style={{ fontSize: 11, fontWeight: 400, color: '#6B7280' }}>{spanLabel}</div>}
+                                    </div>
                                     <div className="cal-agenda-main">
-                                        <div className="cal-agenda-title" style={{ textDecoration: ev.Status === 'CANCELLED' ? 'line-through' : 'none' }}>
+                                        <div className="cal-agenda-title">
+                                            {ev.Status === 'CANCELLED' && (
+                                                <span style={{ background: '#6B7280', color: '#fff', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700, marginInlineEnd: 6 }}>لغو شد</span>
+                                            )}
+                                            {ev.Status === 'DONE' && (
+                                                <span style={{ background: '#389E0D', color: '#fff', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700, marginInlineEnd: 6 }}>انجام شد</span>
+                                            )}
                                             {!ev.IsBusyOnly && <EventStatusIcon status={ev.Status} />}
-                                            {ev.Title}
+                                            <span style={{ textDecoration: ev.Status === 'CANCELLED' ? 'line-through' : 'none', color: ev.Status === 'CANCELLED' ? '#6B7280' : undefined }}>{ev.Title}</span>
                                         </div>
                                         <div className="cal-agenda-meta">
                                             {ev.SourceLabel && <span style={{ color: ev.Color }}>● {ev.SourceLabel}</span>}
@@ -176,7 +200,8 @@ export default function AgendaView({
             })}
             <style>{`
                 .cal-agenda { position: relative; display: flex; flex-direction: column; gap: 14px; max-height: min(72vh, 760px); overflow-y: auto; padding-inline-end: 2px; }
-                .cal-agenda-now { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: ${THEME.error}; font-size: 12px; font-weight: 700; }
+                /* خطِ «اکنون» جدا از رویدادِ زیرش (فاصلهٔ بالا/پایین) تا به آن نچسبد */
+                .cal-agenda-now { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; color: ${THEME.error}; font-size: 12px; font-weight: 700; }
                 .cal-agenda-now::before, .cal-agenda-now::after { content: ''; flex: 1; border-top: 2px solid ${THEME.error}; }
                 .cal-agenda-dayhead { font-weight: 700; font-size: 13px; color: ${THEME.textPrimary}; padding: 6px 10px; background: #F4F2FD; border-radius: 8px; position: sticky; top: 0; z-index: 1; display: flex; align-items: center; }
                 .cal-agenda-dayhead.is-today { background: ${THEME.primary}; color: #fff; }
@@ -185,8 +210,8 @@ export default function AgendaView({
                 .cal-agenda-bar { width: 4px; align-self: stretch; border-radius: 4px; flex-shrink: 0; }
                 .cal-agenda-time { width: 112px; flex-shrink: 0; font-size: 14px; font-weight: 600; color: #111827; }
                 .cal-agenda-main { flex: 1; min-width: 0; }
-                .cal-agenda-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                .cal-agenda-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: ${THEME.textLight}; margin-top: 2px; }
+                .cal-agenda-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .cal-agenda-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: ${THEME.textLight}; margin-top: 2px; }
                 .cal-agenda-tags { display: flex; gap: 4px; flex-shrink: 0; }
                 @media (max-width: 767px) {
                     .cal-agenda { max-height: none; }

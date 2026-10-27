@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\CreatesCrmTitle;
 use Tests\TestCase;
 use Tests\Concerns\CreatesPermissionlessUser;
@@ -112,16 +113,18 @@ class CrmPartyTest extends TestCase
         $this->assertNull($found['IdentifierNumber']);
     }
 
-    public function test_individual_identifier_number_is_ignored_even_if_sent(): void
+    /** پچِ ۱۲۳: حقیقی کدِ ملیِ اختیاری (۱۰ رقم) دارد — قبلاً نادیده گرفته می‌شد */
+    public function test_individual_national_code_is_stored_when_sent(): void
     {
+        $code = $this->uniqueDigits(10);
         $res = $this->createParty([
-            'partyNature' => 'INDIVIDUAL', 'officialName' => 'فروشگاهِ دوم', 'identifierNumber' => $this->uniqueDigits(10),
+            'partyNature' => 'INDIVIDUAL', 'officialName' => 'فروشگاهِ دوم', 'identifierNumber' => $code,
         ]);
         $this->assertTrue($res['success']);
 
         $list = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list?partyNature=INDIVIDUAL')->json('items'));
         $found = $list->firstWhere('PartyID', $res['partyId']);
-        $this->assertNull($found['IdentifierNumber']);
+        $this->assertSame($code, $found['IdentifierNumber']);
     }
 
     public function test_multiple_individual_parties_without_identifier_do_not_collide(): void
@@ -226,6 +229,52 @@ class CrmPartyTest extends TestCase
         $empty = collect($this->as(self::USER_FULL)->getJson('/crm/parties-list')->json('items'))->firstWhere('PartyID', $emptyId);
         $this->assertNull($empty['PartyTypeNames']);
         $this->assertNull($empty['ActivityNames']);
+    }
+
+    /** تعریفِ طرف‌حسابِ حقیقی (پچِ ۱۲۳): کدِ ملیِ اختیاری، شناسه ۱/۲ در شمارهٔ ثبت/کدِ اقتصادی، گروه/زیرگروهِ اختیاری → طبقه‌بندی */
+    public function test_new_individual_party_with_national_code_ids_and_group(): void
+    {
+        $tag = (string) random_int(10000, 99999);
+        $group = $this->as(self::USER_FULL)->postJson('/crm/classification/party-types', ['displayName' => "گروه {$tag}"])->assertOk()->json('partyTypeId');
+        $sub = $this->as(self::USER_FULL)->postJson('/crm/classification/activities', ['partyTypeId' => $group, 'displayName' => "زیرگروه {$tag}"])->assertOk()->json('activityId');
+        $otherGroup = $this->as(self::USER_FULL)->postJson('/crm/classification/party-types', ['displayName' => "گروهِ دیگر {$tag}"])->assertOk()->json('partyTypeId');
+        $code = $this->uniqueDigits(10);
+        $base = ['partyNature' => 'INDIVIDUAL', 'officialName' => 'فروشگاهِ حقیقی ' . bin2hex(random_bytes(3))];
+
+        $partyId = (int) $this->as(self::USER_FULL)->postJson('/crm/parties', $base + [
+            'identifierNumber' => $code, 'identifier1' => 'پروانه/۱۲۳-الف', 'identifier2' => 'AB-42 کد صنفی', 'groupId' => $group, 'subGroupId' => $sub,
+        ])->assertOk()->json('partyId');
+        $row = DB::table('CrmParties')->where('PartyID', $partyId)->first();
+        $this->assertSame($code, $row->IdentifierNumber);
+        // شناسه ۱ و ۲ متنی در ستون‌هایِ جدا (پچِ ۱۲۴)؛ شمارهٔ ثبت/کدِ اقتصادی دست نمی‌خورند
+        $this->assertSame('پروانه/۱۲۳-الف', $row->Identifier1);
+        $this->assertSame('AB-42 کد صنفی', $row->Identifier2);
+        $this->assertNull($row->RegistrationNumber);
+        $detail = DB::selectOne('EXEC dbo.sp_Crm_GetParty @PartyID = ?', [$partyId]);
+        $this->assertSame('AB-42 کد صنفی', $detail->Identifier2);
+
+        // ویرایش: شناسه‌ها عوض می‌شوند
+        $this->as(self::USER_FULL)->postJson('/crm/parties', $base + ['partyId' => $partyId, 'identifier1' => 'شناسهٔ تازه'])->assertOk();
+        $row = DB::table('CrmParties')->where('PartyID', $partyId)->first();
+        $this->assertSame('شناسهٔ تازه', $row->Identifier1);
+        $this->assertNull($row->Identifier2);
+        $cls = DB::table('CrmPartyClassifications')->where('PartyID', $partyId)->get();
+        $this->assertCount(1, $cls);
+        $this->assertSame([(int) $group, (int) $sub], [(int) $cls[0]->PartyTypeID, (int) $cls[0]->ActivityID]);
+
+        // بدونِ کدِ ملی و گروه هم ثبت می‌شود
+        $this->as(self::USER_FULL)->postJson('/crm/parties', ['partyNature' => 'INDIVIDUAL', 'officialName' => 'حقیقیِ ساده ' . bin2hex(random_bytes(3))])->assertOk();
+
+        // کدِ ملیِ نامعتبر، زیرگروهِ بدونِ گروه، و زیرگروهِ گروهِ دیگر → هیچ چیز ثبت نمی‌شود
+        $name = 'نباید ثبت شود ' . bin2hex(random_bytes(3));
+        $this->as(self::USER_FULL)->postJson('/crm/parties', ['partyNature' => 'INDIVIDUAL', 'officialName' => $name, 'identifierNumber' => '123'])->assertStatus(422);
+        $this->as(self::USER_FULL)->postJson('/crm/parties', ['partyNature' => 'INDIVIDUAL', 'officialName' => $name, 'subGroupId' => $sub])->assertStatus(422);
+        $this->as(self::USER_FULL)->postJson('/crm/parties', ['partyNature' => 'INDIVIDUAL', 'officialName' => $name, 'groupId' => $otherGroup, 'subGroupId' => $sub])
+            ->assertStatus(422)->assertJson(['message' => 'زیرگروهِ انتخاب‌شده متعلق به گروهِ انتخاب‌شده نیست.']);
+        $this->assertFalse(DB::table('CrmParties')->where('OfficialName', $name)->exists(), 'خطایِ طبقه‌بندی → خودِ طرف‌حساب هم ثبت نمی‌شود');
+
+        // پیامِ SP با برچسبِ «گروه»
+        $this->as(self::USER_FULL)->postJson('/crm/classification/party-types', ['displayName' => "گروهِ سوم {$tag}"])->assertOk()->assertJson(['message' => 'گروه ایجاد شد.']);
     }
 
     public function test_classification_requires_at_least_one_dimension(): void

@@ -52,7 +52,7 @@ class CrmPersonController extends CrmApiController
         $this->authorizeCrm(self::PERM_VIEW);
 
         $person = $this->parties->getPerson($personId);
-        abort_if(! $person, 404, 'مخاطب یافت نشد.');
+        abort_if(! $person, 404, 'فرد مرتبط یافت نشد.');
 
         return Inertia::render('Crm/Persons/Show', [
             'person' => $person,

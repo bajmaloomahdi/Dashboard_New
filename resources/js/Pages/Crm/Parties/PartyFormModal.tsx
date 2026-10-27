@@ -27,6 +27,9 @@ export interface Party {
     Date_InsertFirst?: string | null;
     /** قطعِ همکاری (پچِ ۱۱۹) — NULL = همکاری برقرار */
     CooperationEndedAt?: string | null;
+    /** شناسه ۱ و ۲ (متنی) — طرف‌حسابِ حقیقی (پچِ ۱۲۴) */
+    Identifier1?: string | null;
+    Identifier2?: string | null;
 }
 
 /** گزینه‌هایِ Master Data («نقش» = CrmContactRoles، «سمت» = CrmPositions) — همان فهرست‌هایِ صفحهٔ «فهرست‌هایِ CRM» */
@@ -47,6 +50,9 @@ interface PartyFormModalProps {
     /** انتخاب‌هایِ فعلیِ طرف‌حسابِ در حالِ ویرایش؛ اگر داده نشود، هنگامِ باز شدن از سرور خوانده می‌شود */
     initialRoles?: PartyRoleRow[];
     initialPositions?: PartyPositionRow[];
+    /** گروه (= نوع) و زیرگروه (= فعالیت)ِ اختیاریِ فرمِ تعریفِ جدید — فقط فعال‌ها */
+    partyTypes?: { PartyTypeID: number | string; DisplayName: string }[];
+    activities?: { ActivityID: number | string; PartyTypeID: number | string; DisplayName: string }[];
 }
 
 const isActiveFlag = (v: boolean | number | string) => v === true || v === 1 || v === '1' || v === 'true';
@@ -57,6 +63,8 @@ const emptyValues = {
     tradeName: '',
     registrationNumber: '',
     economicCode: '',
+    identifier1: '',
+    identifier2: '',
     identifierNumber: '',
     identifierDate: null as string | null,
     description: '',
@@ -65,13 +73,15 @@ const emptyValues = {
 /**
  * فرمِ ایجاد/ویرایشِ اطلاعاتِ هویتی/پایهٔ طرف‌حساب — طرف‌حساب یک نهادِ حقیقی
  * (فروشگاه/مغازه/صاحبِ‌کسب‌وکارِحقیقی) یا حقوقی (شرکت/سازمان/مؤسسه) است.
- * دپارتمان/نوع/فعالیت/برند/مخاطبین/تماس/آدرس — همگی *بعد از ایجاد*، در صفحهٔ
+ * گروه/زیرگروهِ اختیاری فقط هنگامِ تعریف؛ دپارتمان/گروه/زیرگروهِ بیشتر/برند/مخاطبین/تماس/آدرس — همگی *بعد از ایجاد*، در صفحهٔ
  * جزئیاتِ طرف‌حساب مدیریت می‌شوند، نه در این فرم (برند فقط از تبِ «برندها»). هویتِ اشخاصِ حقیقی («مخاطب»)
  * هرگز اینجا ثبت نمی‌شود — مخاطب موجودیتِ کاملاً مستقلی است.
  */
 export default function PartyFormModal({
-    open, onClose, editingParty, onSuccess, contactRoles = [], positions = [], initialRoles, initialPositions,
+    open, onClose, editingParty, onSuccess, contactRoles = [], positions = [], initialRoles, initialPositions, partyTypes = [], activities = [],
 }: PartyFormModalProps) {
+    const [groupId, setGroupId] = useState<number | null>(null);
+    const [subGroupId, setSubGroupId] = useState<number | null>(null);
     const isEdit = !!editingParty;
     const [values, setValues] = useState(emptyValues);
     const [processing, setProcessing] = useState(false);
@@ -148,6 +158,8 @@ export default function PartyFormModal({
                   tradeName: editingParty.TradeName || '',
                   registrationNumber: editingParty.RegistrationNumber || '',
                   economicCode: editingParty.EconomicCode || '',
+                  identifier1: editingParty.Identifier1 || '',
+                  identifier2: editingParty.Identifier2 || '',
                   identifierNumber: editingParty.IdentifierNumber || '',
                   identifierDate: editingParty.IdentifierDate,
                   description: editingParty.Description || '',
@@ -155,14 +167,17 @@ export default function PartyFormModal({
             : emptyValues;
 
         setValues(initial);
+        setGroupId(null);
+        setSubGroupId(null);
         setCoop(cooperationFromServer(editingParty?.CooperationEndedAt));
         setFormError(null);
         setFieldErrors({});
     }, [open, editingParty]);
 
     const isIndividual = values.partyNature === 'INDIVIDUAL';
-    const identifierLabel = 'شناسهٔ ملی';
-    const identifierMaxLen = 11;
+    // حقوقی: شناسهٔ ملیِ الزامی (۱۱ رقم)؛ حقیقی: کدِ ملیِ اختیاری (۱۰ رقم — پچِ ۱۲۳)
+    const identifierLabel = isIndividual ? 'کدِ ملی' : 'شناسهٔ ملی';
+    const identifierMaxLen = isIndividual ? 10 : 11;
     const dateLabel = isIndividual ? 'تاریخِ افتتاح' : 'تاریخِ ثبت';
     // «تاریخِ ایجاد» فقط نمایشی است و ارسال نمی‌شود: در ایجاد، امروز (مقدارِ واقعی را SP با SYSDATETIME در Date_InsertFirst ثبت می‌کند)؛
     // در ویرایش، همان Date_InsertFirstِ رکورد
@@ -184,7 +199,11 @@ export default function PartyFormModal({
             setFormError(`${identifierLabel} الزامی است.`);
             return;
         }
-        const coopProblem = cooperationError(coop);
+        if (isIndividual && values.identifierNumber.trim() && values.identifierNumber.trim().length !== 10) {
+            setFormError('کد ملی باید دقیقاً ۱۰ رقم باشد.');
+            return;
+        }
+        const coopProblem = isEdit ? cooperationError(coop) : null;
         if (coopProblem) {
             setFormError(coopProblem);
             return;
@@ -201,10 +220,14 @@ export default function PartyFormModal({
             tradeName: !isIndividual ? (values.tradeName.trim() || undefined) : undefined,
             registrationNumber: !isIndividual ? (values.registrationNumber.trim() || undefined) : undefined,
             economicCode: !isIndividual ? (values.economicCode.trim() || undefined) : undefined,
-            identifierNumber: !isIndividual ? values.identifierNumber.trim() : undefined,
+            // حقیقی: شناسه ۱ و ۲ (پچِ ۱۲۴) و کدِ ملیِ اختیاری (پچِ ۱۲۳)
+            identifier1: isIndividual ? (values.identifier1.trim() || undefined) : undefined,
+            identifier2: isIndividual ? (values.identifier2.trim() || undefined) : undefined,
+            identifierNumber: values.identifierNumber.trim() || undefined,
             identifierDate: values.identifierDate || undefined,
             description: values.description.trim() || undefined,
-            ...cooperationToApi(coop),
+            // قطعِ همکاری فقط در ویرایش؛ گروه/زیرگروه فقط در تعریفِ جدید
+            ...(isEdit ? cooperationToApi(coop) : { groupId: groupId ?? undefined, subGroupId: subGroupId ?? undefined }),
             // نقش/سمت فقط در ویرایش (در تعریفِ طرف‌حسابِ جدید نمایش داده و ارسال نمی‌شود)
             ...(isEdit && selectionReady ? { roleIds, positionIds } : {}),
         });
@@ -280,7 +303,21 @@ export default function PartyFormModal({
                     ) : null}
                 </Row>
 
-                {!isIndividual ? (
+                {/* حقوقی: شمارهٔ ثبت و کدِ اقتصادی؛ حقیقی: شناسه ۱ و ۲ (متنی، ستون‌هایِ جدا — پچِ ۱۲۴) */}
+                {isIndividual ? (
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="شناسه ۱">
+                                <Input maxLength={100} value={values.identifier1} onChange={(e) => setValues((s) => ({ ...s, identifier1: e.target.value }))} size="large" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="شناسه ۲">
+                                <Input maxLength={100} value={values.identifier2} onChange={(e) => setValues((s) => ({ ...s, identifier2: e.target.value }))} size="large" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                ) : (
                     <Row gutter={16}>
                         <Col xs={24} md={12}>
                             <Form.Item label="شمارهٔ ثبت">
@@ -293,37 +330,76 @@ export default function PartyFormModal({
                             </Form.Item>
                         </Col>
                     </Row>
-                ) : null}
+                )}
 
                 <Row gutter={16}>
-                    <Col xs={24} md={{ span: isIndividual ? 24 : 12, offset: isIndividual ? 0 : 12 }}>
-                        <Form.Item label="تاریخِ ایجاد" tooltip="تاریخِ ثبتِ اولیهٔ این طرف‌حساب در سیستم؛ خودکار است و قابلِ‌ویرایش نیست.">
-                            <Input value={createdDateDisplay} disabled size="large" aria-readonly />
+                    <Col xs={24} md={12}>
+                        <Form.Item label={identifierLabel} required={!isIndividual} validateStatus={fieldErrors.identifierNumber ? 'error' : ''} help={fieldErrors.identifierNumber}>
+                            <Input
+                                dir="ltr"
+                                maxLength={identifierMaxLen}
+                                value={values.identifierNumber}
+                                onChange={(e) => setValues((s) => ({ ...s, identifierNumber: e.target.value.replace(/\D/g, '') }))}
+                                size="large"
+                                placeholder={isIndividual ? '۱۰ رقم (اختیاری)' : '۱۱ رقم'}
+                            />
                         </Form.Item>
                     </Col>
                 </Row>
 
-                <Row gutter={16}>
-                    {!isIndividual ? (
+                {/* تاریخ‌ها فقط در ویرایش؛ در تعریفِ طرف‌حسابِ جدید نمایش داده نمی‌شوند */}
+                {isEdit ? (
+                    <Row gutter={16}>
                         <Col xs={24} md={12}>
-                            <Form.Item label={identifierLabel} required validateStatus={fieldErrors.identifierNumber ? 'error' : ''} help={fieldErrors.identifierNumber}>
-                                <Input
-                                    dir="ltr"
-                                    maxLength={identifierMaxLen}
-                                    value={values.identifierNumber}
-                                    onChange={(e) => setValues((s) => ({ ...s, identifierNumber: e.target.value.replace(/\D/g, '') }))}
+                            <Form.Item label="تاریخِ ایجاد" tooltip="تاریخِ ثبتِ اولیهٔ این طرف‌حساب در سیستم؛ خودکار است و قابلِ‌ویرایش نیست.">
+                                <Input value={createdDateDisplay} disabled size="large" aria-readonly />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                            <Form.Item label={dateLabel}>
+                                <PersianDateInput value={values.identifierDate} onChange={(v) => setValues((s) => ({ ...s, identifierDate: v }))} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                ) : (
+                    // گروه و زیرگروهِ اختیاری فقط در تعریفِ جدید (بعداً از تبِ «گروه و زیرگروه» مدیریت می‌شود)
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="گروه">
+                                <Select
+                                    allowClear
+                                    showSearch
+                                    optionFilterProp="label"
                                     size="large"
-                                    placeholder="۱۱ رقم"
+                                    placeholder="انتخابِ گروه (اختیاری)"
+                                    value={groupId ?? undefined}
+                                    onChange={(v) => {
+                                        setGroupId(v == null ? null : Number(v));
+                                        setSubGroupId(null);
+                                    }}
+                                    options={partyTypes.map((t) => ({ value: Number(t.PartyTypeID), label: t.DisplayName }))}
+                                    notFoundContent="گروهی تعریف نشده است"
                                 />
                             </Form.Item>
                         </Col>
-                    ) : null}
-                    <Col xs={24} md={isIndividual ? 24 : 12}>
-                        <Form.Item label={dateLabel}>
-                            <PersianDateInput value={values.identifierDate} onChange={(v) => setValues((s) => ({ ...s, identifierDate: v }))} />
-                        </Form.Item>
-                    </Col>
-                </Row>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="زیرگروه">
+                                <Select
+                                    allowClear
+                                    showSearch
+                                    optionFilterProp="label"
+                                    size="large"
+                                    disabled={groupId === null}
+                                    placeholder={groupId === null ? 'ابتدا گروه را انتخاب کنید' : 'انتخابِ زیرگروه (اختیاری)'}
+                                    value={subGroupId ?? undefined}
+                                    onChange={(v) => setSubGroupId(v == null ? null : Number(v))}
+                                    options={activities.filter((a) => Number(a.PartyTypeID) === groupId).map((a) => ({ value: Number(a.ActivityID), label: a.DisplayName }))}
+                                    notFoundContent="زیرگروهی برایِ این گروه تعریف نشده است"
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                )}
 
                 {isEdit ? (
                 <Row gutter={16}>
@@ -366,9 +442,12 @@ export default function PartyFormModal({
                 </Row>
                 ) : null}
 
-                <Form.Item>
-                    <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
-                </Form.Item>
+                {/* قطعِ همکاری فقط در ویرایش (و از صفحهٔ اصلیِ طرف‌حساب) */}
+                {isEdit ? (
+                    <Form.Item>
+                        <CooperationEndedField value={coop} onChange={setCoop} disabled={processing} />
+                    </Form.Item>
+                ) : null}
 
                 <Form.Item label="توضیحات">
                     <Input.TextArea value={values.description} onChange={(e) => setValues((s) => ({ ...s, description: e.target.value }))} rows={3} maxLength={2000} showCount />

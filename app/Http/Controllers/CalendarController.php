@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Calendar\CalendarAttachmentFiles;
+use App\Services\Calendar\CalendarOccurrenceStatuses;
 use App\Services\Calendar\CalendarReminderRoller;
 use App\Services\Calendar\JalaliRecurrence;
 use App\Services\Calendar\ReminderContent;
@@ -190,9 +191,10 @@ class CalendarController extends Controller
     }
 
     /** جزئیات یک رویداد (JSON) */
-    public function show(int $id)
+    public function show(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_VIEW');
+        $occurrenceStart = $request->query('occurrence');
 
         $rows = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()]);
         $event = $rows[0] ?? null;
@@ -221,11 +223,19 @@ class CalendarController extends Controller
             }
         }
 
+        // پچِ ۱۲۷: وضعیتِ همان وقوعی که باز شده (اگر جدا ثبت شده باشد؛ وگرنه وضعیتِ سری)
+        $occurrenceStatus = null;
+        if (($event->RecurrenceType ?? 'NONE') !== 'NONE') {
+            $key = $this->occurrenceKey($occurrenceStart, $event);
+            $occurrenceStatus = CalendarOccurrenceStatuses::forEvents([$id])[$id][$key] ?? $event->Status;
+        }
+
         return response()->json([
             'event'                 => $event,
             'attendees'             => $attendees,
             'reminderOffsetMinutes' => $reminder,
             'attachments'           => $this->eventAttachments($id),
+            'occurrenceStatus'      => $occurrenceStatus,
         ]);
     }
 
@@ -251,6 +261,43 @@ class CalendarController extends Controller
         }
 
         return $this->hasReadShareFor($event, DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$eventId]));
+    }
+
+    // ================= توضیحاتِ رویداد (پچِ ۱۲۹) =================
+
+    /** GET /calendar/events/{id}/comments — CALENDAR_COMMENT_VIEW + دسترسی به جزئیاتِ همان رویداد */
+    public function comments(int $id)
+    {
+        $this->authorizeCalendar('CALENDAR_COMMENT_VIEW');
+        if (!$this->canViewEventDetails($id)) {
+            return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
+        }
+
+        return response()->json(['success' => true, 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id])]);
+    }
+
+    /** POST /calendar/events/{id}/comments — CALENDAR_COMMENT_ADD + دسترسی به جزئیاتِ همان رویداد؛ نویسنده و زمان خودکار */
+    public function storeComment(Request $request, int $id)
+    {
+        $this->authorizeCalendar('CALENDAR_COMMENT_ADD');
+        $validated = $request->validate(['Text' => 'required|string|max:2000'], [
+            'Text.required' => 'متنِ توضیح را بنویسید.',
+            'Text.max' => 'توضیح حداکثر ۲۰۰۰ کاراکتر است.',
+        ]);
+        if (!$this->canViewEventDetails($id)) {
+            return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
+        }
+
+        $res = (array) (DB::select('EXEC dbo.sp_Calendar_AddEventComment @EventID = ?, @CommentText = ?, @UserID = ?', [$id, $validated['Text'], Auth::id()])[0] ?? []);
+        if (empty($res['Success'])) {
+            return response()->json(['success' => false, 'message' => $res['Message'] ?? 'خطا در ثبتِ توضیح'], 422);
+        }
+
+        return response()->json([
+            'success'  => true,
+            'message'  => $res['Message'],
+            'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id]),
+        ]);
     }
 
     /**
@@ -375,7 +422,8 @@ class CalendarController extends Controller
             'EXEC sp_InsertCalendarEvent
                 @Title = ?, @Description = ?, @StartDateTime = ?, @EndDateTime = ?, @IsAllDay = ?,
                 @Color = ?, @Status = ?, @RecurrenceType = ?, @RecurrenceInterval = ?, @RecurrenceEndDate = ?,
-                @OwnerUserID = ?, @OrganizationalUnitID = ?, @AttendeeUserIDs = ?, @CreateUser = ?, @IsPrivate = ?',
+                @OwnerUserID = ?, @OrganizationalUnitID = ?, @AttendeeUserIDs = ?, @CreateUser = ?, @IsPrivate = ?,
+                @RecurrenceWeekDays = ?',
             [
                 $validated['Title'],
                 $validated['Description'] ?? null,
@@ -392,6 +440,7 @@ class CalendarController extends Controller
                 implode(',', $attendeeIds),
                 $selfId,
                 $isPrivate ? 1 : 0,
+                implode(',', $this->weekDaysOf($validated)) ?: null,
             ]
         );
 
@@ -436,6 +485,9 @@ class CalendarController extends Controller
         }
         if (!$request->exists('IsAllDay')) {
             $validated['IsAllDay'] = (int) $current->IsAllDay === 1;
+        }
+        if (!$request->exists('RecurrenceWeekDays')) {
+            $validated['RecurrenceWeekDays'] = JalaliRecurrence::parseWeekDays($current->RecurrenceWeekDays ?? null);
         }
         $currentAttendeeIds = collect(DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$id]))
             ->filter(fn ($a) => $a->RelationType !== 'ORGANIZER')->map(fn ($a) => (int) $a->UserID)->values()->all();
@@ -492,7 +544,8 @@ class CalendarController extends Controller
             'EXEC sp_UpdateCalendarEvent
                 @EventID = ?, @Title = ?, @Description = ?, @StartDateTime = ?, @EndDateTime = ?, @IsAllDay = ?,
                 @Color = ?, @Status = ?, @RecurrenceType = ?, @RecurrenceInterval = ?, @RecurrenceEndDate = ?,
-                @OwnerUserID = ?, @OrganizationalUnitID = ?, @AttendeeUserIDs = ?, @ModifyUser = ?, @IsPrivate = ?',
+                @OwnerUserID = ?, @OrganizationalUnitID = ?, @AttendeeUserIDs = ?, @ModifyUser = ?, @IsPrivate = ?,
+                @RecurrenceWeekDays = ?',
             [
                 $id,
                 $validated['Title'],
@@ -510,6 +563,7 @@ class CalendarController extends Controller
                 implode(',', $attendeeIds),
                 $selfId,
                 $isPrivate,
+                implode(',', $this->weekDaysOf($validated)), // خالی = بدونِ روزهایِ انتخابی
             ]
         );
 
@@ -652,7 +706,12 @@ class CalendarController extends Controller
     public function setStatus(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_EDIT');
-        $validated = $request->validate(['Status' => 'required|in:CONFIRMED,CANCELLED,DONE']);
+        $validated = $request->validate([
+            'Status'          => 'required|in:CONFIRMED,CANCELLED,DONE',
+            // پچِ ۱۲۷: رویدادِ تکرارشونده → فقط همین وقوع، مگر «همهٔ تکرارها» خواسته شده باشد
+            'OccurrenceStart' => 'nullable|date',
+            'AllOccurrences'  => 'nullable|boolean',
+        ]);
         $selfId = Auth::id();
 
         $event = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, $selfId])[0] ?? null;
@@ -661,6 +720,9 @@ class CalendarController extends Controller
         }
         if ((int) $event->CanManage !== 1) {
             return response()->json(['success' => false, 'message' => 'فقط ایجادکننده یا مالکِ رویداد می‌تواند وضعیتِ آن را تغییر دهد.'], 403);
+        }
+        if (($event->RecurrenceType ?? 'NONE') !== 'NONE' && empty($validated['AllOccurrences'])) {
+            return $this->setOccurrenceStatus($event, $this->occurrenceKey($validated['OccurrenceStart'] ?? null, $event), $validated['Status'], $selfId);
         }
         if ($event->Status === $validated['Status']) {
             return response()->json(['success' => true, 'message' => 'وضعیت تغییری نکرد.', 'responsesReset' => 0]);
@@ -691,6 +753,57 @@ class CalendarController extends Controller
         $labels = ['CONFIRMED' => 'ثبت شده', 'CANCELLED' => 'لغو شده', 'DONE' => 'انجام شده'];
 
         return $this->updatedResponse("وضعیتِ رویداد «{$labels[$validated['Status']]}» شد.", $response);
+    }
+
+    /** کلیدِ وقوع «Y-m-d H:i:s» — بدونِ مقدار: نخستین وقوع (شروعِ سری) */
+    private function occurrenceKey(?string $occurrenceStart, object $event): string
+    {
+        return Carbon::parse($occurrenceStart ?: $event->StartDateTime)->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * پچِ ۱۲۷ — وضعیتِ فقط یک وقوع از رویدادِ تکرارشونده؛ سری و وقوع‌هایِ دیگر دست نمی‌خورند.
+     * «انجام/لغو شده»: یادآوری‌هایی که برایِ همین وقوع تنظیم بودند (هنوز نمایش داده نشده) به وقوعِ بعدیِ فعال می‌روند.
+     */
+    private function setOccurrenceStatus(object $event, string $occurrenceStart, string $status, int $selfId)
+    {
+        $eventId = (int) $event->EventID;
+        $res = (array) (DB::select('EXEC dbo.sp_Calendar_SetOccurrenceStatus @EventID = ?, @OccurrenceStart = ?, @Status = ?, @UserID = ?',
+            [$eventId, $occurrenceStart, $status, $selfId])[0] ?? []);
+        if (empty($res['Success'])) {
+            return response()->json(['success' => false, 'message' => $res['Message'] ?? 'خطا در تغییرِ وضعیت'], 422);
+        }
+
+        if (in_array($status, ['DONE', 'CANCELLED'], true)) {
+            $next = $this->nextOccurrenceStart(
+                Carbon::parse($event->StartDateTime),
+                (string) $event->RecurrenceType,
+                max(1, (int) $event->RecurrenceInterval),
+                Carbon::parse($occurrenceStart),
+                $event->RecurrenceEndDate ? Carbon::parse($event->RecurrenceEndDate)->endOfDay() : null,
+                false,
+                JalaliRecurrence::parseWeekDays($event->RecurrenceWeekDays ?? null),
+                CalendarOccurrenceStatuses::closedStarts($eventId)
+            );
+            $users = collect(DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$eventId]))->pluck('UserID')
+                ->push($event->CreatedByUserID, $event->OwnerUserID)->map(fn ($v) => (int) $v)->unique();
+            foreach ($users as $uid) {
+                $row = DB::select('EXEC sp_GetReminder @EntityType = ?, @EntityID = ?, @UserID = ?', [self::ENTITY_TYPE, $eventId, $uid])[0] ?? null;
+                if (!$row || (int) $row->IsSent === 1 || $next === null) {
+                    continue;
+                }
+                $anchoredHere = Carbon::parse($row->RemindAt)->addMinutes((int) $row->OffsetMinutes)->format('Y-m-d H:i:s') === $occurrenceStart;
+                if ($anchoredHere) {
+                    DB::select(
+                        'EXEC sp_SaveReminder
+                            @EntityType = ?, @EntityID = ?, @UserID = ?, @OffsetMinutes = ?, @EntityStartDateTime = ?, @CreatedByUserID = ?, @Title = ?',
+                        [self::ENTITY_TYPE, $eventId, $uid, (int) $row->OffsetMinutes, $next->format('Y-m-d H:i:s'), $selfId, null]
+                    );
+                }
+            }
+        }
+
+        return response()->json(['success' => true, 'message' => $res['Message'], 'responsesReset' => 0]);
     }
 
     public function destroy(int $id)
@@ -911,7 +1024,10 @@ class CalendarController extends Controller
                 $recType,
                 (int) ($reminder->RecurrenceInterval ?: 1),
                 $this->sqlNow(),
-                $reminder->RecurrenceEndDate ? Carbon::parse($reminder->RecurrenceEndDate)->endOfDay() : null
+                $reminder->RecurrenceEndDate ? Carbon::parse($reminder->RecurrenceEndDate)->endOfDay() : null,
+                false,
+                JalaliRecurrence::parseWeekDays($reminder->RecurrenceWeekDays ?? null),
+                isset($reminder->EntityID) ? CalendarOccurrenceStatuses::closedStarts((int) $reminder->EntityID) : []
             );
 
             if ($next !== null) {
@@ -952,6 +1068,17 @@ class CalendarController extends Controller
                 $occurrences[] = $occ;
             }
         }
+        // پچِ ۱۲۷: وضعیتِ جداگانهٔ هر وقوعِ رویدادِ تکرارشونده (مثلاً فقط وقوعِ اول «انجام شده»)
+        $recurringIds = collect($rows)->filter(fn ($r) => ($r->RecurrenceType ?? 'NONE') !== 'NONE')->pluck('EventID')->all();
+        $overrides = CalendarOccurrenceStatuses::forEvents($recurringIds);
+        if ($overrides) {
+            foreach ($occurrences as $occ) {
+                $status = $overrides[(int) $occ->EventID][$occ->StartDateTime] ?? null;
+                if ($status !== null) {
+                    $occ->Status = $status;
+                }
+            }
+        }
         usort($occurrences, fn ($a, $b) => strcmp($a->StartDateTime, $b->StartDateTime));
 
         return $occurrences;
@@ -981,7 +1108,8 @@ class CalendarController extends Controller
 
         return array_map(
             fn (array $o) => $makeOccurrence($o[0], $o[1], $o[2]),
-            JalaliRecurrence::between($start, $end, $row->RecurrenceType, (int) $row->RecurrenceInterval, $seriesEnd, $from, $to)
+            JalaliRecurrence::between($start, $end, $row->RecurrenceType, (int) $row->RecurrenceInterval, $seriesEnd, $from, $to,
+                JalaliRecurrence::parseWeekDays($row->RecurrenceWeekDays ?? null))
         );
     }
 
@@ -1164,7 +1292,9 @@ class CalendarController extends Controller
             $startDateTime,
             $recurrence['type'] ?? 'NONE',
             (int) ($recurrence['interval'] ?? 1),
-            $recurrence['endDate'] ?? null
+            $recurrence['endDate'] ?? null,
+            $recurrence['weekDays'] ?? [],
+            ($recurrence['type'] ?? 'NONE') !== 'NONE' ? CalendarOccurrenceStatuses::closedStarts($eventId) : []
         );
 
         DB::select(
@@ -1192,7 +1322,7 @@ class CalendarController extends Controller
      * NONE → همان شروعِ رویداد. تکرارشونده → شروعِ نخستین رخدادی که در آینده است
      * (اگر همه‌ی رخدادها گذشته باشند، همان شروعِ اصلی برگردانده می‌شود تا یادآوری یک‌بار نمایش داده و بسته شود).
      */
-    private function reminderAnchorStart(string $masterStart, ?string $recType, int $interval, ?string $recEndDate): string
+    private function reminderAnchorStart(string $masterStart, ?string $recType, int $interval, ?string $recEndDate, array $weekDays = [], array $skipStarts = []): string
     {
         if ($recType === null || $recType === 'NONE') {
             return $masterStart;
@@ -1204,7 +1334,9 @@ class CalendarController extends Controller
             max(1, $interval),
             $this->sqlNow(),
             $recEndDate ? Carbon::parse($recEndDate)->endOfDay() : null,
-            true // شاملِ خودِ اکنون (رخدادی که همین حالا در جریان است)
+            true, // شاملِ خودِ اکنون (رخدادی که همین حالا در جریان است)
+            $weekDays,
+            $skipStarts
         );
 
         return ($next ?? Carbon::parse($masterStart))->format('Y-m-d H:i:s');
@@ -1220,9 +1352,11 @@ class CalendarController extends Controller
         int $interval,
         Carbon $after,
         ?Carbon $seriesEnd = null,
-        bool $orAfter = false
+        bool $orAfter = false,
+        array $weekDays = [],
+        array $skipStarts = []
     ): ?Carbon {
-        return JalaliRecurrence::next($masterStart, $recType, $interval, $after, $seriesEnd, $orAfter);
+        return JalaliRecurrence::next($masterStart, $recType, $interval, $after, $seriesEnd, $orAfter, $weekDays, $skipStarts);
     }
 
     /**
@@ -1242,15 +1376,16 @@ class CalendarController extends Controller
     /** همان قاعدهٔ sp_UpdateCalendarEvent (پچِ ۱۱۲): شروع، پایان، تمام‌روز یا قاعدهٔ تکرار عوض شده؟ */
     private function timingChanged(object $current, array $validated): bool
     {
-        $norm = fn (?string $type, $interval, $endDate) => ($type ?? 'NONE') === 'NONE'
-            ? ['NONE', null, null]
-            : [$type, (int) ($interval ?: 1), $endDate ? Carbon::parse($endDate)->toDateString() : null];
+        $norm = fn (?string $type, $interval, $endDate, $weekDays) => ($type ?? 'NONE') === 'NONE'
+            ? ['NONE', null, null, []]
+            : [$type, (int) ($interval ?: 1), $endDate ? Carbon::parse($endDate)->toDateString() : null,
+                $this->weekDaysOf(['RecurrenceType' => $type, 'RecurrenceWeekDays' => JalaliRecurrence::parseWeekDays($weekDays)])];
 
         return Carbon::parse($current->StartDateTime)->toDateTimeString() !== Carbon::parse($validated['StartDateTime'])->toDateTimeString()
             || Carbon::parse($current->EndDateTime)->toDateTimeString() !== Carbon::parse($validated['EndDateTime'])->toDateTimeString()
             || (bool) (int) $current->IsAllDay !== (bool) ($validated['IsAllDay'] ?? false)
-            || $norm($current->RecurrenceType, $current->RecurrenceInterval, $current->RecurrenceEndDate)
-                !== $norm($validated['RecurrenceType'] ?? 'NONE', $validated['RecurrenceInterval'] ?? 1, $validated['RecurrenceEndDate'] ?? null);
+            || $norm($current->RecurrenceType, $current->RecurrenceInterval, $current->RecurrenceEndDate, $current->RecurrenceWeekDays ?? null)
+                !== $norm($validated['RecurrenceType'] ?? 'NONE', $validated['RecurrenceInterval'] ?? 1, $validated['RecurrenceEndDate'] ?? null, $validated['RecurrenceWeekDays'] ?? []);
     }
 
     /** یادآوری‌هایِ فعالِ کاربرانِ مرتبط با رویداد (به‌جز $skip) با همان فاصله به شروعِ تازه منتقل می‌شوند */
@@ -1291,7 +1426,23 @@ class CalendarController extends Controller
             'endDate'  => ($validated['RecurrenceType'] ?? 'NONE') !== 'NONE'
                 ? ($validated['RecurrenceEndDate'] ?? null)
                 : null,
+            'weekDays' => $this->weekDaysOf($validated),
         ];
+    }
+
+    /**
+     * روزهایِ هفتهٔ تکرار — هفتگی (پچِ ۱۲۷): روزهایِ وقوع (خالی = همان روزِ شروع)؛ روزانه/ماهانه/سالانه (پچِ ۱۲۸): فیلترِ روزهایِ
+     * مجاز (همهٔ ۷ روز = بدونِ فیلتر → خالی ذخیره می‌شود).
+     */
+    private function weekDaysOf(array $validated): array
+    {
+        $type = $validated['RecurrenceType'] ?? 'NONE';
+        if ($type === 'NONE') {
+            return [];
+        }
+        $days = JalaliRecurrence::parseWeekDays($validated['RecurrenceWeekDays'] ?? []);
+
+        return $type !== 'WEEKLY' && count($days) === 7 ? [] : $days;
     }
 
     private function validateEvent(Request $request, bool $forUpdate = false): array
@@ -1302,11 +1453,14 @@ class CalendarController extends Controller
             'StartDateTime'         => 'required|date',
             'EndDateTime'           => 'required|date|after_or_equal:StartDateTime',
             'IsAllDay'              => 'boolean',
-            'Color'                 => 'nullable|string|max:20',
+            'Color'                 => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'], // در ویرایش هم (با همان دسترسیِ ویرایش)
             'Status'                => 'nullable|in:' . self::EVENT_STATUSES,
             'RecurrenceType'        => 'nullable|in:NONE,DAILY,WEEKLY,MONTHLY,YEARLY',
             'RecurrenceInterval'    => 'nullable|integer|min:1|max:365',
             'RecurrenceEndDate'     => 'nullable|date',
+            // پچِ ۱۲۷: روزهایِ هفتهٔ تکرارِ هفتگی (۰=شنبه … ۶=جمعه)
+            'RecurrenceWeekDays'    => 'nullable|array',
+            'RecurrenceWeekDays.*'  => 'integer|between:0,6',
             'OwnerUserID'           => 'nullable|integer',
             'OrganizationalUnitID'  => 'nullable|integer',
             'AttendeeUserIDs'       => 'nullable|array',

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Select, Switch, InputNumber, Row, Col, Divider, Spin, Upload, Button } from 'antd';
+import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox } from 'antd';
 import { PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import PersianDateInput from '../../Components/PersianDateInput';
 import TimeInput from '../../Components/TimeInput';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
-import { toApiDateTime } from '../../Utils/jalaliCalendar';
+import { WEEKDAY_LABELS_FA, toApiDateTime } from '../../Utils/jalaliCalendar';
 import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
-import { recurrenceIntervalLabel, recurrenceSummary } from './calendarUtils';
+import { jalaliWeekIndex, parseWeekDays, recurrenceSummary } from './calendarUtils';
 import EventAttachmentList, { EventAttachment, uploadEventAttachments } from './EventAttachments';
 
 const { TextArea } = Input;
@@ -42,6 +42,9 @@ const STATUS_OPTIONS = [
     { value: 'CANCELLED', label: 'لغو شده' },
     { value: 'DONE', label: 'انجام شده' },
 ];
+
+/** همهٔ روزهایِ هفته (۰=شنبه … ۶=جمعه) — پیش‌فرضِ روزانه/ماهانه/سالانه */
+const ALL_WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 const RECURRENCE_OPTIONS = [
     { value: 'NONE', label: 'بدون تکرار' },
@@ -85,6 +88,8 @@ interface FormValues {
     RecurrenceType: string;
     RecurrenceInterval: number;
     RecurrenceEndDate: string | null;
+    /** روزهایِ هفتهٔ تکرارِ هفتگی (۰=شنبه … ۶=جمعه) — پچِ ۱۲۷ */
+    RecurrenceWeekDays: number[];
     OwnerUserID: number;
     AttendeeUserIDs: number[];
     ReminderOffsetMinutes: number | null;
@@ -122,6 +127,7 @@ export default function EventFormModal({
     }, [isUnitEvent, form]);
     const recurrenceType = Form.useWatch('RecurrenceType', form);
     const recurrenceInterval = Form.useWatch('RecurrenceInterval', form);
+    const recurrenceWeekDays: number[] = Form.useWatch('RecurrenceWeekDays', form) || [];
     const startDateValue = Form.useWatch('StartDate', form);
     const seriesStart = startDateValue ? new Date(`${startDateValue}T12:00:00`) : null;
     const attendeeIds: number[] = Form.useWatch('AttendeeUserIDs', form) || [];
@@ -134,9 +140,22 @@ export default function EventFormModal({
     const showNotification = (type: NotificationType, message: string) => setNotification({ open: true, type, message });
     // پس از ثبت فقط تاریخ، ساعت و وضعیت قابلِ ویرایش است (متن و موضوع ثابت است)
     const isEdit = !!eventId;
+    // تاریخِ پایان فقط برایِ «تمام‌روز» نمایش داده می‌شود؛ رویدادِ ساعت‌دار همان روز تمام می‌شود (مگر رویدادِ چندروزهٔ قبلی در ویرایش)
+    const [multiDayTimed, setMultiDayTimed] = useState(false);
+    const showEndDate = !!isAllDay || multiDayTimed;
 
     /** با تغییرِ تاریخ یا ساعتِ شروع: پایان = همان لحظه + ۳۰ دقیقه (تمام‌روز: همان روز) */
     const syncEndWithStart = (changed: Partial<FormValues>) => {
+        // تکرارِ هفتگی: پیش‌فرض همان روزِ هفتهٔ تاریخِ شروع تیک می‌خورد (پچِ ۱۲۷)
+        // روزهایِ هفته (پچِ ۱۲۷/۱۲۸): هفتگی → روزِ تاریخِ شروع؛ روزانه/ماهانه/سالانه → همهٔ روزها (برداشتنِ تیک = حذفِ آن روز)
+        if ('RecurrenceType' in changed && changed.RecurrenceType && changed.RecurrenceType !== 'NONE') {
+            const sd = form.getFieldValue('StartDate');
+            form.setFieldsValue({
+                RecurrenceWeekDays: changed.RecurrenceType === 'WEEKLY'
+                    ? (sd ? [jalaliWeekIndex(new Date(`${sd}T12:00:00`))] : [])
+                    : ALL_WEEK_DAYS,
+            });
+        }
         if (!('StartDate' in changed) && !('StartTime' in changed)) return;
         const v = form.getFieldsValue(['StartDate', 'StartTime', 'IsAllDay']) as Partial<FormValues>;
         if (!v.StartDate) return;
@@ -169,6 +188,7 @@ export default function EventFormModal({
                 RecurrenceType: 'NONE',
                 RecurrenceInterval: 1,
                 RecurrenceEndDate: null,
+                RecurrenceWeekDays: [],
                 OwnerUserID: currentUserId,
                 AttendeeUserIDs: [],
                 ReminderOffsetMinutes: NO_REMINDER as any,
@@ -177,6 +197,7 @@ export default function EventFormModal({
                 IsPrivate: false,
             });
             setOriginal(null);
+            setMultiDayTimed(false);
             setExistingFiles([]);
             setNewFiles([]);
             return;
@@ -192,6 +213,7 @@ export default function EventFormModal({
                 const ev = data.event as CalendarEvent;
                 const start = new Date(ev.StartDateTime);
                 const end = new Date(ev.EndDateTime);
+                setMultiDayTimed(Number(ev.IsAllDay) !== 1 && toDateOnly(start) !== toDateOnly(end));
                 form.setFieldsValue({
                     Title: ev.Title,
                     Description: ev.Description || '',
@@ -205,6 +227,7 @@ export default function EventFormModal({
                     RecurrenceType: ev.RecurrenceType || 'NONE',
                     RecurrenceInterval: ev.RecurrenceInterval || 1,
                     RecurrenceEndDate: ev.RecurrenceEndDate,
+                    RecurrenceWeekDays: parseWeekDays(ev.RecurrenceWeekDays).length || ev.RecurrenceType === 'WEEKLY' ? parseWeekDays(ev.RecurrenceWeekDays) : ALL_WEEK_DAYS,
                     OwnerUserID: ev.OwnerUserID || currentUserId,
                     AttendeeUserIDs: (data.attendees || [])
                         .filter((a: any) => a.RelationType !== 'ORGANIZER')
@@ -250,8 +273,10 @@ export default function EventFormModal({
             setSaving(true);
 
             const startDate = combine(values.StartDate, values.IsAllDay ? null : values.StartTime);
-            const endDate = combine(values.EndDate || values.StartDate, values.IsAllDay ? null : values.EndTime);
+            let endDate = combine(showEndDate ? values.EndDate || values.StartDate : values.StartDate, values.IsAllDay ? null : values.EndTime);
             if (values.IsAllDay) endDate.setHours(23, 59, 0, 0);
+            // بدونِ تاریخِ پایان: ساعتِ پایانِ کمتر از شروع یعنی فردا (مثلاً ۲۳:۳۰ تا ۰۰:۳۰)
+            if (!showEndDate && endDate <= startDate) endDate = new Date(endDate.getTime() + 86400000);
 
             if (endDate < startDate) {
                 showNotification('error', 'تاریخ/ساعت پایان نمی‌تواند قبل از شروع باشد.');
@@ -293,9 +318,16 @@ export default function EventFormModal({
                 });
             }
 
-            // ویرایش: فقط تاریخ/ساعت، تمام‌روز و وضعیت (بقیه در سرور همان مقدارِ فعلی می‌ماند)
+            // ویرایش: فقط تاریخ/ساعت، تمام‌روز، وضعیت و رنگ (بقیه در سرور همان مقدارِ فعلی می‌ماند)
             const payload = isEdit
-                ? { StartDateTime: toApiDateTime(startDate), EndDateTime: toApiDateTime(endDate), IsAllDay: !!values.IsAllDay, Status: values.Status }
+                ? {
+                      StartDateTime: toApiDateTime(startDate),
+                      EndDateTime: toApiDateTime(endDate),
+                      IsAllDay: !!values.IsAllDay,
+                      Color: values.Color,
+                      // رویدادِ تکرارشونده: وضعیتِ هر وقوع جداگانه از پنجرهٔ جزئیات تغییر می‌کند (پچِ ۱۲۷)، نه برایِ کلِ سری
+                      ...(values.RecurrenceType && values.RecurrenceType !== 'NONE' ? {} : { Status: values.Status }),
+                  }
                 : {
                 Title: values.Title,
                 Description: values.Description || null,
@@ -305,8 +337,9 @@ export default function EventFormModal({
                 Color: values.Color,
                 Status: values.Status,
                 RecurrenceType: values.RecurrenceType,
-                RecurrenceInterval: values.RecurrenceInterval || 1,
+                RecurrenceInterval: 1,
                 RecurrenceEndDate: values.RecurrenceType !== 'NONE' ? values.RecurrenceEndDate : null,
+                RecurrenceWeekDays: values.RecurrenceType !== 'NONE' ? parseWeekDays(values.RecurrenceWeekDays) : [],
                 OwnerUserID: canForOthers ? values.OwnerUserID || currentUserId : original ? original.owner : currentUserId,
                 AttendeeUserIDs: canForOthers ? attendees : original ? original.attendees : [],
                 // همیشه فرستاده می‌شود: ویرایش از فرم رویدادِ واحد را به تقویمِ شخصی منتقل نکند
@@ -388,7 +421,8 @@ export default function EventFormModal({
                                     </Form.Item>
                                 </Col>
                             )}
-                            <Col xs={24} sm={isAllDay ? 12 : 8}>
+                            {/* تاریخِ پایان فقط برایِ تمام‌روز؛ مقدارش در فرم می‌ماند (پنهان) */}
+                            <Col xs={24} sm={isAllDay ? 12 : 8} style={showEndDate ? undefined : { display: 'none' }}>
                                 <Form.Item name="EndDate" label="تاریخ پایان" rules={[{ required: true, message: 'الزامی است' }]}>
                                     <PersianDateInput value={null as any} onChange={() => {}} />
                                 </Form.Item>
@@ -403,12 +437,20 @@ export default function EventFormModal({
                         </Row>
 
                         <Row gutter={12}>
-                            <Col xs={24} sm={isEdit ? 24 : 12}>
+                            {isEdit && recurrenceType && recurrenceType !== 'NONE' ? (
+                                <Col xs={24}>
+                                    <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>
+                                        وضعیتِ هر وقوعِ این رویدادِ تکرارشونده جداگانه از پنجرهٔ جزئیاتِ همان وقوع تغییر می‌کند.
+                                    </div>
+                                </Col>
+                            ) : (
+                            <Col xs={24} sm={12}>
                                 <Form.Item name="Status" label="وضعیت">
                                     <Select options={STATUS_OPTIONS} size="large" />
                                 </Form.Item>
                             </Col>
-                            {!isEdit && (
+                            )}
+                            {/* رنگ در ثبت و ویرایش — ویرایش با همان دسترسیِ ویرایشِ رویداد (CALENDAR_EDIT + سازنده/مالک/مدیرِ رویدادِ واحد؛ سرور کنترل می‌کند) */}
                             <Col xs={24} sm={12}>
                                 <Form.Item name="Color" label="رنگ رویداد">
                                     <Select
@@ -425,7 +467,6 @@ export default function EventFormModal({
                                     />
                                 </Form.Item>
                             </Col>
-                            )}
                         </Row>
 
                         {/* ضمیمه‌ها — هم در ثبت، هم در ویرایش */}
@@ -543,26 +584,34 @@ export default function EventFormModal({
                         </Divider>
 
                         <Row gutter={12}>
-                            <Col xs={24} sm={recurrenceType && recurrenceType !== 'NONE' ? 8 : 24}>
+                            <Col xs={24} sm={recurrenceType && recurrenceType !== 'NONE' ? 12 : 24}>
                                 <Form.Item name="RecurrenceType" label="نوع تکرار">
                                     <Select options={RECURRENCE_OPTIONS} size="large" />
                                 </Form.Item>
                             </Col>
                             {recurrenceType && recurrenceType !== 'NONE' && (
                                 <>
-                                    <Col xs={24} sm={8}>
-                                        <Form.Item name="RecurrenceInterval" label={recurrenceIntervalLabel(recurrenceType)}>
-                                            <InputNumber min={1} max={365} style={{ width: '100%' }} size="large" />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col xs={24} sm={8}>
+                                    {/* «هر چند روز/هفته/ماه یک‌بار» برداشته شد — تکرارِ تازه همیشه هر بار (فاصلهٔ ۱) است */}
+                                    <Col xs={24} sm={12}>
                                         <Form.Item name="RecurrenceEndDate" label="پایان تکرار">
                                             <PersianDateInput value={null as any} onChange={() => {}} />
                                         </Form.Item>
                                     </Col>
+                                    {recurrenceType !== 'NONE' && (
+                                        <Col xs={24}>
+                                            <Form.Item
+                                                name="RecurrenceWeekDays"
+                                                label={recurrenceType === 'WEEKLY' ? 'روزهایِ هفته' : 'فقط در این روزهایِ هفته'}
+                                                extra={recurrenceType === 'WEEKLY' ? undefined : 'وقوعی که رویِ روزِ بدونِ تیک بیفتد ثبت نمی‌شود (مثلاً جمعه‌ها).'}
+                                                rules={[{ validator: (_, v) => (Array.isArray(v) && v.length ? Promise.resolve() : Promise.reject(new Error('حداقل یک روز را انتخاب کنید'))) }]}
+                                            >
+                                                <Checkbox.Group options={WEEKDAY_LABELS_FA.map((label, i) => ({ label, value: i }))} />
+                                            </Form.Item>
+                                        </Col>
+                                    )}
                                     <Col xs={24}>
                                         <div style={{ fontSize: 12, color: '#6B7280', marginTop: -8 }}>
-                                            {recurrenceSummary(recurrenceType, recurrenceInterval, seriesStart)} — بر اساسِ تقویمِ شمسی.
+                                            {recurrenceSummary(recurrenceType, recurrenceInterval, seriesStart, recurrenceWeekDays)} — بر اساسِ تقویمِ شمسی.
                                             {eventId ? ' ویرایش روی همهٔ وقوع‌هایِ این سری اعمال می‌شود.' : ''}
                                         </div>
                                     </Col>

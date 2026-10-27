@@ -121,7 +121,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
      */
     const handleSubmit = () => {
         form.validateFields().then(() => {
-            if (data.UserType === 'PERSON' && !data.CrmPersonID) return setCrmLinkError('مخاطبِ این کاربر را انتخاب کنید.');
+            if (data.UserType === 'PERSON' && !data.CrmPersonID) return setCrmLinkError('فردِ مرتبطِ این کاربر را انتخاب کنید.');
             if (data.UserType === 'PARTY' && !data.CrmPartyID) return setCrmLinkError('طرف‌حسابِ این کاربر را انتخاب کنید.');
             const options = {
                 preserveScroll: true,
@@ -359,7 +359,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                     </Col>
                     <Col xs={24} md={12}>
                         <Form.Item
-                            label={data.UserType === 'PARTY' ? 'طرف‌حساب' : data.UserType === 'PERSON' ? 'مخاطب' : 'مخاطب (اختیاری، برایِ آدرس و تلفن)'}
+                            label={data.UserType === 'PARTY' ? 'طرف‌حساب' : data.UserType === 'PERSON' ? 'فرد مرتبط' : 'فرد مرتبط (اختیاری، برایِ آدرس و تلفن)'}
                             required={data.UserType !== 'INTERNAL'}
                             validateStatus={crmLinkError ? 'error' : ''}
                             help={crmLinkError}
@@ -368,7 +368,7 @@ export default function UserFormModal({ open, onClose, editingUser }: UserFormMo
                                 showSearch
                                 allowClear
                                 filterOption={false}
-                                placeholder={data.UserType === 'PARTY' ? 'جست‌وجو و انتخابِ طرف‌حساب…' : 'جست‌وجو و انتخابِ مخاطب…'}
+                                placeholder={data.UserType === 'PARTY' ? 'جست‌وجو و انتخابِ طرف‌حساب…' : 'جست‌وجو و انتخابِ فرد مرتبط…'}
                                 value={(data.UserType === 'PARTY' ? data.CrmPartyID : data.CrmPersonID) ?? undefined}
                                 onSearch={(s) => loadCrmOptions(data.UserType, s)}
                                 onChange={(v) => {

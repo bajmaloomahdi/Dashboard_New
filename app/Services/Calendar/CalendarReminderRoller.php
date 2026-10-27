@@ -27,7 +27,11 @@ final class CalendarReminderRoller
                 (string) $r->RecurrenceType,
                 (int) ($r->RecurrenceInterval ?: 1),
                 $now,
-                $r->RecurrenceEndDate ? Carbon::parse($r->RecurrenceEndDate)->endOfDay() : null
+                $r->RecurrenceEndDate ? Carbon::parse($r->RecurrenceEndDate)->endOfDay() : null,
+                false,
+                // پچِ ۱۲۷: روزهایِ هفتهٔ تکرار، و وقوع‌هایِ «انجام/لغو شده» رد می‌شوند
+                JalaliRecurrence::parseWeekDays($r->RecurrenceWeekDays ?? null),
+                isset($r->EventID) ? CalendarOccurrenceStatuses::closedStarts((int) $r->EventID) : []
             );
             // compare-and-set: اگر زمان‌بند و درخواستِ داخلِ برنامه هم‌زمان برسند، یا کاربر در این فاصله «دیدم» زده/رویداد ویرایش شده،
             // فقط یک به‌روزرسانی (یا هیچ) انجام می‌شود — جابه‌جاییِ دوباره یا از دست رفتنِ یادآوری نداریم

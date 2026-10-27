@@ -281,7 +281,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             width: 130,
             align: 'center',
             render: (_, r) => {
-                if (!canManage) return canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="مخاطب" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
+                if (!canManage) return canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="فرد مرتبط" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null;
                 const active = toBool(r.IsActive);
                 return (
                     <Space>
@@ -289,7 +289,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                         <Popconfirm title={active ? 'غیرفعال‌کردنِ رابطه' : 'فعال‌کردنِ رابطه'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.RelationID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
                         </Popconfirm>
-                        {canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="مخاطب" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
+                        {canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="فرد مرتبط" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );
             },
@@ -300,7 +300,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
         <div>
             {canManage ? (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>مخاطبِ جدید</Button>
+                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>فردِ مرتبطِ جدید</Button>
                 </div>
             ) : null}
 
@@ -429,7 +429,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                         </div>
                         <div style={{ paddingTop: 22 }}>
                             <Checkbox checked={draft.isPrimaryContact} onChange={(e) => setDraft((d) => ({ ...d, isPrimaryContact: e.target.checked }))}>
-                                مخاطبِ اصلی
+                                فردِ مرتبطِ اصلی
                             </Checkbox>
                         </div>
                     </Space>
@@ -441,7 +441,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                 </Space>
             ) : null}
 
-            <Table rowKey="RelationID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="مخاطبی ثبت نشده است" /> }} />
+            <Table rowKey="RelationID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="فرد مرتبطی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

@@ -458,7 +458,7 @@ export default function MenuSearchPalette({ open, onClose, focusToken, isMobile 
                     variant="borderless"
                     prefix={<SearchOutlined aria-hidden />}
                     suffix={searching ? <Spin size="small" /> : undefined}
-                    placeholder={serverEnabled ? 'جستجو در صفحه‌ها، طرف‌حساب‌ها، نامه‌ها، پروژه‌ها و فرایندها…' : 'جستجوی صفحه‌ها و گزارش‌ها…'}
+                    placeholder={serverEnabled ? 'جستجو در صفحه‌ها، مخاطبین / طرف‌حساب‌ها، نامه‌ها، پروژه‌ها و فرایندها…' : 'جستجوی صفحه‌ها و گزارش‌ها…'}
                     aria-labelledby={titleId}
                     value={query}
                     onChange={(e) => onQueryChange(e.target.value)}

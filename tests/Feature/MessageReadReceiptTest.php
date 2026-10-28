@@ -128,9 +128,12 @@ class MessageReadReceiptTest extends TestCase
         $this->assertSame(1, (int) $this->inboxRow($copy, $id)->HasUnread);
         $this->assertSame($senderBefore, $this->unreadCount(self::USER_SENDER));
 
-        // توضیحِ دوم پیش از خواندن، تعدادِ پیام‌هایِ خوانده‌نشده را دوبار نمی‌شمارد
+        // توضیحِ دوم پیش از خواندن، تعدادِ پیام‌هایِ خوانده‌نشده را دوبار نمی‌شمارد —
+        // ولی خودش اعلانِ تازه دارد (پچِ ۱۳۰: دیگر به‌خاطرِ اعلانِ خوانده‌نشدهٔ قبلی جا نمی‌افتد → Push هم می‌رود)
+        $rowsBefore = DB::table('UserNotifications')->where('UserID', $recipient)->where('MessageID', $id)->where('IsRead', 0)->count();
         $this->as(self::USER_SENDER)->post("/messages/{$id}/comment", ['Comment' => 'توضیحِ دوم'])->assertSessionHasNoErrors();
         $this->assertSame(1, $this->unreadCount($recipient));
+        $this->assertSame($rowsBefore + 1, DB::table('UserNotifications')->where('UserID', $recipient)->where('MessageID', $id)->where('IsRead', 0)->count());
 
         // گیرنده توضیح می‌گذارد → فرستنده «تغییرِ تازه» می‌گیرد
         $this->as($recipient)->post("/messages/{$id}/comment", ['Comment' => 'پاسخ'])->assertSessionHasNoErrors();

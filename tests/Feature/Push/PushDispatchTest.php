@@ -234,18 +234,47 @@ class PushDispatchTest extends PushTestCase
         $this->assertCount(0, $this->fake->sent);
     }
 
-    public function test_second_notification_for_an_unread_message_is_coalesced(): void
+    /** پچِ ۱۳۰: هر تغییرِ پیامِ خوانده‌نشده هم Pushِ خودش را دارد (قبلاً یکی‌شده/COALESCED) — Tag همان msg-… است */
+    public function test_every_change_on_an_unread_message_is_pushed(): void
     {
         $user = $this->createUserWithoutRoles();
         $endpoint = $this->subscribe($user);
         $messageId = $this->sendMessage([$user]);
-        // رویدادِ دیگری (مثلاً تغییرِ وضعیت) برایِ همان پیامِ هنوز خوانده‌نشده اعلانِ دوم ساخت
+        // رویدادِ دیگری (مثلاً توضیح یا تغییرِ وضعیت) برایِ همان پیامِ هنوز خوانده‌نشده اعلانِ دوم ساخت
         DB::insert('INSERT INTO dbo.UserNotifications (UserID, MessageID, CreateDate, IsRead) VALUES (?, ?, SYSDATETIME(), 0)', [$user, $messageId]);
 
         $this->dispatch();
-        $statuses = array_column($this->outbox($user, 'NOTIFICATION'), 'Status');
-        $this->assertSame(['SENT', 'SKIPPED_COALESCED'], $statuses);
-        $this->assertCount(1, $this->fake->sentTo($endpoint));
+        $rows = $this->outbox($user, 'NOTIFICATION');
+        $this->assertSame(['SENT', 'SENT'], array_column($rows, 'Status'));
+        $this->assertSame(['msg-' . $messageId, 'msg-' . $messageId], array_column($rows, 'Tag'), 'رویِ دستگاه جایگزینِ همان اعلان');
+        $this->assertCount(2, $this->fake->sentTo($endpoint));
+    }
+
+    /** پچِ ۱۳۰: توضیح رویِ رویداد → Pushِ CALEVENT برایِ شرکت‌کننده (نه نویسنده) */
+    public function test_event_comment_is_pushed_to_participants(): void
+    {
+        $owner = $this->createUserWithoutRoles();
+        $guest = $this->createUserWithoutRoles();
+        $this->grantPermissionsTo($owner, ['CALENDAR_VIEW', 'CALENDAR_CREATE', 'CALENDAR_CREATE_FOR_OTHERS', 'CALENDAR_COMMENT_VIEW', 'CALENDAR_COMMENT_ADD']);
+        $this->grantPermissionsTo($guest, ['CALENDAR_VIEW', 'CALENDAR_COMMENT_VIEW']);
+        $endpoint = $this->subscribe($guest);
+        $ownerEndpoint = $this->subscribe($owner);
+        // تاریخِ نزدیک (ساعتِ SQL)؛ تاریخِ خیلی دور TTLِ دعوت را به ثانیه سرریز می‌کند
+        $start = DB::selectOne('SELECT CONVERT(varchar(19), DATEADD(DAY, 1, SYSDATETIME()), 120) AS t')->t;
+        $end = DB::selectOne('SELECT CONVERT(varchar(19), DATEADD(MINUTE, 30, DATEADD(DAY, 1, SYSDATETIME())), 120) AS t')->t;
+        $eventId = (int) $this->actingAs(\App\Models\User::find($owner))->postJson('/calendar/events', [
+            'Title' => 'جلسه', 'StartDateTime' => $start, 'EndDateTime' => $end, 'RecurrenceType' => 'NONE', 'AttendeeUserIDs' => [$guest],
+        ])->assertOk()->json('eventId');
+        $this->actingAs(\App\Models\User::find($owner))->postJson("/calendar/events/{$eventId}/comments", ['Text' => 'دستور جلسه به‌روز شد'])->assertOk();
+
+        $this->dispatch();
+        $rows = $this->outbox($guest, 'CALEVENT');
+        $this->assertCount(1, $rows);
+        $this->assertSame('SENT', $rows[0]->Status);
+        $this->assertSame('cev-' . $eventId, $rows[0]->Tag);
+        $this->assertCount(2, $this->fake->sentTo($endpoint), 'دعوت به جلسه + توضیحِ تازه');
+        $this->assertCount(0, $this->outbox($owner, 'CALEVENT'), 'نویسنده اعلانِ خودش را نمی‌گیرد');
+        $this->assertNotNull($ownerEndpoint);
     }
 
     public function test_disabled_service_sends_nothing(): void

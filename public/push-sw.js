@@ -66,6 +66,11 @@ self.addEventListener('push', (event) => {
         }
         const tag = typeof data.tag === 'string' && data.tag ? data.tag : 'raga360';
         const duplicate = data.id ? await seenBefore(String(data.id)) : false;
+        // یادآوری: دکمه‌هایِ تعویق (اندروید/کروم؛ iOS دکمهٔ اعلان ندارد) — صفحهٔ تقویم با نشست و CSRFِ خودش ثبت می‌کند.
+        // Chrome حداکثر ۲ دکمه نشان می‌دهد (Notification.maxActions = 2)؛ بقیهٔ زمان‌ها با لمسِ خودِ اعلان در پنجرهٔ برنامه
+        const reminderId = typeof data.rid === 'string' && /^\d+$/.test(data.rid) ? data.rid : null;
+        // پچِ ۱۳۲: بقیهٔ انواع (نامه، دعوت، لغو، فعالیتِ رویداد، اعلانِ عمومی) — تعویق با شناسهٔ همین ردیفِ Push
+        const pushId = !reminderId && data.snz === 1 && typeof data.id === 'string' && /^\d+$/.test(data.id) ? data.id : null;
 
         // مرورگرها (به‌خصوص iOS) برایِ هر Push یک اعلانِ قابلِ‌مشاهده می‌خواهند؛ تکراری فقط جایگزینِ بی‌صدا می‌شود
         await self.registration.showNotification(data.title || 'راگا ۳۶۰', {
@@ -77,14 +82,28 @@ self.addEventListener('push', (event) => {
             badge: '/company/pwa-icon/192',
             dir: 'rtl',
             lang: 'fa',
-            data: { url: safeUrl(data.url) },
+            data: { url: safeUrl(data.url), reminderId, pushId },
+            actions: reminderId || pushId
+                ? [
+                      { action: 'snooze-5', title: '۵ دقیقه بعد' },
+                      { action: 'snooze-15', title: '۱۵ دقیقه بعد' },
+                  ]
+                : [],
         });
     })());
 });
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const target = new URL(safeUrl(event.notification.data && event.notification.data.url), self.location.origin).href;
+    const info = event.notification.data || {};
+    // دکمهٔ «… دقیقه بعد» → صفحهٔ تقویم تعویق را ثبت می‌کند (همان نشست و CSRFِ برنامه)
+    const snooze = /^snooze-(5|10|15)$/.exec(event.action || '');
+    const url = snooze && info.reminderId
+        ? `/calendar?snooze=${info.reminderId}&minutes=${snooze[1]}`
+        : snooze && info.pushId
+          ? `/dashboard?psnooze=${info.pushId}&minutes=${snooze[1]}`
+          : info.url;
+    const target = new URL(safeUrl(url), self.location.origin).href;
 
     event.waitUntil((async () => {
         const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

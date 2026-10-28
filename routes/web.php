@@ -5,6 +5,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\MasterParameterController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\NotificationSnoozeController;
 use App\Http\Controllers\MessageStatusController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\MessageTypeController;
@@ -202,7 +203,13 @@ Route::middleware('auth')->group(function () {
     Route::get('messages/archive', [MessageController::class, 'archive'])->name('messages.archive');
     Route::post('messages', [MessageController::class, 'store'])->name('messages.store');
     Route::post('messages/from-template', [MessageTemplateController::class, 'store'])->name('messages.from-template');
-    Route::get('messages/{id}', [MessageController::class, 'show'])->name('messages.show');
+    // اعلانِ زندهٔ داخلِ برنامه (نامه/وظیفهٔ تازه یا تغییر رویِ آن) + شمارندهٔ زنگوله — فقط اعلان‌هایِ خودِ کاربر
+    Route::get('messages/notifications/recent', [MessageController::class, 'recentNotifications'])->name('messages.notifications.recent');
+    // پچِ ۱۳۲ — «بعداً یادآوری کن» رویِ هر اعلان (نامه، دعوت، لغو، فعالیتِ رویداد، اعلانِ عمومی)
+    Route::post('notifications/snooze', [NotificationSnoozeController::class, 'store'])->name('notifications.snooze');
+    Route::get('notifications/snoozes/due', [NotificationSnoozeController::class, 'due'])->name('notifications.snoozes.due');
+    Route::post('notifications/snoozes/{id}/shown', [NotificationSnoozeController::class, 'shown'])->whereNumber('id')->name('notifications.snoozes.shown');
+    Route::get('messages/{id}',[MessageController::class, 'show'])->name('messages.show');
     Route::post('messages/{id}/status', [MessageController::class, 'changeStatus'])->name('messages.change-status');
     Route::post('messages/{id}/forward', [MessageController::class, 'forward'])->name('messages.forward');
     Route::post('messages/{id}/comment', [MessageController::class, 'addComment'])->name('messages.comment');
@@ -269,6 +276,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/calendar/notices', [CalendarController::class, 'notices'])->name('calendar.notices.index');
     Route::post('/calendar/events/{id}/status', [CalendarController::class, 'setStatus'])->whereNumber('id')->name('calendar.events.status');
     Route::post('/calendar/events/{id}/attachments', [CalendarController::class, 'storeAttachments'])->whereNumber('id')->name('calendar.events.attachments.store');
+    // اطلاع‌هایِ فعالیتِ رویداد (پچِ ۱۳۰)
+    Route::get('/calendar/activity', [CalendarController::class, 'activity'])->name('calendar.activity.index');
     // توضیحاتِ رویداد (پچِ ۱۲۹)
     Route::get('/calendar/events/{id}/comments', [CalendarController::class, 'comments'])->whereNumber('id')->name('calendar.events.comments.index');
     Route::post('/calendar/events/{id}/comments', [CalendarController::class, 'storeComment'])->whereNumber('id')->name('calendar.events.comments.store');
@@ -283,6 +292,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/calendar/reminders/standalone', [CalendarController::class, 'storeStandaloneReminder'])->name('calendar.reminders.standalone.store');
     Route::put('/calendar/reminders/standalone/{id}', [CalendarController::class, 'updateStandaloneReminder'])->name('calendar.reminders.standalone.update');
     Route::post('/calendar/reminders/{id}/seen', [CalendarController::class, 'markReminderSeen'])->name('calendar.reminders.seen');
+    // تعویقِ یادآوری (پچِ ۱۳۱): «چند دقیقهٔ دیگر دوباره یادآوری کن»
+    Route::post('/calendar/reminders/{id}/snooze', [CalendarController::class, 'snoozeReminder'])->whereNumber('id')->name('calendar.reminders.snooze');
     Route::delete('/calendar/reminders/{id}', [CalendarController::class, 'destroyReminder'])->name('calendar.reminders.destroy');
 
     // رویدادها

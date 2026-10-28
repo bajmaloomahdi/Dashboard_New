@@ -18,6 +18,7 @@ import { useState, useEffect } from 'react';
 import type { User } from '../Types';
 import MenuSearchPalette from './GlobalSearch/MenuSearchPalette';
 import PushSettingsModal from './Push/PushSettingsModal';
+import { UNREAD_COUNT_EVENT } from './ReminderWatcher';
 import raga360Logo from '../../images/raga360-logo.webp';
 
 const { Header: AntHeader } = Layout;
@@ -89,7 +90,15 @@ export default function Header({ user, collapsed, isMobile = false, onToggleColl
 
     // دریافت تعداد پیام‌ها و شماره نسخه از props سراسری اینرشیا
     const { unreadNotificationsCount, appVersion } = usePage().props as any;
-    const unreadCount = unreadNotificationsCount || 0;
+    // بینِ دو بارِ رفتن به صفحه، ReminderWatcher شمارهٔ تازه را از سرور می‌آورد؛ با propِ تازهٔ صفحه دوباره همان ملاک است
+    const [liveUnread, setLiveUnread] = useState<number | null>(null);
+    useEffect(() => setLiveUnread(null), [unreadNotificationsCount]);
+    useEffect(() => {
+        const onCount = (e: Event) => setLiveUnread(Number((e as CustomEvent).detail) || 0);
+        window.addEventListener(UNREAD_COUNT_EVENT, onCount);
+        return () => window.removeEventListener(UNREAD_COUNT_EVENT, onCount);
+    }, []);
+    const unreadCount = liveUnread ?? (unreadNotificationsCount || 0);
 
     // جستجوی سریع منوها (مرحلهٔ ۱) — فقط روی prop فعلیِ menus، بدون درخواستِ شبکه یا دیتابیس
     const [searchOpen, setSearchOpen] = useState(false);

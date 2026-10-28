@@ -32,7 +32,7 @@ class PushDispatcher
     public function run(?string $worker = null): array
     {
         $worker ??= self::workerName();
-        $stats = ['queuedNotifications' => 0, 'queuedReminders' => 0, 'queuedInvites' => 0, 'queuedCancels' => 0, 'rolledReminders' => 0, 'processed' => 0, 'sent' => 0, 'retry' => 0, 'failed' => 0, 'expired' => 0, 'skipped' => 0];
+        $stats = ['queuedNotifications' => 0, 'queuedReminders' => 0, 'queuedInvites' => 0, 'queuedCancels' => 0, 'queuedEventNotices' => 0, 'queuedSnoozes' => 0, 'rolledReminders' => 0, 'processed' => 0, 'sent' => 0, 'retry' => 0, 'failed' => 0, 'expired' => 0, 'skipped' => 0];
 
         $state = $this->store->heartbeat($worker);
         if (! config('push.enabled')) {
@@ -49,6 +49,8 @@ class PushDispatcher
         $stats['queuedReminders'] = (int) ($q->RemindersQueued ?? 0);
         $stats['queuedInvites'] = (int) ($q->InvitesQueued ?? 0);
         $stats['queuedCancels'] = (int) ($q->CancelsQueued ?? 0);
+        $stats['queuedEventNotices'] = (int) ($q->EventNoticesQueued ?? 0); // پچِ ۱۳۰
+        $stats['queuedSnoozes'] = (int) ($q->SnoozesQueued ?? 0); // پچِ ۱۳۲
 
         $deadline = microtime(true) + (int) config('push.run_budget_seconds', 50);
         while (microtime(true) < $deadline) {

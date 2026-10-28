@@ -76,7 +76,10 @@ class CalendarEventStatusTest extends PushTestCase
         $this->setStatus($owner, $eventId, 'DONE')->assertOk();
         $this->dispatch();
 
-        $this->assertSame([], $this->fake->sentTo($ep), 'انجام‌شده: نه دعوت، نه یادآوری، نه اطلاعِ لغو');
+        // انجام‌شده: نه دعوت، نه یادآوری، نه اطلاعِ لغو — فقط اطلاعِ «تغییرِ وضعیت» (CALEVENT، پچِ ۱۳۰)
+        $sentTypes = DB::table('PushOutbox')->where('UserID', $guest)->where('Status', 'SENT')->pluck('SourceType')->unique()->values()->all();
+        $this->assertSame(['CALEVENT'], $sentTypes, 'انجام‌شده: نه دعوت، نه یادآوری، نه اطلاعِ لغو');
+        $this->assertCount(1, $this->fake->sentTo($ep));
         $this->assertSame([], $this->actingAs(User::find($guest))->getJson('/calendar/invitations')->json('invitations'));
         $this->assertNotContains($eventId, array_map(fn ($r) => (int) $r['EventID'], $this->actingAs(User::find($guest))->getJson('/calendar/reminders/due')->json('reminders')));
         $this->assertSame([], $this->actingAs(User::find($guest))->getJson('/calendar/notices')->json('notices'));

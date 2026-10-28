@@ -263,6 +263,29 @@ class CalendarController extends Controller
         return $this->hasReadShareFor($event, DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$eventId]));
     }
 
+    // ================= اطلاعِ فعالیتِ رویداد (پچِ ۱۳۰) =================
+
+    /**
+     * اطلاعِ فعالیت به طرف‌هایِ رویداد به‌جز خودِ کاربر (اعلانِ داخلِ برنامه + Push از همان ردیف‌ها).
+     * $kind: COMMENT | ATTACHMENT | STATUS | RESPONSE — گیرندگان و مجوزها در SP. خطا مانعِ کارِ اصلی نمی‌شود.
+     */
+    private function notifyActivity(int $eventId, string $kind, ?string $detail = null): void
+    {
+        try {
+            DB::select('EXEC dbo.sp_Calendar_NotifyEventActivity @EventID = ?, @Kind = ?, @ActorUserID = ?, @Detail = ?', [$eventId, $kind, Auth::id(), $detail]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** GET /calendar/activity — اطلاع‌هایِ فعالیتِ رویدادهایِ کاربر (۷ روزِ اخیر) برایِ اعلانِ داخلِ برنامه */
+    public function activity()
+    {
+        $this->authorizeCalendar('CALENDAR_VIEW');
+
+        return response()->json(['notices' => DB::select('EXEC dbo.sp_Calendar_GetEventNotices @UserID = ?', [Auth::id()])]);
+    }
+
     // ================= توضیحاتِ رویداد (پچِ ۱۲۹) =================
 
     /** GET /calendar/events/{id}/comments — CALENDAR_COMMENT_VIEW + دسترسی به جزئیاتِ همان رویداد */
@@ -292,6 +315,7 @@ class CalendarController extends Controller
         if (empty($res['Success'])) {
             return response()->json(['success' => false, 'message' => $res['Message'] ?? 'خطا در ثبتِ توضیح'], 422);
         }
+        $this->notifyActivity($id, 'COMMENT');
 
         return response()->json([
             'success'  => true,
@@ -354,6 +378,7 @@ class CalendarController extends Controller
 
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
+        $this->notifyActivity($id, 'ATTACHMENT', count($files) > 1 ? count($files) . ' فایل' : '۱ فایل');
 
         return response()->json([
             'success' => true,
@@ -752,6 +777,11 @@ class CalendarController extends Controller
         }
         $labels = ['CONFIRMED' => 'ثبت شده', 'CANCELLED' => 'لغو شده', 'DONE' => 'انجام شده'];
 
+        // لغوِ کلِ جلسه اطلاعِ لغوِ خودش را دارد (پچِ ۱۱۳)؛ بقیهٔ تغییرِ وضعیت‌ها اطلاعِ فعالیت (پچِ ۱۳۰)
+        if ($validated['Status'] !== 'CANCELLED') {
+            $this->notifyActivity($id, 'STATUS', $labels[$validated['Status']]);
+        }
+
         return $this->updatedResponse("وضعیتِ رویداد «{$labels[$validated['Status']]}» شد.", $response);
     }
 
@@ -803,6 +833,9 @@ class CalendarController extends Controller
             }
         }
 
+        $statusLabels = ['CONFIRMED' => 'ثبت شده', 'CANCELLED' => 'لغو شده', 'DONE' => 'انجام شده'];
+        $this->notifyActivity($eventId, 'STATUS', ($statusLabels[$status] ?? $status) . ' (یک وقوع)');
+
         return response()->json(['success' => true, 'message' => $res['Message'], 'responsesReset' => 0]);
     }
 
@@ -836,6 +869,11 @@ class CalendarController extends Controller
             [$id, Auth::id(), $validated['ResponseStatus']]
         );
         $response = (array) ($result[0] ?? []);
+        // پاسخ به دعوت → سازنده و مالک باخبر می‌شوند (پچِ ۱۳۰)
+        if (!empty($response['Success']) && $validated['ResponseStatus'] !== 'PENDING') {
+            $responseLabels = ['ACCEPTED' => 'پذیرفت', 'REJECTED' => 'رد کرد', 'TENTATIVE' => 'شاید'];
+            $this->notifyActivity($id, 'RESPONSE', $responseLabels[$validated['ResponseStatus']] ?? null);
+        }
 
         return response()->json([
             'success' => !empty($response['Success']),
@@ -1044,6 +1082,23 @@ class CalendarController extends Controller
         DB::select('EXEC sp_MarkReminderSent @ReminderID = ?, @UserID = ?', [$reminderId, $userId]);
 
         return response()->json(['success' => true, 'rescheduled' => false]);
+    }
+
+    /**
+     * POST /calendar/reminders/{id}/snooze — «چند دقیقهٔ دیگر دوباره یادآوری کن» (پچِ ۱۳۱)؛ ۵ تا ۶۰ دقیقه با گامِ ۵.
+     * فقط صاحبِ یادآوری (SP بررسی می‌کند)؛ زمانِ اصلیِ یادآوری دست نمی‌خورد.
+     */
+    public function snoozeReminder(Request $request, int $id)
+    {
+        $validated = $request->validate(['Minutes' => 'required|integer|min:5|max:60|multiple_of:5']);
+        // دکمهٔ اعلانِ گوشی هم همین مسیر را از خودِ صفحه (با نشست و CSRF) صدا می‌زند: /calendar?snooze={id}&minutes={n}
+        $res = (array) (DB::select('EXEC dbo.sp_Calendar_SnoozeReminder @ReminderID = ?, @UserID = ?, @Minutes = ?', [$id, (int) Auth::id(), (int) $validated['Minutes']])[0] ?? []);
+
+        return response()->json([
+            'success' => !empty($res['Success']),
+            'message' => $res['Message'] ?? '',
+            'snoozedUntil' => $res['SnoozedUntil'] ?? null,
+        ], empty($res['Success']) ? 422 : 200);
     }
 
     // ================= داخلی =================

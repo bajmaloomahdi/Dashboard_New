@@ -24,8 +24,13 @@ class PushPayloadFactory
         // دعوتِ دوباره به‌خاطرِ تغییرِ زمان/تکرار یا برگرداندن از لغو (Tagِ «invu-» از sp_Push_Enqueue) — بدونِ عنوانِ جلسه
         'INVITE_UPDATE' => 'یکی از جلسه‌هایتان تغییر کرد؛ لطفاً دوباره پاسخ دهید.',
         'CANCEL' => 'یکی از جلسه‌هایتان لغو شد.', // لغو یا حذفِ جلسه (پچِ ۱۱۳) — بدونِ عنوان
+        // توضیح، ضمیمه، تغییرِ وضعیت یا پاسخ به دعوت رویِ رویداد (پچِ ۱۳۰) — بدونِ عنوانِ رویداد
+        'CALEVENT' => 'در یکی از رویدادهایِ تقویمتان توضیح یا تغییرِ تازه‌ای ثبت شد.',
         'TEST' => 'اعلانِ آزمایشی: اعلان‌هایِ این دستگاه کار می‌کند.',
     ];
+
+    /** انواعی که رویِ اعلانِ گوشی دکمهٔ تعویق دارند (یادآوری جدا با rid) — پچِ ۱۳۲ */
+    private const SNOOZABLE = ['MESSAGE', 'TASK', 'INVITE', 'CANCEL', 'CALEVENT', 'BROADCAST'];
 
     /** حداکثر اندازهٔ متنِ JSON (بایت) — با ۶۰+۲۴۰ نویسهٔ فارسی هم بسیار کمتر از سقفِ ~۴ کیلوبایتِ Web Push */
     public const MAX_BYTES = 2048;
@@ -42,7 +47,11 @@ class PushPayloadFactory
         if ($kind === 'INVITE' && str_starts_with((string) $outbox->Tag, 'invu-')) {
             $body = self::BODIES['INVITE_UPDATE'];
         }
-        if ($kind === 'BROADCAST') {
+        $snoozed = (string) ($outbox->SourceType ?? '') === 'SNOOZE';
+        if ($snoozed) {
+            // پچِ ۱۳۲: «بعداً یادآوری کن» — همان متنِ عمومیِ نوع (برایِ اعلانِ عمومی هم بدونِ متنِ مدیر)
+            $body = 'یادآوریِ دوباره: ' . ($kind === 'BROADCAST' ? 'یک اعلانِ عمومی دارید.' : $body);
+        } elseif ($kind === 'BROADCAST') {
             if (! $broadcast) {
                 throw new \RuntimeException('محتوایِ اعلانِ عمومی پیدا نشد.');
             }
@@ -72,6 +81,10 @@ class PushPayloadFactory
             'title' => $title,
             'body' => $body,
             'url' => $url,
+            // پچِ ۱۳۱: شناسهٔ یادآوری برایِ دکمه‌هایِ «… دقیقه بعد» (Service Worker صفحهٔ تقویم را با ?snooze= باز می‌کند)
+            ...($kind === 'REMINDER' ? ['rid' => (string) $outbox->SourceID] : []),
+            // پچِ ۱۳۲: بقیهٔ انواع هم «… دقیقه بعد» دارند (Service Worker با شناسهٔ همین ردیفِ Push ثبت می‌کند)
+            ...(in_array($kind, self::SNOOZABLE, true) ? ['snz' => 1] : []),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if ($payload === false || strlen($payload) > self::MAX_BYTES) {

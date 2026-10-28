@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { Modal, Button, Typography, Tag } from 'antd';
-import { BellFilled, CheckOutlined, ClockCircleOutlined, CalendarOutlined } from '@ant-design/icons';
+import { Modal, Button, Typography, Tag, Select } from 'antd';
+import { BellFilled, CheckOutlined, ClockCircleOutlined, CalendarOutlined, FieldTimeOutlined } from '@ant-design/icons';
 import { THEME } from '../theme';
 import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay, parseServerDateTime } from '../Utils/jalali';
 
@@ -15,6 +15,8 @@ export interface DueReminder {
     RecurrenceType: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | null;
     OffsetMinutes: number;
     RemindAt: string;
+    /** پایانِ تعویق (پچِ ۱۳۱)؛ null = بدونِ تعویق */
+    SnoozedUntil?: string | null;
     /** متن/توضیحاتِ رویداد (فقط با دسترسیِ خودِ کاربر)؛ خالی = بدونِ متن */
     Description?: string | null;
 }
@@ -24,6 +26,13 @@ interface Props {
     queueCount: number; // تعداد یادآوری‌های دیگرِ در صف
     acknowledging: boolean;
     onAcknowledge: () => void;
+    /** «چند دقیقهٔ دیگر دوباره یادآوری کن» (۵ تا ۶۰ دقیقه، گامِ ۵) */
+    onSnooze?: (minutes: number) => void;
+    snoozing?: boolean;
+    /** کاربر با پنجره کار کرد → بسته‌شدنِ خودکار متوقف شود */
+    onInteract?: () => void;
+    /** زمان‌سنجِ بسته‌شدنِ خودکار متوقف است */
+    held?: boolean;
     /** پنجره پس از این مدت (میلی‌ثانیه) خودکار بسته می‌شود — فقط برایِ نوارِ پیشرفت؛ بستن در ReminderWatcher است */
     autoCloseMs?: number;
 }
@@ -53,7 +62,10 @@ function relativeStart(startIso: string | null): { label: string; tone: 'now' | 
 
 const { Title, Text, Paragraph } = Typography;
 
-export default function ReminderNotificationModal({ reminder, queueCount, acknowledging, onAcknowledge, autoCloseMs }: Props) {
+/** گزینه‌هایِ بیشترِ تعویق (۲۰ تا ۶۰ دقیقه) — ۵، ۱۰ و ۱۵ دکمهٔ مستقیم دارند */
+const MORE_SNOOZE = [20, 25, 30, 35, 40, 45, 50, 55, 60];
+
+export default function ReminderNotificationModal({ reminder, queueCount, acknowledging, onAcknowledge, autoCloseMs, onSnooze, snoozing, onInteract, held }: Props) {
     const isAllDay = Number(reminder.IsAllDay) === 1;
     const isStandalone = reminder.EntityType === 'STANDALONE' || !reminder.StartDateTime;
 
@@ -84,8 +96,8 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
                 content: { padding: 0, overflow: 'hidden', borderRadius: 18 },
             }}
         >
-            <div className="reminder-pop">
-                {autoCloseMs ? (
+            <div className="reminder-pop" onPointerDown={onInteract} onMouseEnter={onInteract} onFocus={onInteract}>
+                {autoCloseMs && !held ? (
                     // نوارِ زمانِ باقی‌مانده تا بسته‌شدنِ خودکار (بدونِ ثبتِ «دیدم»)
                     <div className="reminder-pop-timer" style={{ animationDuration: `${autoCloseMs}ms`, animationPlayState: acknowledging ? 'paused' : 'running' }} />
                 ) : null}
@@ -160,6 +172,29 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
                     >
                         متوجه شدم
                     </Button>
+
+                    {onSnooze && (
+                        // تعویق: همین یادآوری چند دقیقهٔ دیگر دوباره نمایش داده می‌شود (و Push می‌شود)
+                        <div className="reminder-pop-snooze">
+                            <span className="reminder-pop-snooze-label"><FieldTimeOutlined /> دوباره یادآوری کن:</span>
+                            <div className="reminder-pop-snooze-row">
+                                {[5, 10, 15].map((m) => (
+                                    <Button key={m} size="small" disabled={acknowledging || snoozing} onClick={() => onSnooze(m)}>
+                                        {m} دقیقه بعد
+                                    </Button>
+                                ))}
+                                <Select
+                                    size="small"
+                                    placeholder="بیشتر…"
+                                    style={{ width: 96 }}
+                                    disabled={acknowledging || snoozing}
+                                    value={null}
+                                    onChange={(v) => v && onSnooze(Number(v))}
+                                    options={MORE_SNOOZE.map((m) => ({ value: m, label: `${m} دقیقه` }))}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -207,6 +242,9 @@ export default function ReminderNotificationModal({ reminder, queueCount, acknow
                 }
                 @keyframes reminderTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
                 .reminder-pop { position: relative; }
+                .reminder-pop-snooze { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+                .reminder-pop-snooze-label { font-size: 12px; color: ${THEME.textSecondary}; }
+                .reminder-pop-snooze-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
                 .reminder-pop-ack.ant-btn-primary {
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     border: none; box-shadow: 0 6px 16px rgba(102,126,234,.35);

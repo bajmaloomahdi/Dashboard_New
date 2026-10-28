@@ -29,6 +29,29 @@ class MessageController extends Controller
         );
     }
 
+    /**
+     * اعلان‌هایِ خوانده‌نشدهٔ کاربرِ جاری (یک ردیف به‌ازایِ هر نامه، تازه‌ترین تغییر) برایِ اعلانِ زندهٔ داخلِ برنامه.
+     * شمارنده همان قاعدهٔ زنگولهٔ سربرگ است (تعدادِ نامه‌هایِ دارایِ تغییرِ خوانده‌نشده).
+     */
+    public function recentNotifications()
+    {
+        $rows = array_values(array_filter(
+            DB::select('EXEC sp_GetUserNotifications @UserID = ?', [(int) Auth::id()]),
+            fn ($r) => ! (int) $r->IsRead,
+        ));
+
+        return response()->json([
+            'unreadCount' => count($rows),
+            'notifications' => array_map(fn ($r) => [
+                'UserNotificationID' => (int) $r->UserNotificationID,
+                'MessageID' => (int) $r->MessageID,
+                'MessageNumber' => $r->MessageNumber,
+                'Subject' => $r->Subject,
+                'MessageTypeName' => $r->MessageTypeName,
+            ], array_slice($rows, 0, 10)),
+        ]);
+    }
+
     public function index(Request $request, string $mode = 'inbox')
     {
         $userId = Auth::id();

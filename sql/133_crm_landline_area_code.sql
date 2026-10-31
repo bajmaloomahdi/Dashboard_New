@@ -1,0 +1,116 @@
+/* ==========================================================================
+   پچ خودکار شماره: 133 | نام: crm_landline_area_code
+   تاریخ: 2026-10-31 13:06:30 | شامل 1 دستور SQL
+   ========================================================================== */
+
+-- [ALTER_PROCEDURE] روی PROCEDURE: sp_Crm_SaveContact
+ALTER PROCEDURE dbo.sp_Crm_SaveContact
+    @ContactID       INT           = NULL,
+    @PartyID         INT           = NULL,
+    @PersonID        INT           = NULL,
+    @ContactTypeID   INT,
+    @ContactValue    NVARCHAR(200),
+    @Extension       NVARCHAR(20)  = NULL,
+    @Description     NVARCHAR(200) = NULL,
+    @IsPrimary       BIT           = 0,
+    @RelatedPersonID INT           = NULL,
+    @UserID          INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF (@PartyID IS NULL AND @PersonID IS NULL) OR (@PartyID IS NOT NULL AND @PersonID IS NOT NULL)
+    BEGIN SELECT 0 AS Success, N'دقیقاً یکی از طرف‌حساب یا فرد مرتبط باید مشخص باشد.' AS Message; RETURN; END
+    IF @PartyID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CrmParties WHERE PartyID = @PartyID)
+    BEGIN SELECT 0 AS Success, N'طرف‌حساب انتخاب‌شده معتبر نیست.' AS Message; RETURN; END
+    IF @PersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CrmPersons WHERE PersonID = @PersonID)
+    BEGIN SELECT 0 AS Success, N'فردِ مرتبطِ انتخاب‌شده معتبر نیست.' AS Message; RETURN; END
+    IF NOT EXISTS (SELECT 1 FROM dbo.CrmContactTypes WHERE ContactTypeID = @ContactTypeID)
+    BEGIN SELECT 0 AS Success, N'نوعِ تماس معتبر نیست.' AS Message; RETURN; END
+    IF NULLIF(LTRIM(RTRIM(@ContactValue)), N'') IS NULL
+    BEGIN SELECT 0 AS Success, N'مقدارِ تماس الزامی است.' AS Message; RETURN; END
+    IF @RelatedPersonID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.CrmPersons WHERE PersonID = @RelatedPersonID)
+    BEGIN SELECT 0 AS Success, N'فردِ مرتبطِ این تماس معتبر نیست.' AS Message; RETURN; END
+
+    -- شماره‌ها فقط رقمِ لاتینِ 0 تا 9، بدونِ هیچ نویسهٔ دیگری (فاصله، خط‌تیره، +98، پرانتز، ارقامِ فارسی):
+    -- موبایل = ۱۱ رقم و شروع با ۰۹؛ تلفن/فکس (پچِ ۱۳۳) = دقیقاً ۳ رقم پیش‌شماره (۰ + رقمِ غیرِصفر + رقم، مثلاً 021) و ۸ رقم شماره (شروع با غیرِصفر).
+    DECLARE @TypeName NVARCHAR(100) = (SELECT LTRIM(RTRIM(DisplayName)) FROM dbo.CrmContactTypes WHERE ContactTypeID = @ContactTypeID);
+    IF @TypeName IN (N'موبایل', N'تلفن', N'فکس')
+    BEGIN
+        DECLARE @Digits NVARCHAR(200) = @ContactValue;
+        IF @Digits = N'' OR @Digits COLLATE Latin1_General_BIN LIKE N'%[^0-9]%'
+        BEGIN SELECT 0 AS Success, N'شمارهٔ ' + @TypeName + N' فقط باید شاملِ رقم باشد، بدونِ فاصله، خط‌تیره، +98 یا هر نویسهٔ دیگر (مثلاً 09123544125 یا 02155955160).' AS Message; RETURN; END
+        IF @TypeName = N'موبایل' AND NOT (LEN(@Digits) = 11 AND LEFT(@Digits, 2) = N'09')
+        BEGIN SELECT 0 AS Success, N'شمارهٔ موبایل باید ۱۱ رقم باشد و با ۰۹ شروع شود (مثلاً 09121234567).' AS Message; RETURN; END
+        IF @TypeName IN (N'تلفن', N'فکس') AND NOT (LEN(@Digits) = 11 AND LEFT(@Digits, 1) = N'0' AND SUBSTRING(@Digits, 2, 1) <> N'0' AND SUBSTRING(@Digits, 4, 1) <> N'0')
+        BEGIN SELECT 0 AS Success, N'شمارهٔ ' + @TypeName + N' باید ۳ رقم پیش‌شماره (مثلاً 021) و ۸ رقم شماره (مثلاً 55955160) باشد؛ در مجموع ۱۱ رقم، مثلاً 02155955160.' AS Message; RETURN; END
+    END
+    BEGIN TRY
+        BEGIN TRAN;
+
+        -- شمارهٔ موبایل یکتا: هیچ اطلاعاتِ تماسِ «موبایل»ِ فعالِ دیگری (برایِ هر طرف‌حساب یا مخاطبی) همین شماره را
+        -- نداشته باشد. applock دو ثبتِ هم‌زمانِ یک شماره را پشتِ‌سرِهم می‌کند.
+        IF EXISTS (SELECT 1 FROM dbo.CrmContactTypes WHERE ContactTypeID = @ContactTypeID AND LTRIM(RTRIM(DisplayName)) = N'موبایل')
+        BEGIN
+            EXEC sp_getapplock @Resource = N'CrmMobileUnique', @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 10000;
+
+            DECLARE @Mobile NVARCHAR(200) = dbo.fn_Crm_NormalizeMobile(@ContactValue);
+            DECLARE @DupOwner NVARCHAR(400) = (
+                SELECT TOP 1 COALESCE(p.OfficialName, LTRIM(RTRIM(ISNULL(pe.FirstName, N'') + N' ' + ISNULL(pe.LastName, N''))))
+                FROM dbo.CrmContacts c
+                JOIN dbo.CrmContactTypes t ON t.ContactTypeID = c.ContactTypeID AND LTRIM(RTRIM(t.DisplayName)) = N'موبایل'
+                LEFT JOIN dbo.CrmParties p ON p.PartyID = c.PartyID
+                LEFT JOIN dbo.CrmPersons pe ON pe.PersonID = c.PersonID
+                WHERE c.IsActive = 1
+                  AND (@ContactID IS NULL OR c.ContactID <> @ContactID)
+                  AND dbo.fn_Crm_NormalizeMobile(c.ContactValue) = @Mobile
+                ORDER BY c.ContactID
+            );
+            IF @DupOwner IS NOT NULL
+            BEGIN
+                COMMIT TRAN; -- هنوز چیزی نوشته نشده؛ ROLLBACK تراکنشِ بیرونیِ فراخوان را هم از بین می‌برد
+                SELECT 0 AS Success, N'این شمارهٔ موبایل قبلاً برایِ «' + @DupOwner + N'» ثبت شده است؛ شمارهٔ موبایلِ تکراری مجاز نیست.' AS Message;
+                RETURN;
+            END
+        END
+
+        IF @ContactID IS NULL
+        BEGIN
+            INSERT INTO dbo.CrmContacts (PartyID, PersonID, ContactTypeID, ContactValue, Extension, Description, IsPrimary, RelatedPersonID, IsActive, Date_InsertFirst, UserID_InsertFirst)
+            VALUES (@PartyID, @PersonID, @ContactTypeID, @ContactValue, @Extension, @Description, ISNULL(@IsPrimary, 0), @RelatedPersonID, 1, SYSDATETIME(), @UserID);
+
+            SET @ContactID = CAST(SCOPE_IDENTITY() AS INT);
+        END
+        ELSE
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM dbo.CrmContacts WHERE ContactID = @ContactID)
+            BEGIN
+                ROLLBACK TRAN;
+                SELECT 0 AS Success, N'اطلاعاتِ تماس یافت نشد.' AS Message;
+                RETURN;
+            END
+
+            UPDATE dbo.CrmContacts
+            SET ContactTypeID = @ContactTypeID, ContactValue = @ContactValue, Extension = @Extension,
+                Description = @Description, IsPrimary = ISNULL(@IsPrimary, 0), RelatedPersonID = @RelatedPersonID,
+                Date_LastUpdate = SYSDATETIME(), UserID_LastUpdate = @UserID
+            WHERE ContactID = @ContactID;
+        END
+
+        -- تکِ اصلی بودن، به‌ازایِ همان مالک (طرف‌حساب یا مخاطب)
+        IF ISNULL(@IsPrimary, 0) = 1
+            UPDATE dbo.CrmContacts
+            SET IsPrimary = 0
+            WHERE ContactID <> @ContactID
+              AND ((@PartyID IS NOT NULL AND PartyID = @PartyID) OR (@PersonID IS NOT NULL AND PersonID = @PersonID));
+
+        COMMIT TRAN;
+        SELECT 1 AS Success, N'اطلاعاتِ تماس ذخیره شد.' AS Message, @ContactID AS ContactID;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+        SELECT 0 AS Success, N'خطا در ذخیره: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+

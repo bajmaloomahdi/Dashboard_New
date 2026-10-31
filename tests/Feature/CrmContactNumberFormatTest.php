@@ -9,7 +9,8 @@ use Tests\TestCase;
 
 /**
  * شماره‌ها (پچ‌های 091 و 092): فقط رقمِ لاتین، بدونِ هیچ نویسهٔ دیگری (فاصله، خط‌تیره، +98، پرانتز، ارقامِ فارسی).
- * موبایل = ۱۱ رقم با ۰۹؛ تلفن/فکس = ۱۱ رقم با پیش‌شمارهٔ ۰… یا ۸ رقم بدونِ پیش‌شماره؛ بقیهٔ نوع‌ها بدونِ کنترل.
+ * موبایل = ۱۱ رقم با ۰۹؛ تلفن/فکس (پچِ ۱۳۳) = دقیقاً ۳ رقم پیش‌شماره (0 + غیرِصفر + رقم) و ۸ رقم شماره (شروع با غیرِصفر)؛
+ * بقیهٔ نوع‌ها بدونِ کنترل.
  */
 class CrmContactNumberFormatTest extends TestCase
 {
@@ -92,12 +93,24 @@ class CrmContactNumberFormatTest extends TestCase
         }
     }
 
-    public function test_landline_and_fax_accept_plain_11_digits_with_area_code_or_8_digits(): void
+    public function test_landline_and_fax_accept_3_digit_area_code_plus_8_digits(): void
     {
         $this->save('تلفن', '02155955160')->assertOk()->assertJson(['success' => true]);
-        $this->save('تلفن', '22334455')->assertOk()->assertJson(['success' => true]);
+        $this->save('تلفن', '03132334455')->assertOk()->assertJson(['success' => true]);
         $this->save('فکس', '02112345678')->assertOk()->assertJson(['success' => true]);
-        $this->save('فکس', '88776655')->assertOk()->assertJson(['success' => true]);
+        $this->save('فکس', '04488776655')->assertOk()->assertJson(['success' => true]);
+    }
+
+    /** پچِ ۱۳۳: بدونِ پیش‌شماره، پیش‌شمارهٔ 00 (بین‌المللی) یا شمارهٔ ۸ رقمیِ شروع‌شده با ۰ پذیرفته نمی‌شود */
+    public function test_landline_and_fax_require_area_code_and_valid_local_number(): void
+    {
+        foreach (['تلفن', 'فکس'] as $type) {
+            foreach (['22334455', '88776655', '00155955160', '02105955160', '20155955160'] as $bad) {
+                $res = $this->save($type, $bad);
+                $res->assertJson(['success' => false]);
+                $this->assertStringContainsString('باید ۳ رقم پیش‌شماره (مثلاً 021) و ۸ رقم شماره', (string) $res->json('message'), $bad);
+            }
+        }
     }
 
     public function test_landline_and_fax_with_non_digit_characters_are_rejected(): void
@@ -117,7 +130,7 @@ class CrmContactNumberFormatTest extends TestCase
             foreach (['021123456', '0211234567890', '1234567', '0221234', '12345678901'] as $bad) {
                 $res = $this->save($type, $bad);
                 $res->assertJson(['success' => false]);
-                $this->assertStringContainsString('شمارهٔ ' . $type . ' باید ۱۱ رقم', (string) $res->json('message'), $bad);
+                $this->assertStringContainsString('شمارهٔ ' . $type . ' باید ۳ رقم پیش‌شماره', (string) $res->json('message'), $bad);
             }
         }
     }

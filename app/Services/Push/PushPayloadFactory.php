@@ -38,11 +38,15 @@ class PushPayloadFactory
     /**
      * @param  object|null  $broadcast  برایِ BROADCAST: {Title, Body}
      * @param  array|null  $reminder  برایِ REMINDER: خروجیِ ReminderContent::for (null = متنِ عمومی)
+     * @param  string|null  $messageNumber  برایِ MESSAGE/TASK: شمارهٔ نامه (مثلِ TSK-1405-000050) — در عنوان؛ موضوع همچنان نمی‌آید
      */
-    public function make(object $outbox, ?object $broadcast = null, ?array $reminder = null): string
+    public function make(object $outbox, ?object $broadcast = null, ?array $reminder = null, ?string $messageNumber = null): string
     {
         $kind = (string) $outbox->Kind;
         $title = self::TITLE;
+        if (in_array($kind, ['MESSAGE', 'TASK'], true) && $messageNumber !== null && trim($messageNumber) !== '') {
+            $title = ($kind === 'TASK' ? 'وظیفهٔ ' : 'پیامِ ') . mb_substr(trim($messageNumber), 0, 40);
+        }
         $body = self::BODIES[$kind] ?? self::BODIES['MESSAGE'];
         if ($kind === 'INVITE' && str_starts_with((string) $outbox->Tag, 'invu-')) {
             $body = self::BODIES['INVITE_UPDATE'];

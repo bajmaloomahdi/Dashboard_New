@@ -154,6 +154,19 @@ class PushStore
         return DB::selectOne('EXEC sp_GetReminderById @ReminderID = ?, @UserID = ?', [$reminderId, $userId]) ?: null;
     }
 
+    /** شمارهٔ نامه/وظیفه برایِ عنوانِ Push — فقط اگر همین کاربر اعلانی از این نامه دارد (طرفِ نامه است) */
+    public function messageNumber(int $messageId, int $userId): ?string
+    {
+        $row = DB::selectOne(
+            'SELECT M.MessageNumber FROM dbo.Messages M
+             WHERE M.MessageID = ? AND EXISTS (SELECT 1 FROM dbo.UserNotifications UN WHERE UN.MessageID = M.MessageID AND UN.UserID = ?)',
+            [$messageId, $userId],
+        );
+        $number = trim((string) ($row->MessageNumber ?? ''));
+
+        return $number !== '' ? $number : null;
+    }
+
     /** @param  array<int|string>  $ids */
     private static function idList(array $ids): ?string
     {

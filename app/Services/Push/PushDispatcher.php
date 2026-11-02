@@ -111,7 +111,12 @@ class PushDispatcher
             $r = $this->store->reminder((int) $row->SourceID, (int) $row->UserID);
             $reminder = $r ? ReminderContent::for($r, (int) $row->UserID) : null;
         }
-        $payload = $this->payloads->make($row, $broadcast, $reminder);
+        // نامه/وظیفه (اعلانِ عادی یا تعویق‌شده): شمارهٔ نامه در عنوان — مسیرِ /messages/{id} را خودِ sp_Push_Enqueue ساخته است
+        $messageNumber = null;
+        if (in_array((string) $row->Kind, ['MESSAGE', 'TASK'], true) && preg_match('#^/messages/(\d+)$#', (string) $row->TargetUrl, $m)) {
+            $messageNumber = $this->store->messageNumber((int) $m[1], (int) $row->UserID);
+        }
+        $payload = $this->payloads->make($row, $broadcast, $reminder, $messageNumber);
         $options = $this->payloads->options($row, $check->ExpiresInSeconds);
         $retry = false;
         $retryAfter = null;

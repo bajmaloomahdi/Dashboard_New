@@ -34,6 +34,17 @@ interface ProjectAttachment {
     CreateUserName: string | null;
 }
 
+/** یک ردیفِ فهرستِ زمانی: نظر یا ضمیمه */
+type TimelineItem =
+    | { kind: 'comment'; key: string; at: number; id: number; comment: ProjectComment }
+    | { kind: 'file'; key: string; at: number; id: number; file: ProjectAttachment };
+
+/** «2026-10-28 10:46:00.000» → میلی‌ثانیه (برایِ مرتب‌سازی) */
+function toTime(v: string): number {
+    const t = Date.parse(String(v || '').replace(' ', 'T'));
+    return Number.isNaN(t) ? 0 : t;
+}
+
 interface ProjectCommentsProps {
     projectId: number;
 }
@@ -131,6 +142,13 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
         }
     };
 
+    // نظرها و ضمیمه‌ها در یک فهرستِ زمانی: قدیمی‌ترین بالا، تازه‌ترین پایین (کنارِ کادرِ ثبت)؛
+    // در زمانِ یکسان (نظر و ضمیمه با هم ثبت شده‌اند) اول نظر، بعد ضمیمه‌هایش
+    const timeline: TimelineItem[] = [
+        ...comments.map((c) => ({ kind: 'comment' as const, key: `c-${c.ProjectCommentID}`, at: toTime(c.CreateDate), id: Number(c.ProjectCommentID), comment: c })),
+        ...attachments.map((a) => ({ kind: 'file' as const, key: `f-${a.ProjectAttachmentID}`, at: toTime(a.CreateDate), id: Number(a.ProjectAttachmentID), file: a })),
+    ].sort((x, y) => x.at - y.at || (x.kind === y.kind ? 0 : x.kind === 'comment' ? -1 : 1) || x.id - y.id);
+
     const hasComment = text.trim() !== '';
     const hasFiles = files.length > 0;
     const submitLabel = hasFiles && !hasComment
@@ -141,75 +159,64 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
 
     return (
         <>
-            <Card style={STYLES.card} title={<><CommentOutlined /> نظرات و ضمیمه‌های پروژه ({comments.length})</>}>
+            <Card
+                style={STYLES.card}
+                title={
+                    <>
+                        <CommentOutlined /> نظرات و ضمیمه‌های پروژه ({comments.length} نظر، {attachments.length} ضمیمه)
+                    </>
+                }
+            >
                 <List
                     loading={loading}
-                    dataSource={comments}
-                    locale={{ emptyText: <Empty description="هنوز نظری ثبت نشده است" /> }}
-                    renderItem={(c) => (
-                        <List.Item style={{ border: 'none', padding: '6px 0' }}>
-                            <div className="project-comment-bubble">
-                                <Avatar
-                                    icon={<UserOutlined />}
-                                    style={{ background: THEME.primaryGradient, flexShrink: 0 }}
-                                    size={38}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                                        <Text strong style={{ color: THEME.textPrimary }}>{c.FullName}</Text>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            {gregorianToJalaliDateTimeDisplay(c.CreateDate)}
-                                        </Text>
+                    dataSource={timeline}
+                    rowKey="key"
+                    locale={{ emptyText: <Empty description="هنوز نظر یا ضمیمه‌ای ثبت نشده است" /> }}
+                    renderItem={(item) =>
+                        item.kind === 'comment' ? (
+                            <List.Item style={{ border: 'none', padding: '6px 0' }}>
+                                <div className="project-comment-bubble">
+                                    <Avatar icon={<UserOutlined />} style={{ background: THEME.primaryGradient, flexShrink: 0 }} size={38} />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                                            <Text strong style={{ color: THEME.textPrimary }}>{item.comment.FullName}</Text>
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                {gregorianToJalaliDateTimeDisplay(item.comment.CreateDate)}
+                                            </Text>
+                                        </div>
+                                        <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: THEME.textPrimary }}>{item.comment.Comment}</Paragraph>
                                     </div>
-                                    <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap', color: THEME.textPrimary }}>
-                                        {c.Comment}
-                                    </Paragraph>
                                 </div>
-                            </div>
-                        </List.Item>
-                    )}
-                />
-
-                {attachments.length > 0 && (
-                    <>
-                        <div style={{ borderTop: `1px dashed ${THEME.borderLight}`, margin: '12px 0' }} />
-                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                            <PaperClipOutlined /> ضمیمه‌های پروژه ({attachments.length})
-                        </Text>
-                        <List
-                            dataSource={attachments}
-                            renderItem={(a) => (
-                                <List.Item style={{ border: 'none', padding: 0 }}>
-                                    <a
-                                        href={`/projects/${projectId}/attachments/${a.ProjectAttachmentID}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ width: '100%', padding: '8px 6px', borderRadius: 8, display: 'block', color: 'inherit' }}
-                                        className="project-attachment-row"
-                                    >
-                                        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                                            <Space size={8}>
-                                                <FileOutlined style={{ color: THEME.primary }} />
-                                                <div>
-                                                    <div>
-                                                        <Text>{a.FileName}</Text>
-                                                        <Text type="secondary" style={{ fontSize: 12, marginRight: 6 }}>
-                                                            ({formatFileSize(a.FileSize)})
-                                                        </Text>
-                                                    </div>
-                                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                                        {a.CreateUserName || '—'} — {gregorianToJalaliDateTimeDisplay(a.CreateDate)}
-                                                    </Text>
-                                                </div>
-                                            </Space>
-                                            <EyeOutlined style={{ color: THEME.info }} />
+                            </List.Item>
+                        ) : (
+                            <List.Item style={{ border: 'none', padding: '6px 0' }}>
+                                <a
+                                    href={`/projects/${projectId}/attachments/${item.file.ProjectAttachmentID}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="project-comment-bubble project-attachment-bubble"
+                                    style={{ color: 'inherit' }}
+                                >
+                                    <Avatar icon={<PaperClipOutlined />} style={{ background: THEME.bgHover, color: THEME.primary, flexShrink: 0 }} size={38} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                                            <Text strong style={{ color: THEME.textPrimary }}>{item.file.CreateUserName || '—'}</Text>
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                {gregorianToJalaliDateTimeDisplay(item.file.CreateDate)}
+                                            </Text>
+                                        </div>
+                                        <Space size={6} style={{ maxWidth: '100%' }}>
+                                            <FileOutlined style={{ color: THEME.primary }} />
+                                            <Text ellipsis style={{ maxWidth: 420 }}>{item.file.FileName}</Text>
+                                            <Text type="secondary" style={{ fontSize: 12 }}>({formatFileSize(item.file.FileSize)})</Text>
                                         </Space>
-                                    </a>
-                                </List.Item>
-                            )}
-                        />
-                    </>
-                )}
+                                    </div>
+                                    <EyeOutlined style={{ color: THEME.info, alignSelf: 'center' }} />
+                                </a>
+                            </List.Item>
+                        )
+                    }
+                />
 
                 <div style={{ borderTop: `1px solid ${THEME.borderLight}`, marginTop: 12, paddingTop: 12 }}>
                     <Input.TextArea
@@ -244,9 +251,6 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
             />
 
             <style>{`
-                .project-attachment-row:hover {
-                    background: ${THEME.bgHover};
-                }
                 .project-comment-bubble {
                     display: flex;
                     align-items: flex-start;
@@ -257,6 +261,10 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
                     border-radius: 12px;
                     padding: 12px 14px;
                     transition: box-shadow 0.15s ease, border-color 0.15s ease;
+                }
+                .project-attachment-bubble {
+                    border-style: dashed;
+                    text-decoration: none;
                 }
                 .project-comment-bubble:hover {
                     box-shadow: 0 2px 8px rgba(0,0,0,0.06);

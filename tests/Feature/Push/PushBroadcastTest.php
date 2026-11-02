@@ -267,7 +267,7 @@ class PushBroadcastTest extends PushTestCase
         $kinds = collect($this->fake->sentTo($endpoint))->pluck('payload.kind')->sort()->values()->all();
         $this->assertSame(['BROADCAST', 'MESSAGE'], $kinds);
         $message = collect($this->fake->sentTo($endpoint))->firstWhere('payload.kind', 'MESSAGE');
-        $this->assertSame('راگا ۳۶۰', $message['payload']['title']);
+        $this->assertStringStartsWith('پیامِ ', $message['payload']['title'], 'فقط شمارهٔ نامه، نه موضوع');
         $this->assertStringNotContainsString('اطلاعیه', $message['rawPayload']);
     }
 

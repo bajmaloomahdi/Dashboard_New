@@ -154,7 +154,7 @@ interface TaskUnit {
 }
 
 export default function MessageCreate() {
-    const { messageTypes, priorities, targets, taskUnits, flash } = usePage().props as any;
+    const { messageTypes, priorities, targets, taskUnits, flash, auth } = usePage().props as any;
 
     const [form] = Form.useForm();
     const [fileList, setFileList] = useState<any[]>([]);
@@ -459,11 +459,16 @@ export default function MessageCreate() {
         ),
     }));
 
-    const unitOptions = (taskUnits || []).map((t: TaskUnit) => ({
-        value: t.UnitID,
-        label: `${t.UnitName} (${t.ManagerName || 'بدون مدیر'})`,
-        disabled: !t.ManagerUserID,
-    }));
+    // وظیفه به مدیرِ هر واحد (پچِ ۱۳۴)؛ واحدی که مدیرش خودِ فرستنده است انتخاب‌شدنی نیست (وظیفه به خود ارسال نمی‌شود)
+    const selfId = Number(auth?.user?.UserID) || null;
+    const unitOptions = (taskUnits || []).map((t: TaskUnit) => {
+        const isSelf = !!t.ManagerUserID && Number(t.ManagerUserID) === selfId;
+        return {
+            value: t.UnitID,
+            label: `${t.UnitName} (${t.ManagerName || 'بدون مدیر'}${isSelf ? ' — خودتان' : ''})`,
+            disabled: !t.ManagerUserID || isSelf,
+        };
+    });
 
     const handleUnitChange = (unitId: number) => {
         const unit = (taskUnits || []).find((t: TaskUnit) => t.UnitID === unitId);

@@ -473,8 +473,9 @@ export default function ReminderWatcher() {
                 notifApi.info({
                     key: `message-${n.UserNotificationID}`,
                     icon: <MailOutlined style={{ color: '#667eea' }} />,
-                    message: `${n.MessageTypeName || 'نامه'}: ${n.Subject || 'بدونِ موضوع'}`,
-                    description: `${n.MessageNumber ? `شمارهٔ ${n.MessageNumber} — ` : ''}مورد تازه یا تغییری (توضیح، وضعیت، ارجاع یا رونوشت) ثبت شد.`,
+                    // شمارهٔ نامه/وظیفه در عنوانِ اعلان (مثلاً «وظیفه TSK-1405-000050»)
+                    message: `${n.MessageTypeName || 'نامه'}${n.MessageNumber ? ` ${n.MessageNumber}` : ''}`,
+                    description: `«${n.Subject || 'بدونِ موضوع'}» — مورد تازه یا تغییری (توضیح، وضعیت، ارجاع یا رونوشت) ثبت شد.`,
                     duration: NOTIFY_DURATION_SECONDS,
                     actions: noticeActions(
                         `message-${n.UserNotificationID}`,

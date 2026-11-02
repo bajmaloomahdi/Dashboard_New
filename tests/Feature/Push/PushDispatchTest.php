@@ -250,6 +250,32 @@ class PushDispatchTest extends PushTestCase
         $this->assertCount(2, $this->fake->sentTo($endpoint));
     }
 
+    /** شمارهٔ نامه/وظیفه در عنوانِ Push (موضوع همچنان رویِ صفحهٔ قفل نمی‌آید) */
+    public function test_message_and_task_push_titles_show_the_message_number(): void
+    {
+        $user = $this->createUserWithoutRoles();
+        $endpoint = $this->subscribe($user);
+        $messageId = $this->sendMessage([$user]);
+        $this->dispatch();
+        $msg = DB::table('Messages')->where('MessageID', $messageId)->first(['MessageNumber', 'Subject']);
+        $p = $this->fake->sentTo($endpoint)[0]['payload'];
+        $this->assertSame(['MESSAGE', 'پیامِ ' . $msg->MessageNumber], [$p['kind'], $p['title']]);
+        $this->assertStringNotContainsString($msg->Subject, $p['title'] . $p['body']);
+
+        // وظیفه به مدیرِ واحد (کاربرِ ۴) — عنوان «وظیفهٔ TSK-…»
+        $managerEndpoint = $this->subscribe(4);
+        $subject = 'وظیفهٔ Push ' . bin2hex(random_bytes(3));
+        $this->actingAs(\App\Models\User::find(self::USER_SENDER))->post('/messages', [
+            'MessageTypeID' => (int) DB::table('MessageTypes')->where('MessageTypeName', 'وظیفه')->value('MessageTypeID'),
+            'msgPriorityID' => 1, 'Subject' => $subject, 'MessageText' => 'متن', 'RecipientType' => 1, 'RecipientUserIDs' => [4],
+        ])->assertSessionHasNoErrors();
+        $taskNumber = DB::table('Messages')->where('Subject', $subject)->value('MessageNumber');
+        $this->dispatch();
+        $task = collect($this->fake->sentTo($managerEndpoint))->firstWhere('payload.kind', 'TASK');
+        $this->assertNotNull($task);
+        $this->assertSame('وظیفهٔ ' . $taskNumber, $task['payload']['title']);
+    }
+
     /** پچِ ۱۳۰: توضیح رویِ رویداد → Pushِ CALEVENT برایِ شرکت‌کننده (نه نویسنده) */
     public function test_event_comment_is_pushed_to_participants(): void
     {
@@ -301,7 +327,7 @@ class PushDispatchTest extends PushTestCase
         $this->dispatch();
 
         $sent = $this->fake->sent[0];
-        $this->assertSame('راگا ۳۶۰', $sent['payload']['title']);
+        $this->assertStringStartsWith('پیامِ ', $sent['payload']['title']); // فقط شمارهٔ نامه
         $this->assertStringContainsString('کارتابل', $sent['payload']['body']);
         $this->assertStringNotContainsString('Push آزمون', $sent['rawPayload']); // موضوع/متنِ پیام در اعلان نیست
         $this->assertStringNotContainsString('محرمانه', $sent['rawPayload']);

@@ -61,6 +61,8 @@ class CrmPersonController extends CrmApiController
             'relations' => $this->parties->listRelationsForPerson($personId),
             // همهٔ تعاملاتِ این مخاطب: مستقیم (بدونِ طرف‌حساب) و تعاملاتِ طرف‌حساب‌ها که این مخاطب در آن‌ها انتخاب شده
             'interactions' => $this->parties->listInteractions(null, $personId),
+            // پچِ ۱۳۶ — تبِ «پروژه‌ها»: از راهِ طرف‌حساب‌هایِ این فرد یا عضویتِ کاربرِ متصل؛ فقط پروژه‌هایِ قابلِ دیدن + تعدادِ بقیه
+            'personProjects' => $this->parties->listPersonProjects($personId, $this->actorId()),
             'interactionTypes' => $this->masterData->listInteractionTypes(null, true),
             'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))
                 ->map(fn ($u) => ['UserID' => (int) $u->UserID, 'FullName' => $u->FullName])->values()->all(),

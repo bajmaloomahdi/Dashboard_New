@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Tag, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined } from '@ant-design/icons';
+import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined, ProjectOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -22,6 +22,7 @@ import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import { CooperationEndedAction } from '../../../Components/Crm/CooperationEnded';
 import CrmLinkedUserAction from '../../../Components/Crm/CrmLinkedUser';
 import PartySupplementaryInfoPanel, { PartySupplementaryInfo, OwnershipTypeOption } from './PartySupplementaryInfoPanel';
+import PartyProjectsPanel, { PartyProject } from './PartyProjectsPanel';
 
 const { Text } = Typography;
 
@@ -55,6 +56,8 @@ export default function CrmPartyShow() {
         partyImages: { PartyImageID: number; PartyID: number; ImageMimeType: string; Description: string | null; SortOrder: number; IsActive: boolean | number | string; Date_InsertFirst: string; CreatedByName: string | null; ImageUrl: string }[];
         partyAttachments?: PartyAttachment[];
         supplementaryInfo: PartySupplementaryInfo | null;
+        /** پچِ ۱۳۵ — پروژه‌هایی که این طرف‌حساب مالک یا پیمانکارشان است (فقط قابلِ دیدن برایِ کاربر) */
+        partyProjects?: { items: PartyProject[]; hiddenCount: number };
         ownershipTypes: OwnershipTypeOption[];
         users: { UserID: number; FullName: string }[];
         addressTitles: any[];
@@ -73,13 +76,13 @@ export default function CrmPartyShow() {
     };
 
     const {
-        party: currentParty, partyRoles, partyPositions, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, partyAttachments, supplementaryInfo, ownershipTypes, users, addressTitles, provinces, contactTypes,
+        party: currentParty, partyRoles, partyPositions, brandCategories, addresses, contacts, relations, classifications, interactions, interactionTypes, partyImages, partyAttachments, supplementaryInfo, partyProjects, ownershipTypes, users, addressTitles, provinces, contactTypes,
         positions, contactRoles, titles, departments, partyTypes, activities, canManage, canDelete = false, neshanMapKey, neshanSearchEnabled,
     } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments'>('classifications');
+    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>('classifications');
 
     const isActive = toBool(currentParty.IsActive);
 
@@ -91,6 +94,7 @@ export default function CrmPartyShow() {
         { key: 'classifications' as const, label: 'دسته‌بندی‌ها', icon: <ApartmentOutlined />, count: (classifications || []).length },
         { key: 'relations' as const, label: 'افراد مرتبط', icon: <TeamOutlined />, count: (relations || []).length },
         { key: 'interactions' as const, label: 'تعاملات', icon: <CommentOutlined />, count: (interactions || []).length },
+        { key: 'projects' as const, label: 'پروژه‌ها', icon: <ProjectOutlined />, count: (partyProjects?.items || []).length },
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'brands' as const, label: 'برندها', icon: <TagOutlined />, count: (brandCategories || []).filter((r) => toBool(r.IsActive)).length },
@@ -251,6 +255,12 @@ export default function CrmPartyShow() {
                         canManage={canManage}
                         canDelete={canDelete}
                     />
+                </Card>
+            )}
+
+            {activeTab === 'projects' && (
+                <Card style={STYLES.card}>
+                    <PartyProjectsPanel items={partyProjects?.items || []} hiddenCount={Number(partyProjects?.hiddenCount) || 0} />
                 </Card>
             )}
 

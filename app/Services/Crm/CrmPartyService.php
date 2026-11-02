@@ -513,6 +513,31 @@ class CrmPartyService
         return $this->store->getProjectsForParty($partyId);
     }
 
+    /**
+     * تبِ «پروژه‌ها»ی طرف‌حساب: فقط پروژه‌هایی که کاربر اجازهٔ دیدنشان را دارد (سازنده یا عضو — همان قاعدهٔ فهرستِ پروژه‌ها)؛
+     * از بقیه فقط تعداد (بدونِ عنوان یا کد).
+     *
+     * @return array{items: array, hiddenCount: int}
+     */
+    public function listPartyProjects(int $partyId, int $userId): array
+    {
+        return self::visibleProjects($this->store->getPartyProjects($partyId, $userId));
+    }
+
+    /** تبِ «پروژه‌ها»ی فردِ مرتبط (پچِ ۱۳۶) — همان قاعدهٔ دیدن؛ از بقیه فقط تعداد */
+    public function listPersonProjects(int $personId, int $userId): array
+    {
+        return self::visibleProjects($this->store->getPersonProjects($personId, $userId));
+    }
+
+    /** @return array{items: array, hiddenCount: int} */
+    private static function visibleProjects(array $rows): array
+    {
+        $visible = array_values(array_filter($rows, fn ($r) => (int) $r->CanView === 1));
+
+        return ['items' => $visible, 'hiddenCount' => count($rows) - count($visible)];
+    }
+
     public function setInteractionStatus(int $interactionId, string $status, int $userId): object
     {
         $status = strtoupper(trim($status));

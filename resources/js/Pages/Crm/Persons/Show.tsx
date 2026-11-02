@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined, MessageOutlined } from '@ant-design/icons';
+import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined, MessageOutlined, ProjectOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -14,6 +14,7 @@ import AddressesPanel from '../Parties/AddressesPanel';
 import ContactsPanel from '../Parties/ContactsPanel';
 import RelatedPartiesPanel from './RelatedPartiesPanel';
 import InteractionsPanel from '../Parties/InteractionsPanel';
+import PartyProjectsPanel, { PartyProject } from '../Parties/PartyProjectsPanel';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import { CooperationEndedAction } from '../../../Components/Crm/CooperationEnded';
 import CrmLinkedUserAction from '../../../Components/Crm/CrmLinkedUser';
@@ -41,6 +42,8 @@ export default function CrmPersonShow() {
         addresses: any[];
         relations: any[];
         interactions: any[];
+        /** پچِ ۱۳۶ — پروژه‌هایِ مرتبط با این فرد (فقط قابلِ دیدن برایِ کاربر) */
+        personProjects?: { items: PartyProject[]; hiddenCount: number };
         interactionTypes: any[];
         users: { UserID: number; FullName: string }[];
         addressTitles: any[];
@@ -51,11 +54,11 @@ export default function CrmPersonShow() {
         canDelete?: boolean;
     };
 
-    const { person: currentPerson, contacts, addresses, relations, interactions, interactionTypes, users, addressTitles, provinces, contactTypes, titles, canManage, canDelete = false } = props;
+    const { person: currentPerson, contacts, addresses, relations, interactions, personProjects, interactionTypes, users, addressTitles, provinces, contactTypes, titles, canManage, canDelete = false } = props;
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions'>('contacts');
+    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>('contacts');
 
     // طرف‌حساب‌هایی که تعاملِ جدیدِ این مخاطب می‌تواند به آن‌ها مربوط شود (فقط رابطه‌هایِ فعال)
     const personParties = (relations || [])
@@ -69,6 +72,7 @@ export default function CrmPersonShow() {
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'relations' as const, label: 'مخاطبین / طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
         { key: 'interactions' as const, label: 'تعاملات', icon: <MessageOutlined />, count: (interactions || []).length },
+        { key: 'projects' as const, label: 'پروژه‌ها', icon: <ProjectOutlined />, count: (personProjects?.items || []).length },
     ];
 
     const handleEditSuccess = (message: string) => {
@@ -188,6 +192,12 @@ export default function CrmPersonShow() {
                         canManage={canManage}
                         canDelete={canDelete}
                     />
+                </Card>
+            )}
+
+            {activeTab === 'projects' && (
+                <Card style={STYLES.card}>
+                    <PartyProjectsPanel mode="person" items={personProjects?.items || []} hiddenCount={Number(personProjects?.hiddenCount) || 0} />
                 </Card>
             )}
 

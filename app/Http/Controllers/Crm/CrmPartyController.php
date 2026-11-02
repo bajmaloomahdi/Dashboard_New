@@ -88,6 +88,8 @@ class CrmPartyController extends CrmApiController
             'partyImages' => $this->parties->listPartyImages($partyId),
             'partyAttachments' => $this->parties->listPartyAttachments($partyId),
             'supplementaryInfo' => $this->parties->getSupplementaryInfo($partyId),
+            // پچِ ۱۳۵ — تبِ «پروژه‌ها»: مالک یا پیمانکار؛ فقط پروژه‌هایِ قابلِ دیدن برایِ همین کاربر + تعدادِ بقیه
+            'partyProjects' => $this->parties->listPartyProjects($partyId, $this->actorId()),
             // فقط نوع‌هایِ فعال برایِ انتخابِ جدید؛ نوعِ غیرفعالی که همین حالا روی طرف‌حساب ثبت است از خودِ supplementaryInfo می‌آید
             'ownershipTypes' => $this->masterData->listOwnershipTypes(null, true),
             'users' => collect(DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'))

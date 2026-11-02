@@ -453,6 +453,18 @@ class CrmStore
         return DB::select('EXEC dbo.sp_GetProjectsForParty @PartyID = ?', [$partyId]);
     }
 
+    /** پچِ ۱۳۵ — همهٔ پروژه‌هایِ مرتبط (مالک یا پیمانکارِ فعال) با CanView برایِ کاربرِ جاری */
+    public function getPartyProjects(int $partyId, int $userId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPartyProjects @PartyID = ?, @UserID = ?', [$partyId, $userId]);
+    }
+
+    /** پچِ ۱۳۶ — پروژه‌هایِ مرتبط با فرد (از راهِ طرف‌حساب‌هایش یا عضویتِ کاربرِ متصل) با CanView */
+    public function getPersonProjects(int $personId, int $userId): array
+    {
+        return DB::select('EXEC dbo.sp_Crm_GetPersonProjects @PersonID = ?, @UserID = ?', [$personId, $userId]);
+    }
+
     public function setInteractionStatus(int $interactionId, string $status, int $userId): object
     {
         return $this->write('EXEC dbo.sp_Crm_SetInteractionStatus @InteractionID = ?, @Status = ?, @UserID = ?', [$interactionId, $status, $userId]);

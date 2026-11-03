@@ -39,7 +39,8 @@ class PushReminderTest extends PushTestCase
         $this->assertSame('/calendar', $sent[0]['payload']['url']);
         $this->assertSame('high', $sent[0]['options']['urgency']);
         // موضوعِ یادآوری (فقط برایِ صاحبش) در عنوانِ اعلان؛ یادآوریِ مستقل متن ندارد → متنِ عمومی
-        $this->assertSame(['یادآوری: یادآوریِ محرمانه', 'یک یادآوریِ سررسیدشده دارید.'], [$sent[0]['payload']['title'], $sent[0]['payload']['body']]);
+        $this->assertBrandTitle($sent[0]['payload']);
+        $this->assertSame(['یادآوری: یادآوریِ محرمانه', 'یک یادآوریِ سررسیدشده دارید.'], [$this->headline($sent[0]['payload']), $this->text($sent[0]['payload'])]);
         $this->assertSame(0, (int) DB::selectOne('SELECT IsSent FROM dbo.Reminders WHERE ReminderID = ?', [$id])->IsSent);
     }
 

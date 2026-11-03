@@ -3,6 +3,7 @@
 namespace App\Services\Push;
 
 use App\Services\Calendar\ReminderContent;
+use Illuminate\Support\Facades\DB;
 
 /**
  * محتوایِ اعلان. عمداً عمومی و بدونِ اطلاعاتِ حساس است (بدونِ موضوع، فرستنده یا عنوانِ یادآوری)
@@ -10,10 +11,16 @@ use App\Services\Calendar\ReminderContent;
  * استثنا: اعلانِ عمومی (BROADCAST) عنوان/متنی است که مدیر برایِ همه نوشته و همان نمایش داده می‌شود.
  * استثنا: یادآوری موضوع و متنِ کوتاه‌شدهٔ خودِ یادآوری را (فقط برایِ صاحبش) نشان می‌دهد — با PUSH_REMINDER_DETAILS=false
  * دوباره عمومی می‌شود؛ رویدادِ خصوصی همیشه عمومی می‌ماند.
+ *
+ * عنوانِ همهٔ اعلان‌ها «راگا ۳۶۰ — نامِ شرکت» است (نامِ نرم‌افزار، بعد شرکتِ استفاده‌کننده از sp_GetCompany)؛
+ * عنوانِ خاصِ هر اعلان (مثلِ «وظیفهٔ TSK-…» یا «یادآوری: …») خطِ اولِ متن می‌شود.
  */
 class PushPayloadFactory
 {
     private const TITLE = 'راگا ۳۶۰';
+
+    /** نامِ شرکت در همین فرایند یک‌بار خوانده می‌شود (هر اجرایِ زمان‌بند چند اعلان می‌سازد) */
+    private ?string $brandTitle = null;
 
     private const BODIES = [
         'MESSAGE' => 'پیام یا تغییرِ تازه‌ای در کارتابلِ شما هست.',
@@ -43,9 +50,9 @@ class PushPayloadFactory
     public function make(object $outbox, ?object $broadcast = null, ?array $reminder = null, ?string $messageNumber = null): string
     {
         $kind = (string) $outbox->Kind;
-        $title = self::TITLE;
+        $headline = null; // عنوانِ خاصِ این اعلان — خطِ اولِ متن
         if (in_array($kind, ['MESSAGE', 'TASK'], true) && $messageNumber !== null && trim($messageNumber) !== '') {
-            $title = ($kind === 'TASK' ? 'وظیفهٔ ' : 'پیامِ ') . mb_substr(trim($messageNumber), 0, 40);
+            $headline = ($kind === 'TASK' ? 'وظیفهٔ ' : 'پیامِ ') . mb_substr(trim($messageNumber), 0, 40);
         }
         $body = self::BODIES[$kind] ?? self::BODIES['MESSAGE'];
         if ($kind === 'INVITE' && str_starts_with((string) $outbox->Tag, 'invu-')) {
@@ -59,14 +66,14 @@ class PushPayloadFactory
             if (! $broadcast) {
                 throw new \RuntimeException('محتوایِ اعلانِ عمومی پیدا نشد.');
             }
-            $title = PushBroadcastText::title($broadcast->Title) ?: self::TITLE;
+            $headline = PushBroadcastText::title($broadcast->Title) ?: null;
             $body = PushBroadcastText::body($broadcast->Body);
         }
         if ($kind === 'REMINDER' && $reminder !== null) {
             if ($reminder['isPrivate']) {
                 $body = self::BODIES['REMINDER_PRIVATE']; // رویدادِ خصوصی: عنوان/متن رویِ صفحهٔ قفل نمی‌آید
             } elseif ($reminder['title'] !== '') {
-                $title = 'یادآوری: ' . ReminderContent::truncate($reminder['title'], ReminderContent::TITLE_MAX);
+                $headline = 'یادآوری: ' . ReminderContent::truncate($reminder['title'], ReminderContent::TITLE_MAX);
                 $body = $reminder['description'] !== null
                     ? ReminderContent::truncate($reminder['description'], ReminderContent::BODY_MAX)
                     : ($reminder['startsAt'] !== null ? 'شروع: ' . ReminderContent::jalaliDateTime($reminder['startsAt']) : self::BODIES['REMINDER']);
@@ -82,8 +89,8 @@ class PushPayloadFactory
             'id' => (string) $outbox->PushOutboxID,
             'tag' => (string) $outbox->Tag,
             'kind' => $kind,
-            'title' => $title,
-            'body' => $body,
+            'title' => $this->brandTitle(),
+            'body' => $headline !== null ? $headline . "\n" . $body : $body,
             'url' => $url,
             // پچِ ۱۳۱: شناسهٔ یادآوری برایِ دکمه‌هایِ «… دقیقه بعد» (Service Worker صفحهٔ تقویم را با ?snooze= باز می‌کند)
             ...($kind === 'REMINDER' ? ['rid' => (string) $outbox->SourceID] : []),
@@ -96,6 +103,23 @@ class PushPayloadFactory
         }
 
         return $payload;
+    }
+
+    /** «راگا ۳۶۰ — نامِ شرکت»؛ بدونِ نامِ شرکت (یا خطایِ پایگاه‌داده) فقط «راگا ۳۶۰» */
+    public function brandTitle(): string
+    {
+        if ($this->brandTitle !== null) {
+            return $this->brandTitle;
+        }
+        $name = '';
+        try {
+            $company = DB::select('EXEC sp_GetCompany')[0] ?? null;
+            $name = trim((string) ($company->Name ?? '')) ?: trim((string) ($company->SiteTitle ?? ''));
+        } catch (\Throwable) {
+            $name = '';
+        }
+
+        return $this->brandTitle = $name !== '' ? self::TITLE . ' — ' . mb_substr($name, 0, 60) : self::TITLE;
     }
 
     /** گزینه‌هایِ پروتکل: TTL، اولویت و Topic (یک اعلانِ تحویل‌نشده با Topicِ یکسان جایگزین می‌شود) */

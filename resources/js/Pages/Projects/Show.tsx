@@ -32,12 +32,14 @@ import ProjectContractorInteractionModal from './ProjectContractorInteractionMod
 import ProjectOwnerTab, { ProjectOwner, BrandOption } from './ProjectOwnerTab';
 import ProjectTaskCreateModal from '../../Components/ProjectTaskCreateModal';
 import ProjectComments from '../../Components/ProjectComments';
+import ProjectEventsTab from './ProjectEventsTab';
 import { THEME, STYLES } from '../../theme';
 import { gregorianToJalaliDisplay, gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
 import DueDateBadge from '../../Components/DueDateBadge';
 import { getUserDisplayName } from '../../Utils/userHelpers';
 import { toBool } from '../../Utils/bool';
 import type { ColumnsType } from 'antd/es/table';
+import type { CalendarPermission } from '../../Types';
 
 const { Title, Text } = Typography;
 
@@ -122,7 +124,7 @@ interface InteractionTypeOption {
 }
 
 export default function ProjectShow() {
-    const { project, members, users, msgPriorities, contractors, interactionTypes, owner, allBrands, auth } = usePage().props as unknown as {
+    const { project, members, users, msgPriorities, contractors, interactionTypes, owner, allBrands, auth, calendarPermissions } = usePage().props as unknown as {
         project: Project;
         members: Member[];
         users: UserOption[];
@@ -132,6 +134,8 @@ export default function ProjectShow() {
         owner: ProjectOwner | null;
         allBrands: BrandOption[];
         auth: { user: any };
+        /** پچِ ۱۳۸ — تبِ «رویدادها» */
+        calendarPermissions?: CalendarPermission[];
     };
 
     const [membersModalOpen, setMembersModalOpen] = useState(false);
@@ -141,7 +145,7 @@ export default function ProjectShow() {
     const [taskTargetMember, setTaskTargetMember] = useState<Member | null>(null);
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'owner' | 'members' | 'contractors' | 'tasks' | 'comments'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'owner' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
 
     const activeMembers = (members || []).filter((m) => toBool(m.IsActive));
     const activeContractors = (contractors || []).filter((c) => toBool(c.IsActive));
@@ -319,6 +323,7 @@ export default function ProjectShow() {
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
         { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
+        { key: 'events' as const, label: 'رویدادها', icon: <CalendarOutlined />, count: null },
         { key: 'comments' as const, label: 'نظرات و ضمیمه‌ها', icon: <CommentOutlined />, count: null },
     ];
 
@@ -522,6 +527,9 @@ export default function ProjectShow() {
                 </Card>
             )}
 
+            {activeTab === 'events' && (
+                <ProjectEventsTab projectId={Number(project.ProjectID)} currentUserId={Number(currentUserId)} permissions={calendarPermissions || []} />
+            )}
             {activeTab === 'comments' && <ProjectComments projectId={project.ProjectID} />}
 
             <ProjectMembersModal

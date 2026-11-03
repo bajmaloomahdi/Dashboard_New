@@ -58,7 +58,8 @@ class CalendarReminderContentTest extends PushTestCase
         $this->dispatch();
 
         $p = $this->fake->sentTo($ep)[0]['payload'];
-        $this->assertSame(['یادآوری: جلسهٔ بودجه', 'بررسیِ بودجهٔ سه‌ماههٔ اول', 'REMINDER'], [$p['title'], $p['body'], $p['kind']]);
+        $this->assertBrandTitle($p);
+        $this->assertSame(['یادآوری: جلسهٔ بودجه', 'بررسیِ بودجهٔ سه‌ماههٔ اول', 'REMINDER'], [$this->headline($p), $this->text($p), $p['kind']]);
         $r = collect($this->due($user))->firstWhere('EventID', $eventId);
         $this->assertSame(['جلسهٔ بودجه', 'بررسیِ بودجهٔ سه‌ماههٔ اول'], [$r['Title'], $r['Description']]);
     }
@@ -75,10 +76,10 @@ class CalendarReminderContentTest extends PushTestCase
 
         $sent = $this->fake->sentTo($ep)[0];
         $this->assertLessThanOrEqual(\App\Services\Push\PushPayloadFactory::MAX_BYTES, strlen($sent['rawPayload']));
-        $this->assertSame(mb_strlen('یادآوری: ') + 60, mb_strlen($sent['payload']['title']));
-        $this->assertSame(150, mb_strlen($sent['payload']['body']));
-        $this->assertStringEndsWith('…', $sent['payload']['body']);
-        $this->assertStringNotContainsString("\n", $sent['payload']['body']);
+        $this->assertSame(mb_strlen('یادآوری: ') + 60, mb_strlen($this->headline($sent['payload'])));
+        $this->assertSame(150, mb_strlen($this->text($sent['payload'])));
+        $this->assertStringEndsWith('…', $this->text($sent['payload']));
+        $this->assertStringNotContainsString("\n", $this->text($sent['payload']));
         // متنِ کامل در جزئیاتِ رویداد
         $this->assertSame(trim($desc), $this->actingAs(User::find($user))->getJson("/calendar/events/{$eventId}")->json('event.Description')); // TrimStringsِ Laravel
     }
@@ -92,8 +93,8 @@ class CalendarReminderContentTest extends PushTestCase
         $this->dispatch();
 
         $p = $this->fake->sentTo($ep)[0]['payload'];
-        $this->assertSame('یادآوری: جلسهٔ بودجه', $p['title']);
-        $this->assertMatchesRegularExpression('#^شروع: 14\d\d/\d\d/\d\d ساعت \d\d:\d\d$#u', $p['body']);
+        $this->assertSame('یادآوری: جلسهٔ بودجه', $this->headline($p));
+        $this->assertMatchesRegularExpression('#^شروع: 14\d\d/\d\d/\d\d ساعت \d\d:\d\d$#u', $this->text($p));
         $this->assertNull(collect($this->due($user))->firstWhere('EventID', $eventId)['Description']);
     }
 
@@ -109,7 +110,8 @@ class CalendarReminderContentTest extends PushTestCase
         $this->dispatch();
 
         $reminderPush = collect($this->fake->sentTo($ep))->firstWhere('payload.kind', 'REMINDER');
-        $this->assertSame(['راگا ۳۶۰', 'یادآوریِ یک رویدادِ خصوصی دارید.'], [$reminderPush['payload']['title'], $reminderPush['payload']['body']]);
+        $this->assertBrandTitle($reminderPush['payload']);
+        $this->assertSame('یادآوریِ یک رویدادِ خصوصی دارید.', $reminderPush['payload']['body'], 'بدونِ عنوانِ خاص');
         foreach (['جلسهٔ بودجه', 'بررسیِ بودجه'] as $secret) {
             $this->assertStringNotContainsString($secret, $reminderPush['rawPayload']);
         }
@@ -127,7 +129,8 @@ class CalendarReminderContentTest extends PushTestCase
         $this->dispatch();
 
         $p = $this->fake->sentTo($ep)[0]['payload'];
-        $this->assertSame(['راگا ۳۶۰', 'یک یادآوریِ سررسیدشده دارید.'], [$p['title'], $p['body']]);
+        $this->assertBrandTitle($p);
+        $this->assertSame('یک یادآوریِ سررسیدشده دارید.', $p['body']);
     }
 
     public function test_viewers_without_participation_get_no_reminder_content(): void

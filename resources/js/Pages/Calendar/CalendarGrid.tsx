@@ -52,6 +52,7 @@ interface CalendarGridProps {
 
 const HOUR_HEIGHT = 48; // px
 const NOW_LINE_GAP = 10; // px — فاصلهٔ خطِ «اکنون» تا بالایِ رویدادِ در حالِ اجرا
+const TODAY_COLUMN_WEIGHT = 1.8; // سهمِ عرضِ ستونِ امروز نسبت به روزهایِ دیگرِ هفتهٔ کاری
 const MIN_DURATION_MIN = 15;
 const DRAG_THRESHOLD_PX = 4;
 
@@ -475,7 +476,7 @@ export default function CalendarGrid(props: CalendarGridProps) {
         days = buildWeekDays(referenceDate);
         if (view === 'workweek') days = days.filter((d) => workWeek.days.includes(jalaliWeekIndex(d.date)));
     }
-    return <TimeGridView key={view} days={days} workWeek={workWeek} showOffDays={view === 'week'} {...shared} />;
+    return <TimeGridView key={view} days={days} workWeek={workWeek} {...shared} />;
 }
 
 interface SharedViewProps {
@@ -593,7 +594,6 @@ function MonthView({ referenceDate, events, draggingKey, dragBlockReason, beginD
 function TimeGridView({
     days,
     workWeek,
-    showOffDays,
     events,
     draggingKey,
     dragBlockReason,
@@ -602,7 +602,7 @@ function TimeGridView({
     onSelectSlot,
     onOpenDay,
     isMobile,
-}: SharedViewProps & { days: JalaliCell[]; workWeek: WorkWeekSettings; showOffDays: boolean }) {
+}: SharedViewProps & { days: JalaliCell[]; workWeek: WorkWeekSettings }) {
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const bodyRef = useRef<HTMLDivElement>(null);
     const [now, setNow] = useState(new Date());
@@ -619,7 +619,9 @@ function TimeGridView({
     }, []);
 
     const gutter = isMobile ? 40 : 56;
-    const columns = `${gutter}px repeat(${days.length}, minmax(0, 1fr))`;
+    // ستونِ امروز پهن‌تر و بقیهٔ روزها باریک‌تر (وقتی امروز در همین بازه است)
+    const todayInView = days.length > 1 && days.some((d) => d.isToday);
+    const columns = `${gutter}px ${days.map((d) => (todayInView && d.isToday ? `minmax(0, ${TODAY_COLUMN_WEIGHT}fr)` : 'minmax(0, 1fr)')).join(' ')}`;
     const allDayBars = layoutBars(events, days.map((d) => d.date));
 
     return (
@@ -704,7 +706,6 @@ function TimeGridView({
                 {days.map((day) => {
                     const timedEvents = eventsForDay(events, day.date).filter((ev) => !isAllDay(ev));
                     const laidOut = layoutLanes(timedEvents);
-                    const offDay = showOffDays && !workWeek.days.includes(jalaliWeekIndex(day.date));
                     const base = startOfDay(day.date);
                     const dayEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
 
@@ -712,7 +713,7 @@ function TimeGridView({
                         <div
                             key={day.date.toISOString()}
                             data-cal-daycol={dayKey(day.date)}
-                            className={`cal-timegrid-daycol${offDay ? ' is-offday' : ''}`}
+                            className={`cal-timegrid-daycol${day.isToday ? ' is-today' : ''}`}
                             style={{ height: HOUR_HEIGHT * 24 }}
                             onClick={(e) => {
                                 const minutes = minutesInColumn(e.currentTarget as HTMLDivElement, e.clientY);
@@ -817,7 +818,9 @@ function GridStyles() {
             .cal-chip-icon { font-size: 11px; margin-inline-end: 3px; opacity: 0.9; }
             body.cal-dragging, body.cal-dragging * { cursor: grabbing !important; user-select: none !important; }
 
-            .cal-month-grid { border: 1px solid ${THEME.border}; border-radius: 10px; overflow: hidden; }
+            /* کادرِ تقویم تا پایینِ پنلِ کناری کشیده می‌شود (هم‌ردیف)؛ ردیف‌هایِ ماه و بدنهٔ ساعت‌ها فضایِ باقی‌مانده را پر می‌کنند */
+            .cal-month-grid { border: 1px solid ${THEME.border}; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; flex: 1 1 auto; }
+            .cal-month-week { flex: 1 1 auto; }
             .cal-month-headrow, .cal-month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
             /* نوارِ رویدادِ تمام‌روزِ چندروزه: یک نام رویِ همهٔ روزها؛ لبهٔ صاف یعنی ادامه در هفتهٔ قبل/بعد */
             .cal-bar {
@@ -858,7 +861,7 @@ function GridStyles() {
             .cal-month-more { font-size: 11px; color: ${THEME.primary}; padding: 0 4px; font-weight: 600; }
             .cal-month-more:hover { text-decoration: underline; }
 
-            .cal-timegrid { border: 1px solid ${THEME.border}; border-radius: 10px; overflow: hidden; background: #fff; }
+            .cal-timegrid { border: 1px solid ${THEME.border}; border-radius: 10px; overflow: hidden; background: #fff; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
             .cal-timegrid-header, .cal-timegrid-allday { display: grid; border-bottom: 1px solid ${THEME.borderLight}; }
             .cal-timegrid-gutter { border-inline-start: 1px solid ${THEME.borderLight}; }
             .cal-timegrid-daylabel { text-align: center; padding: 6px 2px; background: #EEEBFB; border-inline-start: 1px solid ${THEME.borderLight}; cursor: pointer; }
@@ -869,11 +872,11 @@ function GridStyles() {
             .cal-timegrid-daynum { font-size: 15px; font-weight: 600; }
             .cal-timegrid-allday-label { font-size: 12px; font-weight: 600; color: #111827; padding: 6px 2px; text-align: center; }
             .cal-timegrid-allday-cell { min-height: 28px; padding: 2px; border-inline-start: 1px solid ${THEME.borderLight}; cursor: pointer; min-width: 0; }
-            .cal-timegrid-body { display: grid; max-height: min(68vh, 720px); overflow-y: auto; overflow-x: hidden; position: relative; }
+            .cal-timegrid-body { display: grid; flex: 1 1 0; min-height: min(74vh, 800px); overflow-y: auto; overflow-x: hidden; position: relative; }
             .cal-timegrid-hours { position: relative; }
             .cal-timegrid-hour-label { font-size: 12px; font-weight: 600; color: #111827; text-align: center; border-top: 1px solid #CBD5E1; }
             .cal-timegrid-daycol { position: relative; border-inline-start: 1px solid #D9DEE5; cursor: pointer; min-width: 0; }
-            .cal-timegrid-daycol.is-offday { background: #FBFBFC; }
+            .cal-timegrid-daycol.is-today { background: #FAFAFF; }
             /* هر ساعت ۴ قسمت: خطِ ساعت پررنگ، نیم‌ساعت خط‌چینِ میانه، ربع‌ها کم‌رنگ */
             .cal-timegrid-hour-row {
                 border-top: 1px solid #CBD5E1; position: relative; box-sizing: border-box;

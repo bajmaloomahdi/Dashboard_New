@@ -49,4 +49,28 @@ class CalendarEventCommentTest extends TestCase
         $this->actingAs(User::find($stranger))->postJson("/calendar/events/{$eventId}/comments", ['Text' => 'x'])->assertForbidden();
         $this->actingAs(User::find($owner))->postJson("/calendar/events/{$eventId}/comments", ['Text' => '   '])->assertStatus(422);
     }
+
+    /** جست‌وجو در «توضیحات»: موضوع + متن + توضیحات با همهٔ کلمه‌ها؛ فقط با دسترسیِ دیدنِ توضیحات و جزئیاتِ همان رویداد */
+    public function test_search_finds_events_by_their_comments_with_access_rules(): void
+    {
+        $owner = $this->user(['CALENDAR_VIEW', 'CALENDAR_CREATE', 'CALENDAR_CREATE_FOR_OTHERS', 'CALENDAR_COMMENT_VIEW', 'CALENDAR_COMMENT_ADD']);
+        $reader = $this->user(['CALENDAR_VIEW', 'CALENDAR_COMMENT_VIEW']);
+        $noPerm = $this->user(['CALENDAR_VIEW']);
+        $stranger = $this->user(['CALENDAR_VIEW', 'CALENDAR_COMMENT_VIEW']);
+        $word = 'واژهٔ' . bin2hex(random_bytes(3));
+        $eventId = (int) $this->actingAs(User::find($owner))->postJson('/calendar/events', [
+            'Title' => 'جلسهٔ بودجه', 'StartDateTime' => '2099-06-01 10:00:00', 'EndDateTime' => '2099-06-01 10:30:00', 'RecurrenceType' => 'NONE',
+            'AttendeeUserIDs' => [$reader, $noPerm],
+        ])->assertOk()->json('eventId');
+        $this->actingAs(User::find($owner))->postJson("/calendar/events/{$eventId}/comments", ['Text' => "پیگیری {$word} با واحدِ مالی"])->assertOk();
+
+        $search = fn (int $u, string $q) => $this->actingAs(User::find($u))->postJson('/calendar/search-comments', ['q' => $q, 'ids' => [$eventId]])->assertOk()->json('ids');
+        $this->assertSame([$eventId], $search($reader, $word), 'کلمهٔ توضیحات');
+        $this->assertSame([$eventId], $search($reader, "بودجه {$word}"), 'کلمه از موضوع + کلمه از توضیحات');
+        $this->assertSame([$eventId], $search($reader, 'واحد مالي'), 'یکسان‌سازیِ «ي» و فاصله');
+        $this->assertSame([], $search($reader, "{$word} ناموجود"), 'همهٔ کلمه‌ها باید باشند');
+        $this->assertSame([], $search($noPerm, $word), 'بدونِ مجوزِ دیدنِ توضیحات');
+        $this->assertSame([], $search($stranger, $word), 'بدونِ دسترسی به جزئیاتِ رویداد');
+        $this->actingAs(User::find($reader))->postJson('/calendar/search-comments', ['q' => $word])->assertStatus(422);
+    }
 }

@@ -96,6 +96,27 @@ abstract class PushTestCase extends TestCase
         return DB::select('SELECT * FROM dbo.PushOutbox WHERE UserID = ? AND (? IS NULL OR SourceType = ?) ORDER BY PushOutboxID', [$userId, $sourceType, $sourceType]);
     }
 
+    /** عنوانِ همهٔ اعلان‌ها «راگا ۳۶۰ — نامِ شرکت» است؛ عنوانِ خاصِ هر اعلان خطِ اولِ متن (null = بدونِ عنوانِ خاص) */
+    protected function headline(array $payload): ?string
+    {
+        $parts = explode("\n", (string) $payload['body'], 2);
+
+        return count($parts) === 2 ? $parts[0] : null;
+    }
+
+    /** متنِ اعلان بدونِ خطِ اول (عنوانِ خاص) */
+    protected function text(array $payload): string
+    {
+        $parts = explode("\n", (string) $payload['body'], 2);
+
+        return count($parts) === 2 ? $parts[1] : $parts[0];
+    }
+
+    protected function assertBrandTitle(array $payload): void
+    {
+        $this->assertStringStartsWith('راگا ۳۶۰', (string) $payload['title'], 'عنوان: نامِ نرم‌افزار، بعد نامِ شرکت');
+    }
+
     /** موعدِ تلاشِ بعدی را به گذشته می‌برد (به‌جایِ صبرکردن) */
     protected function makeDue(): void
     {

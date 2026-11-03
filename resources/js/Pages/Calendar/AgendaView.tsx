@@ -199,7 +199,7 @@ export default function AgendaView({
                 );
             })}
             <style>{`
-                .cal-agenda { position: relative; display: flex; flex-direction: column; gap: 14px; max-height: min(72vh, 760px); overflow-y: auto; padding-inline-end: 2px; }
+                .cal-agenda { position: relative; display: flex; flex-direction: column; gap: 14px; flex: 1 1 0; min-height: min(74vh, 800px); overflow-y: auto; padding-inline-end: 2px; }
                 /* خطِ «اکنون» جدا از رویدادِ زیرش (فاصلهٔ بالا/پایین) تا به آن نچسبد */
                 .cal-agenda-now { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; color: ${THEME.error}; font-size: 12px; font-weight: 700; }
                 .cal-agenda-now::before, .cal-agenda-now::after { content: ''; flex: 1; border-top: 2px solid ${THEME.error}; }
@@ -214,7 +214,7 @@ export default function AgendaView({
                 .cal-agenda-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: ${THEME.textLight}; margin-top: 2px; }
                 .cal-agenda-tags { display: flex; gap: 4px; flex-shrink: 0; }
                 @media (max-width: 767px) {
-                    .cal-agenda { max-height: none; }
+                    .cal-agenda { flex: none; min-height: 0; }
                     .cal-agenda-item { flex-wrap: wrap; gap: 6px 10px; }
                     .cal-agenda-time { width: auto; }
                     .cal-agenda-main { flex-basis: 100%; order: 3; padding-inline-start: 14px; }

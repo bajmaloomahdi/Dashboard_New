@@ -108,7 +108,10 @@ export type CalendarPermission =
     | 'CALENDAR_VIEW_OTHERS'
     // توضیحاتِ رویداد (پچِ ۱۲۹)
     | 'CALENDAR_COMMENT_VIEW'
-    | 'CALENDAR_COMMENT_ADD';
+    | 'CALENDAR_COMMENT_ADD'
+    // ویرایشِ موضوع/متنِ رویداد و متنِ توضیحات (پچِ ۱۳۷)
+    | 'CALENDAR_EDIT_CONTENT'
+    | 'CALENDAR_COMMENT_EDIT';
 
 // Props مشترک تمام صفحات
 export interface PageProps {

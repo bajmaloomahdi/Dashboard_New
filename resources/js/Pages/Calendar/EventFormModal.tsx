@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox } from 'antd';
-import { PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox, ColorPicker, Space, Tooltip, Tag } from 'antd';
+import { BgColorsOutlined, PaperClipOutlined, TagOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import PersianDateInput from '../../Components/PersianDateInput';
 import TimeInput from '../../Components/TimeInput';
@@ -8,8 +8,10 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
 import { WEEKDAY_LABELS_FA, toApiDateTime } from '../../Utils/jalaliCalendar';
 import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
-import { jalaliWeekIndex, parseWeekDays, recurrenceSummary } from './calendarUtils';
+import { getColorNames, jalaliWeekIndex, parseWeekDays, recurrenceSummary, setColorName } from './calendarUtils';
+import { normalizeForSearch } from '../../Utils/persianSearch';
 import EventAttachmentList, { EventAttachment, uploadEventAttachments } from './EventAttachments';
+import EventLinksFields, { EventLink } from './EventLinksFields';
 
 const { TextArea } = Input;
 
@@ -29,12 +31,36 @@ interface EventFormModalProps {
     defaultDate: Date | null;
     /** واحدهایی که کاربر عضوِ مستقیمِ آن‌هاست (CanManageEvents = اجازهٔ رویدادِ واحد) */
     units?: { UnitID: number; UnitName: string; CanManageEvents: boolean | number }[];
+    /** پچِ ۱۳۸ — وصل کردنِ طرف‌حساب/فردِ مرتبط (CRM_VIEW) */
+    canLinkCrm?: boolean;
 }
 
 /** «تقویمِ شخصی» در فیلدِ تقویم (۰ = بدونِ واحد) */
 const PERSONAL_CALENDAR = 0;
 
 const COLOR_PRESETS = ['#1677ff', '#722ed1', '#13a8a8', '#52c41a', '#fa8c16', '#eb2f96', '#f5222d', '#595959'];
+
+/** رنگ‌هایی که کاربر از «پالتِ رنگ» ساخته — به فهرستِ رنگ‌ها افزوده می‌شوند (در همین مرورگر؛ تازه‌ترین اول، حداکثر ۱۶) */
+const CUSTOM_COLORS_KEY = 'raga360.calendar.customColors';
+const MAX_CUSTOM_COLORS = 16;
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
+function loadCustomColors(): string[] {
+    try {
+        const list = JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY) || '[]');
+        return Array.isArray(list) ? list.map((c) => String(c).toLowerCase()).filter((c) => HEX_COLOR.test(c)).slice(0, MAX_CUSTOM_COLORS) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveCustomColors(list: string[]): void {
+    try {
+        localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(list));
+    } catch {
+        /* بی‌اهمیت */
+    }
+}
 const NO_REMINDER = '__none__';
 
 const STATUS_OPTIONS = [
@@ -96,6 +122,10 @@ interface FormValues {
     AttendeeReminders: Record<number, number | string>;
     OrganizationalUnitID: number;
     IsPrivate: boolean;
+    // پچِ ۱۳۸ — ارتباط‌ها
+    LinkedProjectIDs?: number[];
+    LinkedPartyIDs?: number[];
+    LinkedPersonIDs?: number[];
 }
 
 export default function EventFormModal({
@@ -108,7 +138,24 @@ export default function EventFormModal({
     eventId,
     defaultDate,
     units = [],
+    canLinkCrm = false,
 }: EventFormModalProps) {
+    const [links, setLinks] = useState<EventLink[]>([]);
+    // پالتِ رنگ: رنگِ ساخته‌شده به فهرست افزوده می‌شود
+    const [customColors, setCustomColors] = useState<string[]>(loadCustomColors);
+    // تگِ رنگ‌ها (نام) — در فهرست قابلِ جست‌وجو و در جست‌وجویِ تقویم هم
+    const [colorNames, setColorNames] = useState<Record<string, string>>(getColorNames);
+    const addCustomColor = (hex: string) => {
+        const c = hex.toLowerCase();
+        if (!HEX_COLOR.test(c)) return;
+        form.setFieldValue('Color', c);
+        if (COLOR_PRESETS.includes(c)) return;
+        setCustomColors((prev) => {
+            const next = [c, ...prev.filter((x) => x !== c)].slice(0, MAX_CUSTOM_COLORS);
+            saveCustomColors(next);
+            return next;
+        });
+    };
     const canForOthers = permissions.includes('CALENDAR_CREATE_FOR_OTHERS');
     // ویرایشِ رویدادِ موجود بدونِ «برای دیگران»: مالک و شرکت‌کنندگانِ فعلی دست‌نخورده فرستاده شوند (حذفِ بی‌صدا نشوند)
     const [original, setOriginal] = useState<{ owner: number; attendees: number[]; unitId: number | null; unitName: string | null } | null>(null);
@@ -120,6 +167,7 @@ export default function EventFormModal({
     const [existingFiles, setExistingFiles] = useState<EventAttachment[]>([]);
     const [newFiles, setNewFiles] = useState<File[]>([]);
     const isAllDay = Form.useWatch('IsAllDay', form);
+    const colorValue = Form.useWatch('Color', form) as string | undefined;
     const selectedUnit = Form.useWatch('OrganizationalUnitID', form);
     const isUnitEvent = !!selectedUnit && Number(selectedUnit) !== PERSONAL_CALENDAR;
     useEffect(() => {
@@ -138,8 +186,10 @@ export default function EventFormModal({
         message: '',
     });
     const showNotification = (type: NotificationType, message: string) => setNotification({ open: true, type, message });
-    // پس از ثبت فقط تاریخ، ساعت و وضعیت قابلِ ویرایش است (متن و موضوع ثابت است)
+    // ویرایش: تاریخ، ساعت، وضعیت و رنگ با CALENDAR_EDIT؛ موضوع و متن فقط با CALENDAR_EDIT_CONTENT (پچِ ۱۳۷)
     const isEdit = !!eventId;
+    const canEditSchedule = permissions.includes('CALENDAR_EDIT');
+    const canEditContent = permissions.includes('CALENDAR_EDIT_CONTENT');
     // تاریخِ پایان فقط برایِ «تمام‌روز» نمایش داده می‌شود؛ رویدادِ ساعت‌دار همان روز تمام می‌شود (مگر رویدادِ چندروزهٔ قبلی در ویرایش)
     const [multiDayTimed, setMultiDayTimed] = useState(false);
     const showEndDate = !!isAllDay || multiDayTimed;
@@ -171,12 +221,16 @@ export default function EventFormModal({
         if (!open) return;
 
         if (!eventId) {
+            setLinks([]); // پچِ ۱۳۸
             const base = defaultDate ? new Date(defaultDate) : new Date();
             let startTime = dayjs(base).second(0).millisecond(0);
             if (!defaultDate && startTime.minute() % 15 !== 0) startTime = startTime.add(15 - (startTime.minute() % 15), 'minute');
             const endTime = startTime.add(30, 'minute');
             form.setFieldsValue({
                 Title: '',
+                LinkedProjectIDs: [],
+                LinkedPartyIDs: [],
+                LinkedPersonIDs: [],
                 Description: '',
                 StartDate: startTime.format('YYYY-MM-DD'),
                 StartTime: startTime,
@@ -211,6 +265,9 @@ export default function EventFormModal({
             .then((r) => r.json())
             .then((data) => {
                 const ev = data.event as CalendarEvent;
+                const evLinks: EventLink[] = data.links || [];
+                setLinks(evLinks);
+                const linkIds = (t: EventLink['LinkType']) => evLinks.filter((l) => l.LinkType === t).map((l) => Number(l.EntityID));
                 const start = new Date(ev.StartDateTime);
                 const end = new Date(ev.EndDateTime);
                 setMultiDayTimed(Number(ev.IsAllDay) !== 1 && toDateOnly(start) !== toDateOnly(end));
@@ -235,6 +292,9 @@ export default function EventFormModal({
                     ReminderOffsetMinutes: (data.reminderOffsetMinutes ?? NO_REMINDER) as any,
                     OrganizationalUnitID: ev.OrganizationalUnitID ? Number(ev.OrganizationalUnitID) : PERSONAL_CALENDAR,
                     IsPrivate: Number(ev.IsPrivate) === 1,
+                    LinkedProjectIDs: linkIds('PROJECT'),
+                    LinkedPartyIDs: linkIds('PARTY'),
+                    LinkedPersonIDs: linkIds('PERSON'),
                     AttendeeReminders: Object.fromEntries(
                         (data.attendees || [])
                             .filter((a: any) => a.ReminderOffsetMinutes !== null && a.ReminderOffsetMinutes !== undefined)
@@ -285,7 +345,7 @@ export default function EventFormModal({
             }
             // شروعِ گذشته (مثلاً اشتباه در ساعت): یادآوری برایش ارسال نمی‌شود — اول تأیید
             const startsInPast = values.IsAllDay ? endDate < new Date() : startDate < new Date();
-            if (startsInPast && (values.RecurrenceType ?? 'NONE') === 'NONE') {
+            if (startsInPast && (values.RecurrenceType ?? 'NONE') === 'NONE' && (!isEdit || canEditSchedule)) {
                 const proceed = await new Promise<boolean>((resolve) =>
                     Modal.confirm({
                         title: 'زمانِ رویداد گذشته است',
@@ -318,9 +378,17 @@ export default function EventFormModal({
                 });
             }
 
-            // ویرایش: فقط تاریخ/ساعت، تمام‌روز، وضعیت و رنگ (بقیه در سرور همان مقدارِ فعلی می‌ماند)
+            // ویرایش: تاریخ/ساعت، تمام‌روز، وضعیت و رنگ (+ موضوع و متن با مجوزش)؛ بقیه در سرور همان مقدارِ فعلی می‌ماند
+            const content = { Title: (values.Title || '').trim(), Description: (values.Description || '').trim() || null };
+            // پچِ ۱۳۸ — ارتباط‌ها (طرف‌حساب/فرد فقط با CRM_VIEW؛ سرور هم همین را کنترل می‌کند)
+            const linkPayload = {
+                LinkedProjectIDs: values.LinkedProjectIDs || [],
+                ...(canLinkCrm ? { LinkedPartyIDs: values.LinkedPartyIDs || [], LinkedPersonIDs: values.LinkedPersonIDs || [] } : {}),
+            };
             const payload = isEdit
                 ? {
+                      ...(canEditContent ? content : {}),
+                      ...linkPayload,
                       StartDateTime: toApiDateTime(startDate),
                       EndDateTime: toApiDateTime(endDate),
                       IsAllDay: !!values.IsAllDay,
@@ -347,14 +415,18 @@ export default function EventFormModal({
                 // رویدادِ واحد خصوصی نمی‌شود (سرور هم رد می‌کند)
                 IsPrivate: values.OrganizationalUnitID && Number(values.OrganizationalUnitID) !== PERSONAL_CALENDAR ? false : !!values.IsPrivate,
                 AttendeeReminders: attendeeReminders,
+                ...linkPayload,
                 ReminderOffsetMinutes:
                     (values.ReminderOffsetMinutes as unknown as string) === NO_REMINDER
                         ? null
                         : values.ReminderOffsetMinutes,
                 };
 
+            // فقط مجوزِ موضوع/متن (بدونِ ویرایشِ زمان): مسیرِ جداگانهٔ همان دو فیلد
             const result = eventId
-                ? await api(`/calendar/events/${eventId}`, 'PUT', payload)
+                ? canEditSchedule
+                    ? await api(`/calendar/events/${eventId}`, 'PUT', payload)
+                    : await api(`/calendar/events/${eventId}/content`, 'POST', content)
                 : await api('/calendar/events', 'POST', payload);
 
             if (result.success) {
@@ -384,7 +456,7 @@ export default function EventFormModal({
         <>
             <Modal
                 open={open}
-                title={eventId ? 'ویرایشِ تاریخ، ساعت و وضعیت' : 'رویداد جدید'}
+                title={eventId ? 'ویرایشِ رویداد' : 'رویداد جدید'}
                 onCancel={() => onClose(false)}
                 onOk={handleSubmit}
                 confirmLoading={saving}
@@ -395,13 +467,19 @@ export default function EventFormModal({
                 maskClosable={false}
             >
                 <Spin spinning={loadingDetail}>
-                    <Form form={form} layout="vertical" requiredMark={false} onValuesChange={syncEndWithStart}>
-                        <Form.Item name="Title" label="عنوان رویداد" rules={[{ required: true, message: 'عنوان الزامی است' }]} extra={isEdit ? 'موضوع و متن پس از ثبت قابلِ تغییر نیست.' : undefined}>
-                            <Input disabled={isEdit} placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
+                    {/* بدونِ مجوزِ ویرایشِ زمان، فقط موضوع و متن باز است */}
+                    <Form form={form} layout="vertical" requiredMark={false} onValuesChange={syncEndWithStart} disabled={isEdit && !canEditSchedule}>
+                        <Form.Item
+                            name="Title"
+                            label="عنوان رویداد"
+                            rules={[{ required: true, message: 'عنوان الزامی است' }]}
+                            extra={isEdit && !canEditContent ? 'موضوع و متن فقط با دسترسیِ «ویرایشِ موضوع و متنِ رویداد» قابلِ تغییر است.' : undefined}
+                        >
+                            <Input disabled={isEdit && !canEditContent} placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
                         </Form.Item>
 
                         <Form.Item name="Description" label="توضیحات">
-                            <TextArea disabled={isEdit} rows={3} placeholder="توضیحات تکمیلی (اختیاری)" maxLength={2000} />
+                            <TextArea disabled={isEdit && !canEditContent} rows={3} placeholder="توضیحات تکمیلی (اختیاری)" maxLength={2000} />
                         </Form.Item>
 
                         <Form.Item name="IsAllDay" label="تمام‌روز" valuePropName="checked">
@@ -452,19 +530,57 @@ export default function EventFormModal({
                             )}
                             {/* رنگ در ثبت و ویرایش — ویرایش با همان دسترسیِ ویرایشِ رویداد (CALENDAR_EDIT + سازنده/مالک/مدیرِ رویدادِ واحد؛ سرور کنترل می‌کند) */}
                             <Col xs={24} sm={12}>
-                                <Form.Item name="Color" label="رنگ رویداد">
-                                    <Select
-                                        size="large"
-                                        options={COLOR_PRESETS.map((c) => ({
-                                            value: c,
-                                            label: (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                                    <span style={{ width: 14, height: 14, borderRadius: 4, background: c, display: 'inline-block' }} />
-                                                    {c}
-                                                </span>
-                                            ),
-                                        }))}
-                                    />
+                                <Form.Item label="رنگ رویداد">
+                                    <Space.Compact style={{ width: '100%' }}>
+                                        <Form.Item name="Color" noStyle>
+                                            <Select
+                                                size="large"
+                                                style={{ flex: 1, minWidth: 0 }}
+                                                showSearch
+                                                placeholder="جست‌وجو با نامِ رنگ…"
+                                                filterOption={(input, option) => normalizeForSearch(String((option as { searchText?: string } | undefined)?.searchText ?? '')).includes(normalizeForSearch(input))}
+                                                options={Array.from(new Set([...COLOR_PRESETS, ...customColors, ...(colorValue ? [String(colorValue).toLowerCase()] : [])])).map((c) => ({
+                                                    value: c,
+                                                    searchText: `${colorNames[c] || ''} ${c}`,
+                                                    label: (
+                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                                            <span style={{ width: 14, height: 14, borderRadius: 4, background: c, display: 'inline-block', flexShrink: 0 }} />
+                                                            {colorNames[c] ? (
+                                                                <Tag color={c} style={{ marginInlineEnd: 0, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                    {colorNames[c]}
+                                                                </Tag>
+                                                            ) : null}
+                                                            <span dir="ltr" style={{ color: '#9CA3AF', fontSize: 12 }}>{c}</span>
+                                                        </span>
+                                                    ),
+                                                }))}
+                                            />
+                                        </Form.Item>
+                                        {/* پالتِ رنگ: هر رنگی؛ پس از انتخاب به همین فهرست افزوده می‌شود */}
+                                        <ColorPicker
+                                            value={colorValue || COLOR_PRESETS[0]}
+                                            disabledAlpha
+                                            format="hex"
+                                            presets={[{ label: 'رنگ‌هایِ پیش‌فرض', colors: COLOR_PRESETS }, ...(customColors.length ? [{ label: 'رنگ‌هایِ من', colors: customColors }] : [])]}
+                                            onChangeComplete={(c) => addCustomColor(c.toHexString())}
+                                        >
+                                            <Tooltip title="پالتِ رنگ">
+                                                <Button size="large" icon={<BgColorsOutlined />} aria-label="پالتِ رنگ" />
+                                            </Tooltip>
+                                        </ColorPicker>
+                                    </Space.Compact>
+                                    {/* تگِ همین رنگ: با تایپِ نام در فهرستِ رنگ‌ها و در جست‌وجویِ تقویم پیدا می‌شود */}
+                                    {colorValue ? (
+                                        <Input
+                                            size="small"
+                                            style={{ marginTop: 6 }}
+                                            prefix={<TagOutlined style={{ color: String(colorValue) }} />}
+                                            maxLength={30}
+                                            placeholder="نامِ این رنگ (تگ) — مثلاً «جلسهٔ مشتری»"
+                                            value={colorNames[String(colorValue).toLowerCase()] || ''}
+                                            onChange={(e) => setColorNames(setColorName(String(colorValue), e.target.value))}
+                                        />
+                                    ) : null}
                                 </Form.Item>
                             </Col>
                         </Row>
@@ -542,6 +658,8 @@ export default function EventFormModal({
                                 />
                             </Form.Item>
                         )}
+
+                        <EventLinksFields open={open} canLinkCrm={canLinkCrm} links={links} />
 
                         <Form.Item name="ReminderOffsetMinutes" label="یادآوری من">
                             <Select

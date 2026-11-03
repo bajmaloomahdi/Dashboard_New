@@ -7,6 +7,7 @@ use App\Services\Calendar\CalendarOccurrenceStatuses;
 use App\Services\Calendar\CalendarReminderRoller;
 use App\Services\Calendar\JalaliRecurrence;
 use App\Services\Calendar\ReminderContent;
+use App\Services\GlobalSearch\PersianNormalizer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -76,6 +77,8 @@ class CalendarController extends Controller
             'isReadOnly'      => $isOther,
             'viewableUsers'   => $canViewOthers ? $users : [],
             'currentUserId'   => $selfId,
+            // پچِ ۱۳۸ — وصل کردنِ طرف‌حساب/فردِ مرتبط به رویداد فقط با CRM_VIEW
+            'canLinkCrm'      => $this->userCan('CRM_VIEW'),
         ]);
     }
 
@@ -235,6 +238,7 @@ class CalendarController extends Controller
             'attendees'             => $attendees,
             'reminderOffsetMinutes' => $reminder,
             'attachments'           => $this->eventAttachments($id),
+            'links'                 => $this->eventLinks($id),
             'occurrenceStatus'      => $occurrenceStatus,
         ]);
     }
@@ -259,8 +263,98 @@ class CalendarController extends Controller
         if (($event->MyRelation ?? 'NONE') !== 'NONE' || $this->userCan('CALENDAR_VIEW_OTHERS')) {
             return true;
         }
+        // پچِ ۱۳۸: رویدادِ وصل به پروژه‌ای که کاربر سازنده یا عضوِ فعالِ آن است
+        if ($this->isProjectEventFor($eventId, (int) Auth::id())) {
+            return true;
+        }
 
         return $this->hasReadShareFor($event, DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$eventId]));
+    }
+
+    private function isProjectEventFor(int $eventId, int $userId): bool
+    {
+        return (bool) DB::selectOne(
+            "SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM dbo.CalendarEventLinks l INNER JOIN dbo.Projects p ON p.ProjectID = l.EntityID
+                WHERE l.EventID = ? AND l.LinkType = 'PROJECT' AND l.IsActive = 1
+                  AND (p.UserID_InsertFirst = ? OR EXISTS (SELECT 1 FROM dbo.ProjectMembers pm WHERE pm.ProjectID = p.ProjectID AND pm.UserID = ? AND pm.IsActive = 1))
+             ) THEN 1 ELSE 0 END AS ok",
+            [$eventId, $userId, $userId],
+        )->ok;
+    }
+
+    /** پچِ ۱۳۸ — ثبتِ ارتباط‌ها اگر در درخواست آمده؛ طرف‌حساب/فرد فقط با CRM_VIEW (وگرنه همان قبلی) */
+    private function saveEventLinks(int $eventId, Request $request): void
+    {
+        $csv = fn (string $key) => $request->exists($key) ? implode(',', array_map('intval', (array) $request->input($key, []))) : null;
+        $crm = $this->userCan('CRM_VIEW');
+        $projects = $csv('LinkedProjectIDs');
+        $parties = $crm ? $csv('LinkedPartyIDs') : null;
+        $persons = $crm ? $csv('LinkedPersonIDs') : null;
+        if ($projects === null && $parties === null && $persons === null) {
+            return;
+        }
+        DB::select('EXEC dbo.sp_Calendar_SetEventLinks @EventID = ?, @UserID = ?, @PartyIDs = ?, @PersonIDs = ?, @ProjectIDs = ?',
+            [$eventId, (int) Auth::id(), $parties, $persons, $projects]);
+    }
+
+    /**
+     * پچِ ۱۳۸ — ارتباط‌هایِ رویداد برایِ نمایش: طرف‌حساب/فرد فقط با CRM_VIEW؛ وظیفه فقط برایِ طرفِ همان نامه؛
+     * پروژه برایِ همه (عنوان و کد).
+     */
+    private function eventLinks(int $eventId): array
+    {
+        $userId = (int) Auth::id();
+        $crm = $this->userCan('CRM_VIEW');
+        $rows = DB::select('EXEC dbo.sp_Calendar_GetEventLinks @EventID = ?', [$eventId]);
+        $out = [];
+        foreach ($rows as $r) {
+            if (in_array($r->LinkType, ['PARTY', 'PERSON'], true) && !$crm) {
+                continue;
+            }
+            if ($r->LinkType === 'MESSAGE' && !DB::selectOne(
+                'SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.Messages WHERE MessageID = ? AND SenderUserID = ?)
+                              OR EXISTS (SELECT 1 FROM dbo.MessageDetails WHERE MessageID = ? AND (ToUserID = ? OR FromUserID = ?))
+                              OR EXISTS (SELECT 1 FROM dbo.MessageCopies WHERE MessageID = ? AND UserID = ?) THEN 1 ELSE 0 END AS ok',
+                [$r->EntityID, $userId, $r->EntityID, $userId, $userId, $r->EntityID, $userId],
+            )->ok) {
+                continue;
+            }
+            $out[] = ['LinkType' => $r->LinkType, 'EntityID' => (int) $r->EntityID, 'DisplayName' => $r->DisplayName];
+        }
+
+        return $out;
+    }
+
+    /** GET /calendar/link-projects — پروژه‌هایی که کاربر می‌تواند به رویداد وصل کند (سازنده یا عضو) */
+    public function linkProjects()
+    {
+        $this->authorizeCalendar('CALENDAR_VIEW');
+        $rows = DB::select('EXEC sp_GetProjects @SearchText = NULL, @IsActive = NULL, @ProjectStatusID = NULL, @UserID = ?', [Auth::id()]);
+
+        return response()->json(['projects' => array_map(fn ($p) => [
+            'ProjectID' => (int) $p->ProjectID, 'ProjectCode' => $p->ProjectCode, 'ProjectTitle' => $p->ProjectTitle, 'IsActive' => (int) $p->IsActive === 1,
+        ], $rows)]);
+    }
+
+    /**
+     * GET /projects/{id}/events — تبِ «رویدادها»ی پروژه (دستورکار): فقط برایِ سازنده/عضوِ پروژه (همان قاعدهٔ صفحهٔ پروژه)؛
+     * تکرارها مثلِ تقویم بسط داده می‌شوند.
+     */
+    public function projectEvents(Request $request, int $id)
+    {
+        $validated = $request->validate(['from' => 'required|date', 'to' => 'required|date']);
+        $visible = collect(DB::select('EXEC sp_GetProjects @SearchText = NULL, @IsActive = NULL, @ProjectStatusID = NULL, @UserID = ?', [Auth::id()]))
+            ->contains(fn ($p) => (int) $p->ProjectID === $id);
+        if (!$visible) {
+            return response()->json(['message' => 'پروژه یافت نشد یا به آن دسترسی ندارید.'], 403);
+        }
+        $from = Carbon::parse($validated['from'])->startOfDay();
+        $to = Carbon::parse($validated['to'])->endOfDay();
+        $rows = DB::select('EXEC dbo.sp_Calendar_GetProjectEvents @ProjectID = ?, @FromDate = ?, @ToDate = ?, @ViewerID = ?',
+            [$id, $from->toDateTimeString(), $to->toDateTimeString(), Auth::id()]);
+
+        return response()->json(['events' => $this->expandRows($rows, $from, $to)]);
     }
 
     // ================= اطلاعِ فعالیتِ رویداد (پچِ ۱۳۰) =================
@@ -299,6 +393,60 @@ class CalendarController extends Controller
         return response()->json(['success' => true, 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id])]);
     }
 
+    /**
+     * POST /calendar/search-comments — از میانِ رویدادهایی که مرورگر برایِ کاربر نشان می‌دهد (ids)، آن‌هایی که همهٔ
+     * کلمه‌هایِ جست‌وجو در «موضوع + متن + توضیحاتِ» آن‌ها هست. بدونِ CALENDAR_COMMENT_VIEW خالی؛ هر نتیجه با همان
+     * دسترسیِ جزئیاتِ رویداد (رویدادِ خصوصیِ دیگران یا بی‌دسترسی برنمی‌گردد). یکسان‌سازیِ فارسی همانِ جست‌وجویِ مرورگر.
+     */
+    public function searchComments(Request $request)
+    {
+        $this->authorizeCalendar('CALENDAR_VIEW');
+        $validated = $request->validate([
+            'q' => 'required|string|max:200',
+            'ids' => 'required|array|max:3000',
+            'ids.*' => 'integer|min:1',
+        ]);
+        if (!$this->userCan('CALENDAR_COMMENT_VIEW')) {
+            return response()->json(['ids' => []]);
+        }
+        $normalizer = new PersianNormalizer();
+        $tokens = $normalizer->tokenize($normalizer->normalize($validated['q']));
+        $ids = array_values(array_unique(array_map('intval', $validated['ids'])));
+        if (!$tokens || !$ids) {
+            return response()->json(['ids' => []]);
+        }
+
+        $rows = DB::select(
+            'SELECT C.EventID, C.CommentText, E.Title, E.Description
+             FROM dbo.CalendarEventComments C
+             INNER JOIN dbo.CalendarEvents E ON E.EventID = C.EventID
+             WHERE C.IsActive = 1 AND E.IsActive = 1
+               AND C.EventID IN (SELECT TRY_CAST(value AS BIGINT) FROM STRING_SPLIT(?, \',\'))',
+            [implode(',', $ids)],
+        );
+        $texts = [];
+        foreach ($rows as $r) {
+            $id = (int) $r->EventID;
+            $texts[$id] ??= [(string) $r->Title, (string) ($r->Description ?? '')];
+            $texts[$id][] = (string) $r->CommentText;
+        }
+
+        $matched = [];
+        foreach ($texts as $id => $parts) {
+            $haystack = $normalizer->normalize(implode(' ', $parts));
+            foreach ($tokens as $token) {
+                if (!str_contains($haystack, $token)) {
+                    continue 2;
+                }
+            }
+            if ($this->canViewEventDetails($id)) {
+                $matched[] = $id;
+            }
+        }
+
+        return response()->json(['ids' => $matched]);
+    }
+
     /** POST /calendar/events/{id}/comments — CALENDAR_COMMENT_ADD + دسترسی به جزئیاتِ همان رویداد؛ نویسنده و زمان خودکار */
     public function storeComment(Request $request, int $id)
     {
@@ -328,6 +476,73 @@ class CalendarController extends Controller
      * POST /calendar/events/{id}/attachments — multipart: files[] (هم پس از ثبتِ رویدادِ تازه، هم در ویرایش).
      * فقط سازنده/مالک/مدیرِ رویدادِ واحد (در SP هم کنترل می‌شود). همه یا هیچ: خطا → Rollbackِ ردیف‌ها و حذفِ فایل‌هایِ همین درخواست.
      */
+    /** POST /calendar/events/{id}/attachments/{attachmentId}/description — توضیحِ یک ضمیمه؛ همان قاعدهٔ افزودنِ ضمیمه (پچِ ۱۳۷) */
+    public function attachmentDescription(Request $request, int $id, int $attachmentId)
+    {
+        if (!$this->userCan('CALENDAR_CREATE') && !$this->userCan('CALENDAR_EDIT')) {
+            abort(403, 'شما دسترسیِ لازم را ندارید.');
+        }
+        $validated = $request->validate(['Description' => 'nullable|string|max:500'], ['Description.max' => 'توضیحِ ضمیمه حداکثر ۵۰۰ کاراکتر است.']);
+        $res = (array) (DB::select(
+            'EXEC dbo.sp_Calendar_UpdateEventAttachmentDescription @CalendarEventAttachmentID = ?, @EventID = ?, @Description = ?, @UserID = ?',
+            [$attachmentId, $id, $validated['Description'] ?? null, Auth::id()],
+        )[0] ?? []);
+        if (empty($res['Success'])) {
+            return response()->json(['success' => false, 'message' => $res['Message'] ?? 'ثبتِ توضیحِ ضمیمه ناموفق بود.'], 422);
+        }
+
+        return response()->json(['success' => true, 'message' => $res['Message'], 'attachments' => $this->eventAttachments($id)]);
+    }
+
+    /**
+     * POST /calendar/events/{id}/content — ویرایشِ موضوع و متنِ رویداد (پچِ ۱۳۷): مجوزِ CALENDAR_EDIT_CONTENT و فقط سازنده،
+     * مالک یا مدیرِ رویدادِ واحد (SP). طرف‌هایِ رویداد اطلاع می‌گیرند.
+     */
+    public function updateContent(Request $request, int $id)
+    {
+        $this->authorizeCalendar('CALENDAR_EDIT_CONTENT');
+        $validated = $request->validate([
+            'Title' => 'required|string|max:250',
+            'Description' => 'nullable|string|max:4000',
+        ], [
+            'Title.required' => 'موضوعِ رویداد الزامی است.',
+            'Title.max' => 'موضوع حداکثر ۲۵۰ کاراکتر است.',
+            'Description.max' => 'متن حداکثر ۴۰۰۰ کاراکتر است.',
+        ]);
+        $res = (array) (DB::select(
+            'EXEC dbo.sp_Calendar_UpdateEventContent @EventID = ?, @Title = ?, @Description = ?, @UserID = ?',
+            [$id, $validated['Title'], $validated['Description'] ?? null, Auth::id()],
+        )[0] ?? []);
+        if (empty($res['Success'])) {
+            return response()->json(['success' => false, 'message' => $res['Message'] ?? 'ویرایشِ رویداد ناموفق بود.'], 422);
+        }
+        $this->notifyActivity($id, 'STATUS', 'موضوع یا متن ویرایش شد');
+
+        return response()->json(['success' => true, 'message' => $res['Message']]);
+    }
+
+    /** PUT /calendar/events/{id}/comments/{commentId} — ویرایشِ متنِ توضیح (پچِ ۱۳۷): CALENDAR_COMMENT_EDIT + دسترسیِ جزئیاتِ رویداد */
+    public function updateComment(Request $request, int $id, int $commentId)
+    {
+        $this->authorizeCalendar('CALENDAR_COMMENT_EDIT');
+        $validated = $request->validate(['Text' => 'required|string|max:2000'], [
+            'Text.required' => 'متنِ توضیح را بنویسید.',
+            'Text.max' => 'توضیح حداکثر ۲۰۰۰ کاراکتر است.',
+        ]);
+        if (!$this->canViewEventDetails($id)) {
+            return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
+        }
+        $res = (array) (DB::select(
+            'EXEC dbo.sp_Calendar_UpdateEventComment @CommentID = ?, @EventID = ?, @CommentText = ?, @UserID = ?',
+            [$commentId, $id, $validated['Text'], Auth::id()],
+        )[0] ?? []);
+        if (empty($res['Success'])) {
+            return response()->json(['success' => false, 'message' => $res['Message'] ?? 'ویرایشِ توضیح ناموفق بود.'], 422);
+        }
+
+        return response()->json(['success' => true, 'message' => $res['Message'], 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id])]);
+    }
+
     public function storeAttachments(Request $request, int $id)
     {
         if (!$this->userCan('CALENDAR_CREATE') && !$this->userCan('CALENDAR_EDIT')) {
@@ -349,19 +564,22 @@ class CalendarController extends Controller
             return response()->json(['success' => false, 'message' => 'فقط ایجادکننده یا مالکِ رویداد می‌تواند فایل ضمیمه کند.'], 403);
         }
 
+        // پچِ ۱۳۷: یک توضیحِ اختیاری برایِ همین فایل‌ها
+        $description = $request->validate(['Description' => 'nullable|string|max:500'], ['Description.max' => 'توضیحِ ضمیمه حداکثر ۵۰۰ کاراکتر است.'])['Description'] ?? null;
+
         $store = app(CalendarAttachmentFiles::class);
         foreach ($files as $file) {
             $store->validate($file);
         }
         $saved = [];
         try {
-            DB::transaction(function () use ($files, $id, $store, &$saved) {
+            DB::transaction(function () use ($files, $id, $store, $description, &$saved) {
                 foreach ($files as $file) {
                     $s = $store->store($file, $id);
                     $saved[] = $s['path'];
                     $res = (array) (DB::select(
-                        'EXEC sp_Calendar_AddEventAttachment @EventID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @UserID = ?',
-                        [$id, $s['name'], $s['extension'], $s['size'], $s['path'], Auth::id()]
+                        'EXEC sp_Calendar_AddEventAttachment @EventID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @UserID = ?, @Description = ?',
+                        [$id, $s['name'], $s['extension'], $s['size'], $s['path'], Auth::id(), $description]
                     )[0] ?? []);
                     if (empty($res['Success'])) {
                         throw new \RuntimeException($res['Message'] ?? 'ثبتِ فایل ناموفق بود.');
@@ -487,6 +705,8 @@ class CalendarController extends Controller
             }
         }
 
+        $this->saveEventLinks($eventId, $request);
+
         return response()->json(['success' => true, 'message' => $response['Message'], 'eventId' => $eventId]);
     }
 
@@ -500,9 +720,22 @@ class CalendarController extends Controller
         if (!$current) {
             return response()->json(['success' => false, 'message' => 'رویداد یافت نشد.'], 404);
         }
-        // پس از ثبت، متن و موضوع ثابت است (ویرایش برایِ تاریخ/ساعت و وضعیت)؛ فیلدی که ارسال نشده مقدارِ فعلی را نگه می‌دارد
-        $validated['Title'] = $current->Title;
-        $validated['Description'] = $current->Description;
+        // موضوع و متن فقط با مجوزِ CALENDAR_EDIT_CONTENT (پچِ ۱۳۷) از همین فرم عوض می‌شود؛ وگرنه همان مقدارِ فعلی.
+        // فیلدی که ارسال نشده مقدارِ فعلی را نگه می‌دارد
+        $contentChanged = false;
+        if ($this->userCan('CALENDAR_EDIT_CONTENT') && $request->exists('Title')) {
+            $title = trim((string) ($validated['Title'] ?? ''));
+            if ($title === '') {
+                return response()->json(['success' => false, 'message' => 'موضوعِ رویداد الزامی است.'], 422);
+            }
+            $description = $request->exists('Description') ? (trim((string) ($validated['Description'] ?? '')) ?: null) : $current->Description;
+            $contentChanged = $title !== (string) $current->Title || (string) $description !== (string) ($current->Description ?? '');
+            $validated['Title'] = $title;
+            $validated['Description'] = $description;
+        } else {
+            $validated['Title'] = $current->Title;
+            $validated['Description'] = $current->Description;
+        }
         foreach (['Color', 'Status', 'RecurrenceType', 'RecurrenceInterval', 'RecurrenceEndDate'] as $keep) {
             if (!$request->exists($keep)) {
                 $validated[$keep] = $current->$keep;
@@ -616,6 +849,11 @@ class CalendarController extends Controller
         if ($this->timingChanged($current, $validated)) {
             $this->reanchorReminders($id, $validated['StartDateTime'], $recurrence, $selfId, $saved);
         }
+        if ($contentChanged) {
+            $this->notifyActivity($id, 'STATUS', 'موضوع یا متن ویرایش شد');
+        }
+
+        $this->saveEventLinks($id, $request);
 
         return $this->updatedResponse($response['Message'], $response);
     }
@@ -1505,6 +1743,13 @@ class CalendarController extends Controller
         return $request->validate([
             'Title'                 => ($forUpdate ? 'sometimes|nullable' : 'required') . '|string|max:250', // در ویرایش ثابت است
             'Description'           => 'nullable|string',
+            // پچِ ۱۳۸ — ارتباطِ رویداد با پروژه، طرف‌حساب و فردِ مرتبط (نبودنِ کلید = همان قبلی)
+            'LinkedProjectIDs'      => 'nullable|array|max:50',
+            'LinkedProjectIDs.*'    => 'integer|min:1',
+            'LinkedPartyIDs'        => 'nullable|array|max:50',
+            'LinkedPartyIDs.*'      => 'integer|min:1',
+            'LinkedPersonIDs'       => 'nullable|array|max:50',
+            'LinkedPersonIDs.*'     => 'integer|min:1',
             'StartDateTime'         => 'required|date',
             'EndDateTime'           => 'required|date|after_or_equal:StartDateTime',
             'IsAllDay'              => 'boolean',

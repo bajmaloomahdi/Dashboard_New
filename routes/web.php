@@ -250,6 +250,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/projects/{id}/members', [ProjectsController::class, 'removeMember'])->name('projects.members.remove');
 
     Route::get('/projects/{id}/contractors', [ProjectsController::class, 'contractors'])->name('projects.contractors');
+    // پچِ ۱۳۸ — تبِ «رویدادها»ی پروژه (دستورکار)
+    Route::get('/projects/{id}/events', [CalendarController::class, 'projectEvents'])->whereNumber('id')->name('projects.events');
     Route::get('/projects/{id}/contractors/search', [ProjectsController::class, 'searchContractorCandidates'])->name('projects.contractors.search');
     Route::post('/projects/{id}/contractors', [ProjectsController::class, 'addContractor'])->name('projects.contractors.add');
     Route::delete('/projects/{id}/contractors', [ProjectsController::class, 'removeContractor'])->name('projects.contractors.remove');
@@ -278,9 +280,18 @@ Route::middleware('auth')->group(function () {
     Route::post('/calendar/events/{id}/attachments', [CalendarController::class, 'storeAttachments'])->whereNumber('id')->name('calendar.events.attachments.store');
     // اطلاع‌هایِ فعالیتِ رویداد (پچِ ۱۳۰)
     Route::get('/calendar/activity', [CalendarController::class, 'activity'])->name('calendar.activity.index');
+    // پچِ ۱۳۸ — پروژه‌هایِ قابلِ اتصال به رویداد
+    Route::get('/calendar/link-projects', [CalendarController::class, 'linkProjects'])->name('calendar.link-projects');
     // توضیحاتِ رویداد (پچِ ۱۲۹)
+    // جست‌وجو در «توضیحات»ِ رویدادها (موضوع و متن در مرورگر جست‌وجو می‌شوند؛ توضیحات فقط در سرور)
+    Route::post('/calendar/search-comments', [CalendarController::class, 'searchComments'])->name('calendar.search-comments');
     Route::get('/calendar/events/{id}/comments', [CalendarController::class, 'comments'])->whereNumber('id')->name('calendar.events.comments.index');
     Route::post('/calendar/events/{id}/comments', [CalendarController::class, 'storeComment'])->whereNumber('id')->name('calendar.events.comments.store');
+    // پچِ ۱۳۷ — ویرایشِ متنِ توضیح، موضوع/متنِ رویداد و توضیحِ ضمیمه
+    Route::put('/calendar/events/{id}/comments/{commentId}', [CalendarController::class, 'updateComment'])->whereNumber('id')->whereNumber('commentId')->name('calendar.events.comments.update');
+    Route::post('/calendar/events/{id}/content', [CalendarController::class, 'updateContent'])->whereNumber('id')->name('calendar.events.content');
+    Route::post('/calendar/events/{id}/attachments/{attachmentId}/description', [CalendarController::class, 'attachmentDescription'])
+        ->whereNumber('id')->whereNumber('attachmentId')->name('calendar.events.attachments.description');
     Route::get('/calendar/event-attachments/{attachmentId}/download', [CalendarController::class, 'downloadAttachment'])->whereNumber('attachmentId')->name('calendar.event-attachments.download');
     // تقویمِ مشترک: منابع (اشتراک‌گذاشته‌شده با من + واحدهایِ من)، تقویمِ واحد، اشتراکِ تقویمِ شخصی
     Route::get('/calendar/sources', [CalendarController::class, 'sources'])->name('calendar.sources');

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Modal,
     Descriptions,
@@ -12,6 +12,7 @@ import {
     Segmented,
     Divider,
     Checkbox,
+    Input,
 } from 'antd';
 import {
     EditOutlined,
@@ -23,13 +24,16 @@ import {
     BellOutlined,
     LockOutlined,
     SyncOutlined,
+    PaperClipOutlined,
+    UploadOutlined,
 } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../Utils/jalali';
 import type { CalendarEventAttendee, CalendarPermission, ReminderOption } from '../../Types';
 import { parseDT, previousResponseText, recurrenceSummary } from './calendarUtils';
-import EventAttachmentList, { EventAttachment } from './EventAttachments';
+import EventAttachmentList, { EventAttachment, saveEventAttachmentDescription, uploadEventAttachments } from './EventAttachments';
 import { EventDetailTabs } from './EventComments';
+import type { EventLink } from './EventLinksFields';
 
 const { Text, Paragraph } = Typography;
 
@@ -141,6 +145,7 @@ export default function EventDetailsModal({
     const [event, setEvent] = useState<EventDetail | null>(null);
     const [attendees, setAttendees] = useState<CalendarEventAttendee[]>([]);
     const [attachments, setAttachments] = useState<EventAttachment[]>([]);
+    const [links, setLinks] = useState<EventLink[]>([]); // پچِ ۱۳۸
     const [myReminder, setMyReminder] = useState<number | string>(NO_REMINDER);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -162,6 +167,7 @@ export default function EventDetailsModal({
                 setOccurrenceStatus(data.occurrenceStatus ?? null);
                 setAttendees(data.attendees || []);
                 setAttachments(data.attachments || []);
+                setLinks(data.links || []);
                 setMyReminder(data.reminderOffsetMinutes ?? NO_REMINDER);
             })
             .finally(() => setLoading(false));
@@ -227,15 +233,110 @@ export default function EventDetailsModal({
     // عضوِ واحد (UNIT) که شرکت‌کننده نیست یادآوریِ شخصی ندارد
     const relatedToEvent = event && event.MyRelation !== 'NONE' && event.MyRelation !== 'UNIT';
 
+    // ضمائم در تبِ «توضیحات و ضمائم» (با دسترسیِ دیدنِ توضیحات)؛ وگرنه مثلِ قبل در جزئیات
+    const canViewComments = permissions.includes('CALENDAR_COMMENT_VIEW');
+    // افزودنِ ضمیمه: همان قاعدهٔ سرور (ایجادکننده/مالک + مجوزِ ایجاد یا ویرایش)
+    const canAttach = canManage && (permissions.includes('CALENDAR_CREATE') || permissions.includes('CALENDAR_EDIT'));
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
+    // پچِ ۱۳۷: فایل‌هایِ انتخاب‌شده ابتدا با یک توضیحِ اختیاری نشان داده می‌شوند، بعد ثبت
+    const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+    const [pendingNote, setPendingNote] = useState('');
+    useEffect(() => {
+        setPendingFiles([]);
+        setPendingNote('');
+    }, [eventId, open]);
+    const pickFiles = (list: FileList | null) => {
+        const files = Array.from(list || []);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (files.length) setPendingFiles(files);
+    };
+    const uploadPending = async () => {
+        if (!eventId || !pendingFiles.length) return;
+        setUploading(true);
+        const res = await uploadEventAttachments(eventId, pendingFiles, pendingNote);
+        setUploading(false);
+        if (res.success) {
+            notify('success', res.message || 'فایل ضمیمه شد.');
+            setPendingFiles([]);
+            setPendingNote('');
+            reload();
+            onChanged();
+        } else {
+            notify('error', res.message);
+        }
+    };
+    const saveAttachmentNote = async (attachmentId: number, description: string) => {
+        if (!eventId) return false;
+        const res = await saveEventAttachmentDescription(eventId, attachmentId, description);
+        if (res.success) {
+            if (res.attachments) setAttachments(res.attachments);
+            notify('success', res.message || 'توضیحِ ضمیمه ثبت شد.');
+            return true;
+        }
+        notify('error', res.message);
+        return false;
+    };
+
+    // پچِ ۱۳۷: موضوع و متن در همان فرمِ «ویرایش» (مجوزِ CALENDAR_EDIT_CONTENT + مدیریتِ همین رویداد)
+    const canEditContent = canManage && permissions.includes('CALENDAR_EDIT_CONTENT');
+    const attachmentsBlock = (
+        <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid #F0F0F0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <Text strong>
+                    <PaperClipOutlined /> ضمائم {attachments.length ? `(${attachments.length})` : ''}
+                </Text>
+                {canAttach ? (
+                    <>
+                        <input ref={fileInputRef} type="file" multiple hidden onChange={(e) => pickFiles(e.target.files)} />
+                        <Button size="small" icon={<UploadOutlined />} disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                            افزودن ضمیمه
+                        </Button>
+                    </>
+                ) : null}
+            </div>
+            {pendingFiles.length ? (
+                <div style={{ marginBottom: 8, padding: 8, background: '#FAFAFF', border: '1px dashed #C7BFEF', borderRadius: 8 }}>
+                    <div style={{ fontSize: 12, marginBottom: 6, overflowWrap: 'anywhere' }}>
+                        <PaperClipOutlined /> {pendingFiles.map((f) => f.name).join('، ')}
+                    </div>
+                    <Input.TextArea
+                        value={pendingNote}
+                        onChange={(e) => setPendingNote(e.target.value)}
+                        rows={2}
+                        maxLength={500}
+                        showCount
+                        placeholder="توضیحِ ضمیمه (اختیاری)…"
+                        disabled={uploading}
+                    />
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 22 }}>
+                        <Button size="small" onClick={() => setPendingFiles([])} disabled={uploading}>
+                            انصراف
+                        </Button>
+                        <Button size="small" type="primary" icon={<UploadOutlined />} loading={uploading} onClick={uploadPending}>
+                            ثبتِ ضمیمه
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+            {attachments.length ? (
+                <EventAttachmentList items={attachments} onSaveDescription={canAttach ? saveAttachmentNote : undefined} />
+            ) : pendingFiles.length ? null : (
+                <Text type="secondary" style={{ fontSize: 12 }}>ضمیمه‌ای ثبت نشده است.</Text>
+            )}
+        </div>
+    );
+
     const footer: React.ReactNode[] = [];
     // حذف از این پنجره برداشته شد؛ ویرایش فقط برایِ تاریخ/ساعت و وضعیت است.
     // تبِ «توضیحات»: دکمهٔ ویرایش نمایش داده نمی‌شود — دکمهٔ «ثبتِ توضیح» پایینِ همان تب است
     if (activeTab === 'comments') {
         // بدونِ دکمهٔ پایینِ پنجره
-    } else if (event && canEdit) {
+    } else if (event && (canEdit || canEditContent)) {
+        // یک دکمه: تاریخ/ساعت/رنگ با «ویرایشِ رویداد»، موضوع و متن با «ویرایشِ موضوع و متن» — هر کدام در همان فرم
         footer.push(
             <Button key="edit" type="primary" icon={<EditOutlined />} onClick={() => eventId && onEdit(eventId)}>
-                ویرایشِ تاریخ، ساعت و رنگ
+                ویرایش
             </Button>,
         );
     } else {
@@ -257,8 +358,11 @@ export default function EventDetailsModal({
                         <EventDetailTabs
                             onTabChange={setActiveTab}
                             eventId={Number(event.EventID)}
-                            canView={permissions.includes('CALENDAR_COMMENT_VIEW')}
+                            canView={canViewComments}
                             canAdd={permissions.includes('CALENDAR_COMMENT_ADD')}
+                            canEditComments={permissions.includes('CALENDAR_COMMENT_EDIT')}
+                            attachments={attachmentsBlock}
+                            attachmentCount={attachments.length}
                         >
                         <div>
                             <Space wrap style={{ marginBottom: 12 }}>
@@ -319,11 +423,32 @@ export default function EventDetailsModal({
                                         ? gregorianToJalaliDisplay(event.EndDateTime)
                                         : gregorianToJalaliDateTimeDisplay(event.EndDateTime)}
                                 </Descriptions.Item>
-                                {attachments.length > 0 && (
+                                {attachments.length > 0 && !canViewComments && (
                                     <Descriptions.Item label="ضمیمه‌ها">
                                         <EventAttachmentList items={attachments} />
                                     </Descriptions.Item>
                                 )}
+                                {/* پچِ ۱۳۸ — ارتباط‌هایِ رویداد با لینک به صفحهٔ هر کدام */}
+                                {([
+                                    ['PROJECT', 'پروژه', (id: number) => `/projects/${id}`],
+                                    ['MESSAGE', 'وظیفه', (id: number) => `/messages/${id}`],
+                                    ['PARTY', 'طرف‌حساب', (id: number) => `/crm/parties/${id}`],
+                                    ['PERSON', 'افرادِ مرتبط', (id: number) => `/crm/persons/${id}`],
+                                ] as const).map(([type, label, href]) => {
+                                    const items = links.filter((l) => l.LinkType === type);
+                                    if (!items.length) return null;
+                                    return (
+                                        <Descriptions.Item key={type} label={label}>
+                                            <Space size={[6, 4]} wrap>
+                                                {items.map((l) => (
+                                                    <a key={l.EntityID} href={href(Number(l.EntityID))}>
+                                                        <Tag style={{ cursor: 'pointer', marginInlineEnd: 0 }}>{l.DisplayName || l.EntityID}</Tag>
+                                                    </a>
+                                                ))}
+                                            </Space>
+                                        </Descriptions.Item>
+                                    );
+                                })}
                                 <Descriptions.Item label={<><UserOutlined /> ایجادکننده</>}>{event.CreatorName}</Descriptions.Item>
                                 <Descriptions.Item label={<><CrownOutlined /> مالک</>}>
                                     {event.OwnerName}

@@ -77,7 +77,7 @@ class NotificationSnoozeTest extends PushTestCase
         $this->assertCount(2, $sent);
         $p = $sent[1]['payload'];
         $this->assertSame(['MESSAGE', '/messages/' . $messageId, 'snz-' . $snoozeId], [$p['kind'], $p['url'], $p['tag']]);
-        $this->assertStringStartsWith('یادآوریِ دوباره', $p['body']);
+        $this->assertStringStartsWith('یادآوریِ دوباره', $this->text($p));
         $this->assertStringNotContainsString($subject, $p['body'], 'موضوع رویِ صفحهٔ قفل نمی‌آید');
 
         // نمایش در برنامه → دیگر برنمی‌گردد
@@ -143,7 +143,7 @@ class NotificationSnoozeTest extends PushTestCase
 
         $before = count($this->fake->sentTo($endpoint));
         $this->dispatch();
-        $kinds = array_map(fn ($s) => [$s['payload']['kind'], str_starts_with($s['payload']['body'], 'یادآوریِ دوباره')], array_slice($this->fake->sentTo($endpoint), $before));
+        $kinds = array_map(fn ($s) => [$s['payload']['kind'], str_starts_with($this->text($s['payload']), 'یادآوریِ دوباره')], array_slice($this->fake->sentTo($endpoint), $before));
         $this->assertContains(['INVITE', true], $kinds);
         $this->assertContains(['CALEVENT', true], $kinds);
     }

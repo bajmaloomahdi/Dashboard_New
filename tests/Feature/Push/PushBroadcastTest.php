@@ -101,8 +101,9 @@ class PushBroadcastTest extends PushTestCase
 
         $sent = $this->fake->sentTo($endpoint);
         $this->assertCount(1, $sent);
+        $this->assertBrandTitle($sent[0]['payload']);
         $this->assertSame(['BROADCAST', 'اطلاعیه', 'سامانه امشب به‌روزرسانی می‌شود.', "bc-{$id}", '/dashboard'],
-            [$sent[0]['payload']['kind'], $sent[0]['payload']['title'], $sent[0]['payload']['body'], $sent[0]['payload']['tag'], $sent[0]['payload']['url']]);
+            [$sent[0]['payload']['kind'], $this->headline($sent[0]['payload']), $this->text($sent[0]['payload']), $sent[0]['payload']['tag'], $sent[0]['payload']['url']]);
         $this->assertSame(86400, $sent[0]['options']['TTL']);
 
         $stats = $this->broadcastRow($id);
@@ -183,7 +184,7 @@ class PushBroadcastTest extends PushTestCase
 
         $sent = $this->fake->sentTo($endpoint);
         $this->assertCount(1, $sent);
-        $this->assertSame($title, $sent[0]['payload']['title']);
+        $this->assertSame($title, $this->headline($sent[0]['payload']));
         $this->assertLessThanOrEqual(PushPayloadFactory::MAX_BYTES, strlen($sent[0]['rawPayload']));
     }
 
@@ -267,7 +268,7 @@ class PushBroadcastTest extends PushTestCase
         $kinds = collect($this->fake->sentTo($endpoint))->pluck('payload.kind')->sort()->values()->all();
         $this->assertSame(['BROADCAST', 'MESSAGE'], $kinds);
         $message = collect($this->fake->sentTo($endpoint))->firstWhere('payload.kind', 'MESSAGE');
-        $this->assertStringStartsWith('پیامِ ', $message['payload']['title'], 'فقط شمارهٔ نامه، نه موضوع');
+        $this->assertStringStartsWith('پیامِ ', (string) $this->headline($message['payload']), 'فقط شمارهٔ نامه، نه موضوع');
         $this->assertStringNotContainsString('اطلاعیه', $message['rawPayload']);
     }
 

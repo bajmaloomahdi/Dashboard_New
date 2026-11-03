@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Crm\CrmPartyService;
 use App\Services\Crm\Exceptions\CrmException;
 use App\Services\Crm\Exceptions\CrmValidationException;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -96,6 +97,9 @@ class ProjectsController extends Controller
             'owner'            => DB::selectOne('EXEC sp_GetProjectOwner @ProjectID = ?', [$id]),
             // همهٔ برندهایِ فعال — گزینه‌هایِ برند وقتی طرف‌حساب انتخاب نشده (پروژهٔ داخلی)
             'allBrands'        => $this->brandOptions(DB::select('EXEC sp_Crm_GetBrands @SearchText = NULL, @IsActive = 1')),
+            // پچِ ۱۳۸ — تبِ «رویدادها»: پنجرهٔ جزئیاتِ رویداد همان مجوزهایِ تقویمِ کاربر را لازم دارد
+            'calendarPermissions' => collect(DB::select('EXEC sp_GetUserPermissions @UserID = ?', [Auth::id()]))
+                ->pluck('PermissionCode')->filter(fn ($c) => str_starts_with((string) $c, 'CALENDAR_'))->values()->all(),
         ]);
     }
 
@@ -349,9 +353,29 @@ class ProjectsController extends Controller
 
         $row = $result[0] ?? null;
         $response = (array) ($row ?? []);
+        $message = $response['Message'] ?? '';
+
+        // پچِ ۱۳۸ — وظیفهٔ دارایِ مهلت: رویدادِ همان روز ساعتِ ۱۳ در تقویمِ گیرنده (وصل به پروژه و همین وظیفه)
+        if (!empty($response['Success']) && !empty($validated['DueDate']) && !empty($response['NewMessageID'])) {
+            try {
+                $text = trim((string) ($validated['MessageText'] ?? ''));
+                $firstLine = $text !== '' ? mb_substr(trim(strtok($text, "\n")), 0, 120) : '';
+                $title = 'مهلتِ وظیفهٔ ' . ($response['MessageNumber'] ?? '') . ($firstLine !== '' ? ': ' . $firstLine : ' — ' . $project->ProjectTitle);
+                $due = (array) (DB::select(
+                    'EXEC dbo.sp_Calendar_CreateTaskDueEvent @ProjectID = ?, @MessageID = ?, @Title = ?, @Description = ?, @DueDate = ?, @CreatorUserID = ?, @AssigneeUserID = ?',
+                    [$id, (int) $response['NewMessageID'], mb_substr($title, 0, 250), trim($text . "\nپروژه: " . $subject), Carbon::parse($validated['DueDate'])->toDateString(), Auth::id(), (int) $validated['ToUserID']],
+                )[0] ?? []);
+                if (!empty($due['Success'])) {
+                    $message .= ' رویدادِ مهلت هم در تقویم ثبت شد (ساعتِ ۱۳).';
+                }
+            } catch (\Throwable $e) {
+                report($e); // ثبتِ وظیفه انجام شده؛ نبودِ رویداد مانعِ آن نیست
+            }
+        }
+
         return response()->json([
             'success' => !empty($response['Success']),
-            'message' => $response['Message'] ?? '',
+            'message' => $message,
         ]);
     }
 

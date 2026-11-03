@@ -95,7 +95,7 @@ function computeRange(view: ViewMode, referenceDate: Date, workWeek: WorkWeekSet
             to: jalaliMonthBounds(addJalaliMonths(referenceDate, AGENDA_FUTURE_MONTHS)).to,
         };
     }
-    if (view === 'week' || view === 'workweek') {
+    if (view === 'workweek') {
         let cells = buildWeekDays(referenceDate);
         if (view === 'workweek') {
             const work = cells.filter((c) => workWeek.days.includes(jalaliWeekIndex(c.date)));
@@ -126,6 +126,47 @@ const rangeQuery = (from: Date, to: Date) => `from=${toApiDate(from)}&to=${toApi
 
 async function fetchEvents(from: Date, to: Date, userId: number): Promise<CalendarEvent[]> {
     return (await fetchCalendar(`/calendar/events?${rangeQuery(from, to)}&userId=${userId}`)).events;
+}
+
+/**
+ * جست‌وجو در «توضیحات»ِ رویدادها: موضوع و متن در مرورگر جست‌وجو می‌شوند؛ رویدادهایی که فقط با توضیحاتشان پیدا می‌شوند
+ * را سرور برمی‌گرداند (از میانِ همان رویدادهایِ قابلِ دیدن، با دسترسیِ دیدنِ توضیحات).
+ */
+function useCommentMatches(query: string, candidates: CalendarEvent[] | null): Set<number> {
+    const [hits, setHits] = useState<Set<number>>(() => new Set());
+    const q = query.trim();
+    const ids = useMemo(
+        () => (q && candidates ? Array.from(new Set(candidates.filter((ev) => !matchesSearch(ev, q)).map((ev) => Number(ev.EventID)))).slice(0, 3000) : []),
+        [q, candidates],
+    );
+    const idsKey = ids.join(',');
+    useEffect(() => {
+        if (!q || !ids.length) {
+            setHits(new Set());
+            return;
+        }
+        let cancelled = false;
+        const t = window.setTimeout(async () => {
+            try {
+                const res = await fetch('/calendar/search-comments', {
+                    method: 'POST',
+                    headers: { 'X-XSRF-TOKEN': xsrf(), 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json', Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ q, ids }),
+                });
+                const data = res.ok ? await res.json() : { ids: [] };
+                if (!cancelled) setHits(new Set((data.ids || []).map(Number)));
+            } catch {
+                if (!cancelled) setHits(new Set());
+            }
+        }, 300);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(t);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [q, idsKey]);
+    return hits;
 }
 
 async function moveEventApi(eventId: number, start: Date, end: Date): Promise<{ ok: boolean; message: string }> {
@@ -166,8 +207,9 @@ export default function CalendarIndex() {
         viewableUsers: UserOption[];
         currentUserId: number;
         viewingAccess?: string;
+        canLinkCrm?: boolean;
     };
-    const { initialEvents, users, reminderOptions, permissions, viewableUsers, currentUserId } = props;
+    const { initialEvents, users, reminderOptions, permissions, viewableUsers, currentUserId, canLinkCrm = false } = props;
     const can = (p: CalendarPermission) => permissions.includes(p);
 
     const screens = Grid.useBreakpoint();
@@ -408,11 +450,22 @@ export default function CalendarIndex() {
         }
     };
     // «موقت» (دادهٔ قدیمی) هم‌ردهٔ «ثبت شده»
-    const agendaEvents = useMemo(
-        () => visibleEvents.filter((ev) => agendaStatuses.includes(ev.Status === 'TENTATIVE' ? 'CONFIRMED' : ev.Status) && matchesSearch(ev, agendaQuery)),
-        [visibleEvents, agendaStatuses, agendaQuery],
+    const agendaByStatus = useMemo(
+        () => visibleEvents.filter((ev) => agendaStatuses.includes(ev.Status === 'TENTATIVE' ? 'CONFIRMED' : ev.Status)),
+        [visibleEvents, agendaStatuses],
     );
-    const searchResults = useMemo(() => (searching && searchEvents ? applyFilters(searchEvents, filters, query) : []), [searching, searchEvents, filters, query]);
+    // جست‌وجو در موضوع، متن و توضیحاتِ رویداد (توضیحات از سرور)
+    const agendaCommentHits = useCommentMatches(view === 'agenda' ? agendaQuery : '', agendaByStatus);
+    const agendaEvents = useMemo(
+        () => agendaByStatus.filter((ev) => matchesSearch(ev, agendaQuery) || agendaCommentHits.has(Number(ev.EventID))),
+        [agendaByStatus, agendaQuery, agendaCommentHits],
+    );
+    const searchPool = useMemo(() => (searching && searchEvents ? applyFilters(searchEvents, filters, '') : null), [searching, searchEvents, filters]);
+    const searchCommentHits = useCommentMatches(searching ? query : '', searchPool);
+    const searchResults = useMemo(
+        () => (searchPool ? searchPool.filter((ev) => matchesSearch(ev, query) || searchCommentHits.has(Number(ev.EventID))) : []),
+        [searchPool, query, searchCommentHits],
+    );
 
     const eventDays = useMemo(() => {
         const set = new Set<string>();
@@ -432,12 +485,12 @@ export default function CalendarIndex() {
 
     const goPrev = () => {
         if (view === 'month' || view === 'agenda') setReferenceDate((d) => addJalaliMonths(d, -1));
-        else if (view === 'week' || view === 'workweek') setReferenceDate((d) => addDays(d, -7));
+        else if (view === 'workweek') setReferenceDate((d) => addDays(d, -7));
         else setReferenceDate((d) => addDays(d, -1));
     };
     const goNext = () => {
         if (view === 'month' || view === 'agenda') setReferenceDate((d) => addJalaliMonths(d, 1));
-        else if (view === 'week' || view === 'workweek') setReferenceDate((d) => addDays(d, 7));
+        else if (view === 'workweek') setReferenceDate((d) => addDays(d, 7));
         else setReferenceDate((d) => addDays(d, 1));
     };
     const goToday = () => setReferenceDate(startOfDay(new Date()));
@@ -561,7 +614,7 @@ export default function CalendarIndex() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             prefix={<SearchOutlined style={{ color: THEME.textLight }} />}
-            placeholder="جست‌وجو در رویدادها"
+            placeholder="جست‌وجو در موضوع، متن و توضیحات"
             style={{ width: isMobile ? '100%' : 230 }}
         />
     );
@@ -632,7 +685,7 @@ export default function CalendarIndex() {
                         )}
                     </Col>
                 )}
-                <Col flex="auto" style={{ minWidth: 0 }}>
+                <Col flex="auto" className="cal-fill-col" style={{ minWidth: 0 }}>
                     <Card style={{ marginBottom: 12, ...STYLES.filterCard }} styles={{ body: { padding: isMobile ? 10 : 14 } }}>
                         <div className="cal-toolbar">
                             <Space wrap size={6} className="cal-toolbar-nav">
@@ -658,7 +711,7 @@ export default function CalendarIndex() {
                         </div>
                     </Card>
 
-                    <Card style={STYLES.card} styles={{ body: { padding: isMobile ? 8 : 12 } }}>
+                    <Card className="cal-main-card" style={STYLES.card} styles={{ body: { padding: isMobile ? 8 : 12 } }}>
                         {searching ? (
                             <Spin spinning={searchLoading}>
                                 <div className="cal-search-head">
@@ -697,7 +750,7 @@ export default function CalendarIndex() {
                                         <Input
                                             allowClear
                                             prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                                            placeholder="جستجو در موضوع و متن…"
+                                            placeholder="جستجو در موضوع، متن و توضیحات…"
                                             value={agendaQuery}
                                             onChange={(e) => setAgendaQuery(e.target.value)}
                                             className="cal-agenda-search"
@@ -773,6 +826,7 @@ export default function CalendarIndex() {
                 eventId={editingEventId}
                 defaultDate={defaultSlotDate}
                 units={sources?.units ?? []}
+                canLinkCrm={canLinkCrm}
             />
 
             <EventDetailsModal
@@ -805,6 +859,14 @@ export default function CalendarIndex() {
             />
 
             <style>{`
+                /* کادرِ اصلیِ تقویم تا پایینِ پنلِ کناری (هم‌ردیف)؛ زنجیرهٔ flex تا بدنهٔ ساعت‌ها/ماه/دستورکار */
+                .cal-fill-col { display: flex; flex-direction: column; }
+                .cal-main-card { flex: 1 1 auto; display: flex; flex-direction: column; }
+                .cal-main-card > .ant-card-body,
+                .cal-main-card > .ant-card-body > .ant-spin,
+                .cal-main-card > .ant-card-body > .ant-spin > .ant-spin-container,
+                .cal-main-card > .ant-card-body > .ant-spin-nested-loading,
+                .cal-main-card > .ant-card-body > .ant-spin-nested-loading > .ant-spin-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
                 .cal-agenda-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
                 .cal-agenda-from { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
                 .cal-agenda-search { flex: 1; min-width: 200px; max-width: 360px; }

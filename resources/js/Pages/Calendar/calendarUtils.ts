@@ -7,12 +7,12 @@ import { WEEKDAY_LABELS_FA, jalaliParts } from '../../Utils/jalaliCalendar';
  * ابزارهای مشترکِ صفحهٔ تقویم: تاریخ، فیلتر و جست‌وجو، هفتهٔ کاری و قواعدِ جابه‌جایی (Drag & Drop).
  */
 
-export type ViewMode = 'day' | 'workweek' | 'week' | 'month' | 'agenda';
+// نمایِ «هفته» (با روزهایِ تعطیل) برداشته شد — «هفتهٔ کاری» کافی است
+export type ViewMode = 'day' | 'workweek' | 'month' | 'agenda';
 
 export const VIEW_OPTIONS: { label: string; value: ViewMode }[] = [
     { label: 'روز', value: 'day' },
     { label: 'هفته کاری', value: 'workweek' },
-    { label: 'هفته', value: 'week' },
     { label: 'ماه', value: 'month' },
     { label: 'دستورکار', value: 'agenda' },
 ];
@@ -108,10 +108,45 @@ export function activeFilterCount(f: CalendarFilterState): number {
         + (f.onlyWithReminder ? 1 : 0) + (f.hideCancelled ? 1 : 0);
 }
 
+/**
+ * «تگِ» رنگ‌ها: نامی که کاربر برایِ هر رنگ می‌گذارد (مثلاً #fa8c16 = «جلسهٔ مشتری») — در فهرستِ رنگ‌هایِ فرم قابلِ جست‌وجو
+ * و در جست‌وجویِ تقویم هم رویدادهایِ همان رنگ را پیدا می‌کند. در همین مرورگر ذخیره می‌شود.
+ */
+const COLOR_NAMES_KEY = 'raga360.calendar.colorNames';
+let colorNamesCache: Record<string, string> | null = null;
+
+export function getColorNames(): Record<string, string> {
+    if (colorNamesCache) return colorNamesCache;
+    try {
+        const raw = JSON.parse(localStorage.getItem(COLOR_NAMES_KEY) || '{}');
+        colorNamesCache = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    } catch {
+        colorNamesCache = {};
+    }
+    return colorNamesCache!;
+}
+
+/** نامِ یک رنگ را ثبت یا (با متنِ خالی) پاک می‌کند؛ خروجی: نقشهٔ تازه */
+export function setColorName(hex: string, name: string): Record<string, string> {
+    const key = hex.toLowerCase();
+    const next = { ...getColorNames() };
+    const clean = name.trim().slice(0, 30);
+    if (clean) next[key] = clean;
+    else delete next[key];
+    colorNamesCache = next;
+    try {
+        localStorage.setItem(COLOR_NAMES_KEY, JSON.stringify(next));
+    } catch {
+        /* بی‌اهمیت */
+    }
+    return next;
+}
+
 export function matchesSearch(ev: CalendarEvent, query: string): boolean {
     const q = normalizeForSearch(query.trim());
     if (!q) return true;
-    const haystack = normalizeForSearch([ev.Title, ev.Description, ev.CreatorName, ev.OwnerName].filter(Boolean).join(' '));
+    const colorName = getColorNames()[String(ev.Color || '').toLowerCase()];
+    const haystack = normalizeForSearch([ev.Title, ev.Description, ev.CreatorName, ev.OwnerName, colorName].filter(Boolean).join(' '));
     return q.split(' ').filter(Boolean).every((token) => haystack.includes(token));
 }
 

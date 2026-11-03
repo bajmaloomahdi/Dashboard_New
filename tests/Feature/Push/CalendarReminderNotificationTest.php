@@ -72,7 +72,7 @@ class CalendarReminderNotificationTest extends PushTestCase
         $this->assertCount(1, $sent, 'برایِ یک یادآوری فقط یک Push');
         $this->assertSame(['REMINDER', '/calendar'], [$sent[0]['payload']['kind'], $sent[0]['payload']['url']]);
         // موضوعِ یادآوری برایِ صاحبش در اعلان می‌آید (رویدادِ خصوصی عمومی می‌ماند — CalendarReminderContentTest)
-        $this->assertStringStartsWith('یادآوری: جلسهٔ محرمانهٔ آزمون', $sent[0]['payload']['title']);
+        $this->assertStringStartsWith('یادآوری: جلسهٔ محرمانهٔ آزمون', (string) $this->headline($sent[0]['payload']));
         $this->assertSame('high', $sent[0]['options']['urgency']);
         $this->assertCount(1, $this->outbox($u, 'REMINDER'));
 

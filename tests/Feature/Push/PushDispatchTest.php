@@ -259,7 +259,8 @@ class PushDispatchTest extends PushTestCase
         $this->dispatch();
         $msg = DB::table('Messages')->where('MessageID', $messageId)->first(['MessageNumber', 'Subject']);
         $p = $this->fake->sentTo($endpoint)[0]['payload'];
-        $this->assertSame(['MESSAGE', 'پیامِ ' . $msg->MessageNumber], [$p['kind'], $p['title']]);
+        $this->assertBrandTitle($p);
+        $this->assertSame(['MESSAGE', 'پیامِ ' . $msg->MessageNumber], [$p['kind'], $this->headline($p)]);
         $this->assertStringNotContainsString($msg->Subject, $p['title'] . $p['body']);
 
         // وظیفه به مدیرِ واحد (کاربرِ ۴) — عنوان «وظیفهٔ TSK-…»
@@ -273,7 +274,7 @@ class PushDispatchTest extends PushTestCase
         $this->dispatch();
         $task = collect($this->fake->sentTo($managerEndpoint))->firstWhere('payload.kind', 'TASK');
         $this->assertNotNull($task);
-        $this->assertSame('وظیفهٔ ' . $taskNumber, $task['payload']['title']);
+        $this->assertSame('وظیفهٔ ' . $taskNumber, $this->headline($task['payload']));
     }
 
     /** پچِ ۱۳۰: توضیح رویِ رویداد → Pushِ CALEVENT برایِ شرکت‌کننده (نه نویسنده) */
@@ -327,8 +328,12 @@ class PushDispatchTest extends PushTestCase
         $this->dispatch();
 
         $sent = $this->fake->sent[0];
-        $this->assertStringStartsWith('پیامِ ', $sent['payload']['title']); // فقط شمارهٔ نامه
-        $this->assertStringContainsString('کارتابل', $sent['payload']['body']);
+        $this->assertBrandTitle($sent['payload']);
+        $company = DB::select('EXEC sp_GetCompany')[0] ?? null;
+        $name = trim((string) ($company->Name ?? '')) ?: trim((string) ($company->SiteTitle ?? ''));
+        $this->assertSame($name !== '' ? 'راگا ۳۶۰ — ' . mb_substr($name, 0, 60) : 'راگا ۳۶۰', $sent['payload']['title'], 'نامِ نرم‌افزار، بعد شرکتِ استفاده‌کننده');
+        $this->assertStringStartsWith('پیامِ ', (string) $this->headline($sent['payload'])); // فقط شمارهٔ نامه
+        $this->assertStringContainsString('کارتابل', $this->text($sent['payload']));
         $this->assertStringNotContainsString('Push آزمون', $sent['rawPayload']); // موضوع/متنِ پیام در اعلان نیست
         $this->assertStringNotContainsString('محرمانه', $sent['rawPayload']);
         $this->assertLessThanOrEqual(\App\Services\Push\PushPayloadFactory::MAX_BYTES, strlen($sent['rawPayload']));

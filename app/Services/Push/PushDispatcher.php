@@ -116,7 +116,9 @@ class PushDispatcher
         if (in_array((string) $row->Kind, ['MESSAGE', 'TASK'], true) && preg_match('#^/messages/(\d+)$#', (string) $row->TargetUrl, $m)) {
             $messageNumber = $this->store->messageNumber((int) $m[1], (int) $row->UserID);
         }
-        $payload = $this->payloads->make($row, $broadcast, $reminder, $messageNumber);
+        // دعوت/لغو/فعالیتِ رویداد (و تعویقِ آن‌ها): موضوعِ رویداد در خطِ اول — همان کلیدِ PUSH_REMINDER_DETAILS؛ خصوصی عمومی می‌ماند
+        $eventTitle = config('push.reminder_details', true) ? $this->store->eventTitle($row) : null;
+        $payload = $this->payloads->make($row, $broadcast, $reminder, $messageNumber, $eventTitle);
         $options = $this->payloads->options($row, $check->ExpiresInSeconds);
         $retry = false;
         $retryAfter = null;

@@ -87,7 +87,10 @@ class CalendarInvitationTest extends PushTestCase
         $sent = $this->fake->sentTo($guestEndpoint);
         $this->assertCount(1, $sent, 'هر نسخهٔ دعوت فقط یک Push');
         $this->assertSame(['INVITE', '/calendar?invites=1'], [$sent[0]['payload']['kind'], $sent[0]['payload']['url']]);
-        $this->assertStringNotContainsString('بودجه', $sent[0]['rawPayload']); // عنوانِ جلسه رویِ صفحهٔ قفل نمی‌آید
+        // موضوعِ جلسه در خطِ اول (رویدادِ خصوصی عمومی می‌ماند)؛ متن همان متنِ عمومیِ دعوت
+        $this->assertStringStartsWith('رویداد: ', (string) $this->headline($sent[0]['payload']));
+        $this->assertStringContainsString('بودجه', (string) $this->headline($sent[0]['payload']));
+        $this->assertSame('دعوت به جلسهٔ تازه‌ای دارید.', $this->text($sent[0]['payload']));
         $this->assertCount(0, $this->fake->sentTo($creatorEndpoint));
     }
 

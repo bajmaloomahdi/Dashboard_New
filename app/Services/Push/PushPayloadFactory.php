@@ -47,12 +47,16 @@ class PushPayloadFactory
      * @param  array|null  $reminder  برایِ REMINDER: خروجیِ ReminderContent::for (null = متنِ عمومی)
      * @param  string|null  $messageNumber  برایِ MESSAGE/TASK: شمارهٔ نامه (مثلِ TSK-1405-000050) — در عنوان؛ موضوع همچنان نمی‌آید
      */
-    public function make(object $outbox, ?object $broadcast = null, ?array $reminder = null, ?string $messageNumber = null): string
+    public function make(object $outbox, ?object $broadcast = null, ?array $reminder = null, ?string $messageNumber = null, ?string $eventTitle = null): string
     {
         $kind = (string) $outbox->Kind;
         $headline = null; // عنوانِ خاصِ این اعلان — خطِ اولِ متن
         if (in_array($kind, ['MESSAGE', 'TASK'], true) && $messageNumber !== null && trim($messageNumber) !== '') {
             $headline = ($kind === 'TASK' ? 'وظیفهٔ ' : 'پیامِ ') . mb_substr(trim($messageNumber), 0, 40);
+        }
+        // دعوت، لغو یا فعالیت رویِ رویداد: موضوعِ رویداد (رویدادِ خصوصی را فراخوان null می‌دهد)
+        if (in_array($kind, ['INVITE', 'CANCEL', 'CALEVENT'], true) && $eventTitle !== null && trim($eventTitle) !== '') {
+            $headline = 'رویداد: ' . ReminderContent::truncate(trim($eventTitle), ReminderContent::TITLE_MAX);
         }
         $body = self::BODIES[$kind] ?? self::BODIES['MESSAGE'];
         if ($kind === 'INVITE' && str_starts_with((string) $outbox->Tag, 'invu-')) {

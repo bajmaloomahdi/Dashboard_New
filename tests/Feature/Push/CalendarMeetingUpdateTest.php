@@ -82,7 +82,7 @@ class CalendarMeetingUpdateTest extends PushTestCase
 
     private function bodies(string $endpoint): array
     {
-        return array_map(fn ($s) => $s['payload']['body'], $this->fake->sentTo($endpoint));
+        return array_map(fn ($s) => $this->text($s['payload']), $this->fake->sentTo($endpoint)); // بدونِ خطِ اولِ «رویداد: …»
     }
 
     public function test_every_timing_change_resets_all_responses_and_keeps_the_previous_one(): void

@@ -311,7 +311,7 @@ export default function ReminderWatcher() {
                     key: `invite-${inviteKey(inv)}`,
                     icon: <MailOutlined style={{ color: '#667eea' }} />,
                     message: Number(inv.InviteIsUpdate) === 1 ? 'تغییرِ جلسه — لطفاً دوباره پاسخ دهید' : 'دعوت به جلسه',
-                    description: `${inv.Title} — ${gregorianToJalaliDateTimeDisplay(inv.StartDateTime)}${inv.OrganizerName ? ` (از: ${inv.OrganizerName})` : ''}`,
+                    description: `${inv.Title} — ${gregorianToJalaliDateTimeDisplay(inv.StartDateTime)}`,
                     duration: NOTIFY_DURATION_SECONDS,
                     actions: noticeActions(
                         `invite-${inviteKey(inv)}`,

@@ -167,6 +167,38 @@ class PushStore
         return $number !== '' ? $number : null;
     }
 
+    /**
+     * موضوعِ رویداد برایِ اعلانِ دعوت/لغو/فعالیتِ رویداد (و تعویقِ همان‌ها) — فقط اگر همین کاربر طرفِ همان دعوت/اطلاع است؛
+     * رویدادِ خصوصی null (رویِ صفحهٔ قفل نمی‌آید، مثلِ یادآوری).
+     */
+    public function eventTitle(object $row): ?string
+    {
+        $type = (string) $row->SourceType;
+        $sourceId = (int) $row->SourceID;
+        $userId = (int) $row->UserID;
+        if ($type === 'SNOOZE') {
+            $z = DB::selectOne('SELECT SourceKind, SourceID FROM dbo.NotificationSnoozes WHERE SnoozeID = ? AND UserID = ?', [$sourceId, $userId]);
+            if (! $z || ! in_array($z->SourceKind, ['INVITE', 'CANCEL', 'CALEVENT'], true)) {
+                return null;
+            }
+            $event = $z->SourceKind === 'CALEVENT'
+                ? DB::selectOne('SELECT E.Title, E.IsPrivate FROM dbo.CalendarEvents E WHERE E.EventID = ?', [(int) $z->SourceID])
+                : DB::selectOne('SELECT E.Title, E.IsPrivate FROM dbo.CalendarEventAttendees A INNER JOIN dbo.CalendarEvents E ON E.EventID = A.EventID WHERE A.CalendarEventAttendeeID = ? AND A.UserID = ?', [(int) $z->SourceID, $userId]);
+        } elseif (in_array($type, ['INVITE', 'CANCEL'], true)) {
+            $event = DB::selectOne('SELECT E.Title, E.IsPrivate FROM dbo.CalendarEventAttendees A INNER JOIN dbo.CalendarEvents E ON E.EventID = A.EventID WHERE A.CalendarEventAttendeeID = ? AND A.UserID = ?', [$sourceId, $userId]);
+        } elseif ($type === 'CALEVENT') {
+            $event = DB::selectOne('SELECT E.Title, E.IsPrivate FROM dbo.CalendarEventNotices N INNER JOIN dbo.CalendarEvents E ON E.EventID = N.EventID WHERE N.NoticeID = ? AND N.UserID = ?', [$sourceId, $userId]);
+        } else {
+            return null;
+        }
+        if (! $event || (int) ($event->IsPrivate ?? 0) === 1) {
+            return null;
+        }
+        $title = trim((string) ($event->Title ?? ''));
+
+        return $title !== '' ? $title : null;
+    }
+
     /** @param  array<int|string>  $ids */
     private static function idList(array $ids): ?string
     {

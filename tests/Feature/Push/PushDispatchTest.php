@@ -277,6 +277,35 @@ class PushDispatchTest extends PushTestCase
         $this->assertSame('وظیفهٔ ' . $taskNumber, $this->headline($task['payload']));
     }
 
+    /** موضوعِ رویداد در خطِ اولِ اعلانِ دعوت/فعالیت؛ رویدادِ خصوصی عمومی می‌ماند (مثلِ یادآوری) */
+    public function test_event_push_shows_title_except_for_private_events(): void
+    {
+        $owner = $this->createUserWithoutRoles();
+        $guest = $this->createUserWithoutRoles();
+        $this->grantPermissionsTo($owner, ['CALENDAR_VIEW', 'CALENDAR_CREATE', 'CALENDAR_CREATE_FOR_OTHERS', 'CALENDAR_COMMENT_VIEW', 'CALENDAR_COMMENT_ADD']);
+        $this->grantPermissionsTo($guest, ['CALENDAR_VIEW', 'CALENDAR_COMMENT_VIEW']);
+        $endpoint = $this->subscribe($guest);
+        $start = DB::selectOne('SELECT CONVERT(varchar(19), DATEADD(DAY, 1, SYSDATETIME()), 120) AS t')->t;
+        $end = DB::selectOne('SELECT CONVERT(varchar(19), DATEADD(MINUTE, 30, DATEADD(DAY, 1, SYSDATETIME())), 120) AS t')->t;
+        $make = fn (string $title, bool $private) => (int) $this->actingAs(\App\Models\User::find($owner))->postJson('/calendar/events', [
+            'Title' => $title, 'StartDateTime' => $start, 'EndDateTime' => $end, 'RecurrenceType' => 'NONE', 'AttendeeUserIDs' => [$guest], 'IsPrivate' => $private,
+        ])->assertOk()->json('eventId');
+        $public = $make('جلسهٔ برنامه‌ریزی', false);
+        $make('جلسهٔ محرمانه', true);
+        $this->actingAs(\App\Models\User::find($owner))->postJson("/calendar/events/{$public}/comments", ['Text' => 'دستورِ جلسه'])->assertOk();
+
+        $this->dispatch();
+        $sent = $this->fake->sentTo($endpoint);
+        $headlines = array_map(fn ($s) => [$s['payload']['kind'], $this->headline($s['payload'])], $sent);
+        $this->assertContains(['INVITE', 'رویداد: جلسهٔ برنامه‌ریزی'], $headlines);
+        $this->assertContains(['CALEVENT', 'رویداد: جلسهٔ برنامه‌ریزی'], $headlines);
+        $this->assertContains(['INVITE', null], $headlines, 'دعوتِ رویدادِ خصوصی بدونِ موضوع');
+        foreach ($sent as $s) {
+            $this->assertStringNotContainsString('محرمانه', $s['rawPayload']);
+            $this->assertStringStartsWith('راگا ۳۶۰', $s['payload']['title']);
+        }
+    }
+
     /** پچِ ۱۳۰: توضیح رویِ رویداد → Pushِ CALEVENT برایِ شرکت‌کننده (نه نویسنده) */
     public function test_event_comment_is_pushed_to_participants(): void
     {

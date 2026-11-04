@@ -61,7 +61,7 @@ class CalendarNotificationCoordinationTest extends PushTestCase
 
     private function bodies(string $endpoint): array
     {
-        return array_map(fn ($s) => $s['payload']['body'], $this->fake->sentTo($endpoint));
+        return array_map(fn ($s) => $this->text($s['payload']), $this->fake->sentTo($endpoint)); // بدونِ خطِ اولِ «رویداد: …»
     }
 
     private function notices(int $userId): array

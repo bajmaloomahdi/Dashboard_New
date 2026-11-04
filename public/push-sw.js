@@ -73,7 +73,13 @@ self.addEventListener('push', (event) => {
         const pushId = !reminderId && data.snz === 1 && typeof data.id === 'string' && /^\d+$/.test(data.id) ? data.id : null;
 
         // مرورگرها (به‌خصوص iOS) برایِ هر Push یک اعلانِ قابلِ‌مشاهده می‌خواهند؛ تکراری فقط جایگزینِ بی‌صدا می‌شود
-        await self.registration.showNotification(data.title || 'راگا ۳۶۰', {
+        // اپل (iPhone/iPad و Safariِ مک): سیستم «from نامِ برنامهٔ نصب‌شده» (= نامِ شرکت) را خودش زیرِ عنوان می‌نویسد →
+        // عنوان فقط نامِ نرم‌افزار، تا نامِ شرکت تکرار نشود؛ بقیهٔ دستگاه‌ها همان «راگا ۳۶۰ — نامِ شرکت»
+        const ua = (self.navigator && self.navigator.userAgent) || '';
+        const appleWebPush = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|Firefox|FxiOS/.test(ua));
+        const title = appleWebPush && typeof data.app === 'string' && data.app ? data.app : data.title || 'راگا ۳۶۰';
+
+        await self.registration.showNotification(title, {
             body: data.body || '',
             tag,
             renotify: !duplicate,

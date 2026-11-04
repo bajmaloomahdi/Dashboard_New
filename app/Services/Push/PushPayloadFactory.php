@@ -94,6 +94,9 @@ class PushPayloadFactory
             'tag' => (string) $outbox->Tag,
             'kind' => $kind,
             'title' => $this->brandTitle(),
+            // دستگاه‌هایِ اپل (وب‌اپِ نصب‌شده) خودشان «from نامِ برنامه» (= نامِ شرکت) را زیرِ عنوان می‌گذارند؛
+            // Service Worker آن‌جا فقط همین نامِ نرم‌افزار را عنوان می‌کند تا نامِ شرکت دو بار نیاید
+            'app' => self::TITLE,
             'body' => $headline !== null ? $headline . "\n" . $body : $body,
             'url' => $url,
             // پچِ ۱۳۱: شناسهٔ یادآوری برایِ دکمه‌هایِ «… دقیقه بعد» (Service Worker صفحهٔ تقویم را با ?snooze= باز می‌کند)

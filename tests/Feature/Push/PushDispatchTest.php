@@ -361,6 +361,7 @@ class PushDispatchTest extends PushTestCase
         $company = DB::select('EXEC sp_GetCompany')[0] ?? null;
         $name = trim((string) ($company->Name ?? '')) ?: trim((string) ($company->SiteTitle ?? ''));
         $this->assertSame($name !== '' ? 'راگا ۳۶۰ — ' . mb_substr($name, 0, 60) : 'راگا ۳۶۰', $sent['payload']['title'], 'نامِ نرم‌افزار، بعد شرکتِ استفاده‌کننده');
+        $this->assertSame('راگا ۳۶۰', $sent['payload']['app'], 'عنوانِ کوتاه برایِ دستگاه‌هایِ اپل (که خودشان «from نامِ شرکت» می‌گذارند)');
         $this->assertStringStartsWith('پیامِ ', (string) $this->headline($sent['payload'])); // فقط شمارهٔ نامه
         $this->assertStringContainsString('کارتابل', $this->text($sent['payload']));
         $this->assertStringNotContainsString('Push آزمون', $sent['rawPayload']); // موضوع/متنِ پیام در اعلان نیست

@@ -261,6 +261,7 @@ export default function RoleUsers() {
                     کاربرانِ این نقش ({selectedUsers.length} نفر)
                 </Text>
                 <DataGrid
+                    gridKey="admin.roles.users"
                     columns={[]}
                     dataSource={selectedUsers}
                     customColumns={columns}

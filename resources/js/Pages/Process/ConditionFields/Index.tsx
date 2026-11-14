@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Table, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Card, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
 import {
     PlusOutlined,
     SaveOutlined,
@@ -356,7 +357,7 @@ export default function ProcessConditionFieldsIndex() {
                     </Space>
                 ) : null}
 
-                <Table
+                <PreferenceTable gridKey="workflow.condition-fields"
                     rowKey="FieldID"
                     columns={columns}
                     dataSource={items}

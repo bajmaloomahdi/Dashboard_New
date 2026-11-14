@@ -193,7 +193,7 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
                 <>
                     <Descriptions bordered column={{ xs: 1, sm: 2 }} size="middle">
                         <Descriptions.Item label="طرف‌حساب">
-                            {owner?.OwnerPartyID ? owner.OwnerPartyName || `#${owner.OwnerPartyID}` : <Text type="secondary">انتخاب نشده (پروژهٔ داخلی)</Text>}
+                            {owner?.OwnerPartyID ? <a href={`/crm/parties/${owner.OwnerPartyID}?tab=interactions`}>{owner.OwnerPartyName || `#${owner.OwnerPartyID}`}</a> : <Text type="secondary">انتخاب نشده (پروژهٔ داخلی)</Text>}
                         </Descriptions.Item>
                         <Descriptions.Item label="برند">
                             {owner?.OwnerBrandID ? owner.OwnerBrandName || `#${owner.OwnerBrandID}` : <Text type="secondary">—</Text>}

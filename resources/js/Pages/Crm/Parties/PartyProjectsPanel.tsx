@@ -1,4 +1,5 @@
-import { Table, Tag, Typography, Progress, Alert, Empty, Space } from 'antd';
+import PreferenceTable from '../../../Components/PreferenceTable';
+import { Tag, Typography, Progress, Alert, Empty, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Link } from '@inertiajs/react';
 import { toBool } from '../../../Utils/bool';
@@ -111,7 +112,7 @@ export default function PartyProjectsPanel({ items, hiddenCount, mode = 'party' 
                     message={`${hiddenCount} پروژهٔ دیگر هم به ${subject} مرتبط است که شما عضوِ آن نیستید و نمایش داده نمی‌شود.`}
                 />
             ) : null}
-            <Table
+            <PreferenceTable gridKey={isPerson ? 'crm.persons.projects' : 'crm.parties.projects'}
                 rowKey={(p) => String(p.ProjectID)}
                 columns={columns}
                 dataSource={items}

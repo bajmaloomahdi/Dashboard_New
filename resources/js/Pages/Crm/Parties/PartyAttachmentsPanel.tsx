@@ -1,3 +1,4 @@
+import { newestFirst } from '../../../Utils/newestFirst';
 import { useRef, useState } from 'react';
 import { Button, Space, Typography, Empty, Popconfirm, Spin, Input, Tooltip } from 'antd';
 import {
@@ -196,7 +197,7 @@ export default function PartyAttachmentsPanel({ partyId, items: initialItems, ca
                     <Empty description="هنوز فایلی برایِ این طرف‌حساب پیوست نشده است" />
                 ) : (
                     <div className="crm-party-attachments-list">
-                        {files.map((f) => (
+                        {newestFirst(files, (f) => f.Date_InsertFirst, (f) => f.PartyAttachmentID).map((f) => (
                             <div key={f.PartyAttachmentID} className="crm-party-attachment-row">
                                 <div className="crm-party-attachment-icon">{fileIcon(f.FileExtension)}</div>
                                 <div className="crm-party-attachment-main">

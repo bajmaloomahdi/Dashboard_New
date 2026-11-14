@@ -101,6 +101,40 @@ class CrmCooperationEndedTest extends TestCase
         }
     }
 
+    public function test_party_list_filters_cooperation_alongside_search_status_and_nature(): void
+    {
+        $search = 'آزمونِ فیلترِ همکاری ' . bin2hex(random_bytes(3));
+        $endedId = (int) $this->as(self::USER_FULL)->postJson('/crm/parties', [
+            'partyNature' => 'LEGAL',
+            'officialName' => $search . ' پایان‌یافته',
+            'identifierNumber' => $this->digits(),
+            'cooperationEnded' => true,
+            'cooperationEndedAt' => '2026-10-20 14:30:00',
+        ])->assertOk()->json('partyId');
+        $openId = (int) $this->as(self::USER_FULL)->postJson('/crm/parties', [
+            'partyNature' => 'LEGAL',
+            'officialName' => $search . ' برقرار',
+            'identifierNumber' => $this->digits(),
+        ])->assertOk()->json('partyId');
+
+        $query = http_build_query(['search' => $search, 'isActive' => '1', 'partyNature' => 'LEGAL']);
+        $endedItems = $this->as(self::USER_FULL)->getJson("/crm/parties-list?{$query}&cooperationEnded=1")
+            ->assertOk()->json('items');
+        $openItems = $this->as(self::USER_FULL)->getJson("/crm/parties-list?{$query}&cooperationEnded=0")
+            ->assertOk()->json('items');
+
+        $this->assertSame([$endedId], collect($endedItems)->pluck('PartyID')->map(fn ($id) => (int) $id)->all());
+        $this->assertSame([$openId], collect($openItems)->pluck('PartyID')->map(fn ($id) => (int) $id)->all());
+
+        $this->as(self::USER_FULL)->get("/crm/parties?{$query}&cooperationEnded=1")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Crm/Parties/Index')
+                ->has('parties', 1)
+                ->where('parties.0.PartyID', $endedId)
+                ->where('filters.cooperationEnded', true));
+    }
+
     public function test_person_cooperation_end_is_saved_and_cleared(): void
     {
         $base = ['titleId' => $this->crmTitleId(), 'firstName' => 'مخاطب', 'lastName' => 'قطعِ همکاری ' . bin2hex(random_bytes(3))];

@@ -1,5 +1,6 @@
+import PreferenceTable from '../../Components/PreferenceTable';
 import { useEffect, useState } from 'react';
-import { Modal, Select, Button, Table, Tag, Space, Typography } from 'antd';
+import { Modal, Select, Button, Tag, Space, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined, CrownOutlined, TeamOutlined } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
@@ -253,7 +254,7 @@ export default function ProjectMembersModal({
                 </Typography.Text>
             </Space>
 
-            <Table
+            <PreferenceTable gridKey="projects.modal.members"
                 className="unified-table"
                 columns={columns}
                 dataSource={activeMembers}

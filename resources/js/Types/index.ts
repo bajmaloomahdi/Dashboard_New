@@ -32,6 +32,7 @@ export interface MenuTree extends Menu {
 
 // رویداد تقویم (شامل رخدادهای بسط‌یافته‌ی تکرارشونده)
 export interface CalendarEvent {
+    AttendeeNames?: string[];
     EventID: number;
     OccurrenceKey: string;
     IsRecurringInstance: boolean;

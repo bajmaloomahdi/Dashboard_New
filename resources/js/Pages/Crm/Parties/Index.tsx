@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { compareGridValues } from '../../../Utils/gridSorting';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Popconfirm, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -19,6 +20,7 @@ import {
     ApartmentOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
+import { useGridColumnSettings } from '../../../Components/GridColumnSettings';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
@@ -30,11 +32,18 @@ import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
 import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
 import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
-import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, distinctListOptions, filterHeaderCss } from '../../../Components/Crm/tableFilters';
+import { useColumnFilters, FilterHeader, TextFilterInput, distinctListOptions, filterHeaderCss, normalizeForFilter } from '../../../Components/Crm/tableFilters';
+import { emptyCategory, emptySelections, filterPartyCategories, type CategorySelections } from './categoryFilters';
 import FirstWithTooltipCell, { parseNameList } from '../../../Components/Crm/FirstWithTooltipCell';
 import { CooperationEndedTag } from '../../../Components/Crm/CooperationEnded';
 
 const { Title, Text } = Typography;
+
+const cooperationFilterOptions = [
+    { value: 'all', label: 'همه' },
+    { value: '0', label: 'فعال' },
+    { value: '1', label: 'پایان‌یافته' },
+];
 
 interface PartyRow extends Party {
     DisplayName: string;
@@ -62,10 +71,47 @@ interface PartyRow extends Party {
     PrimaryAddressTitle?: string | null;
 }
 
+const typeList = (p: PartyRow) => parseNameList(p.PartyTypeNames, p.PartyTypeName);
+const activityList = (p: PartyRow) => parseNameList(p.ActivityNames, p.ActivityName);
+
+function CategoryFilter({ label, value, onChange, options, testId }: {
+    label: string;
+    value: string[];
+    onChange: (value: string[]) => void;
+    options: { value: string; label: string }[];
+    testId?: string;
+}) {
+    const available = new Set(options.map((option) => option.value));
+    return (
+        <Select<string[]>
+            mode="multiple"
+            data-testid={testId}
+            aria-label={label}
+            size="small"
+            allowClear
+            showSearch
+            placeholder="همه"
+            style={{ width: 160 }}
+            maxTagCount={1}
+            maxTagTextLength={12}
+            maxTagPlaceholder={(omitted) => <Tooltip title={omitted.map((option) => option.label).join('، ')}>+{omitted.length}</Tooltip>}
+            popupMatchSelectWidth={false}
+            value={value}
+            onChange={onChange}
+            options={[...options, ...value.filter((name) => !available.has(name)).map((name) => ({
+                value: name,
+                label: name === emptyCategory ? '— (خالی)' : name,
+            }))]}
+            filterOption={(input, option) => normalizeForFilter(option?.label).includes(normalizeForFilter(input))}
+        />
+    );
+}
+
 export default function CrmPartiesIndex() {
+    const columnSettings = useGridColumnSettings('crm.parties.list');
     const { parties, filters, canManage, canDelete = false, positions, contactRoles, partyTypes, activities } = usePage().props as unknown as {
         parties: PartyRow[];
-        filters: { search: string | null; isActive: boolean | null; partyNature: string | null };
+        filters: { search: string | null; isActive: boolean | null; partyNature: string | null; cooperationEnded?: boolean | null };
         canManage: boolean;
         canDelete?: boolean;
         positions: PositionOption[];
@@ -78,9 +124,14 @@ export default function CrmPartiesIndex() {
     const [items, setItems] = useState<PartyRow[]>(parties || []);
     const [searchText, setSearchText] = useState(filters?.search || '');
     const [statusFilter, setStatusFilter] = useState<string | null>(
-        filters?.isActive === null || filters?.isActive === undefined ? null : filters.isActive ? '1' : '0'
+        filters?.isActive === null || filters?.isActive === undefined ? null : toBool(filters.isActive) ? '1' : '0'
     );
     const [natureFilter, setNatureFilter] = useState<string | null>(filters?.partyNature ?? null);
+    const [cooperationFilter, setCooperationFilter] = useState<'all' | '0' | '1'>(
+        filters?.cooperationEnded === null || filters?.cooperationEnded === undefined
+            ? 'all'
+            : toBool(filters.cooperationEnded) ? '1' : '0'
+    );
     const [searching, setSearching] = useState(false);
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -89,33 +140,39 @@ export default function CrmPartiesIndex() {
     const [viewMode, setViewMode] = useListViewMode('crm.parties.viewMode');
     const [page, setPage] = useState({ current: 1, pageSize: 20 });
     // فیلترهایِ ستونیِ شبیهِ اکسل (با تایپ، همان لحظه؛ سمتِ مرورگر رویِ همین فهرستِ بارگذاری‌شده)
-    const typeList = (p: PartyRow) => parseNameList(p.PartyTypeNames, p.PartyTypeName);
-    const activityList = (p: PartyRow) => parseNameList(p.ActivityNames, p.ActivityName);
+    const [categories, setCategories] = useState<CategorySelections>(emptySelections);
     const colF = useColumnFilters<PartyRow>(items, {
         name: { get: (p) => p.DisplayName, mode: 'text' },
-        nature: { get: (p) => p.PartyNature, mode: 'exact' },
         identifier: { get: (p) => p.IdentifierNumber, mode: 'text' },
-        type: { get: typeList, mode: 'any' },
-        activity: { get: activityList, mode: 'any' },
         person: { get: (p) => p.PrimaryContactPersonName, mode: 'text' },
         contact: { get: (p) => [p.PrimaryContactValue, p.PrimaryContactType, p.PrimaryContactExtension].filter(Boolean).join(' '), mode: 'text' },
         address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCounty, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
-        status: { get: (p) => (toBool(p.IsActive) ? '1' : '0'), mode: 'exact' },
     });
+    const filteredRows = useMemo(
+        () => filterPartyCategories(colF.filtered, categories, {
+            type: typeList,
+            activity: activityList,
+            nature: (p) => [p.PartyNature],
+            status: (p) => [toBool(p.IsActive) ? '1' : '0'],
+            cooperation: (p) => [p.CooperationEndedAt != null ? '1' : '0'],
+        }),
+        [colF.filtered, categories],
+    );
+    const hasGridFilters = colF.hasAny || Object.values(categories).some((values) => values.length > 0);
+    const clearGridFilters = () => {
+        colF.clear();
+        setCategories(emptySelections());
+        setPage((pg) => ({ ...pg, current: 1 }));
+    };
+    const setCategory = (key: keyof CategorySelections, value: string[]) => {
+        setCategories((current) => current[key].length === value.length && current[key].every((v, i) => v === value[i])
+            ? current : { ...current, [key]: value });
+        setPage((pg) => pg.current === 1 ? pg : { ...pg, current: 1 });
+    };
     const setColFilter = (key: string, value: string) => {
         colF.setValue(key, value);
         setPage((pg) => ({ ...pg, current: 1 }));
     };
-
-    // در نمایِ جدولی جست‌وجو فقط از فیلترِ ستون‌هاست؛ فیلترهایِ بالایِ صفحه (حالتِ کارتی) پاک می‌شوند تا همهٔ ردیف‌ها بیایند
-    useEffect(() => {
-        if (viewMode === 'grid' && (searchText || statusFilter !== null || natureFilter)) {
-            setSearchText('');
-            setStatusFilter(null);
-            setNatureFilter(null);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewMode]);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -134,6 +191,7 @@ export default function CrmPartiesIndex() {
                     ...(searchText ? { search: searchText } : {}),
                     ...(statusFilter !== null ? { isActive: statusFilter } : {}),
                     ...(natureFilter ? { partyNature: natureFilter } : {}),
+                    ...(cooperationFilter !== 'all' ? { cooperationEnded: cooperationFilter } : {}),
                 }).toString()
         );
         if (res.ok && res.success) setItems(res.items || []);
@@ -155,13 +213,14 @@ export default function CrmPartiesIndex() {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchText, statusFilter, natureFilter]);
+    }, [searchText, statusFilter, natureFilter, cooperationFilter]);
 
     const handleReset = () => {
-        colF.clear();
+        clearGridFilters();
         setSearchText('');
         setStatusFilter(null);
         setNatureFilter(null);
+        setCooperationFilter('all');
     };
 
     const handleCreate = () => {
@@ -252,6 +311,7 @@ export default function CrmPartiesIndex() {
         {
             title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
             key: 'name',
+            sorter: (a, b) => compareGridValues(a.DisplayName, b.DisplayName),
             render: (_, p) => (
                 <Space size={6} wrap>
                     <Text strong>{p.DisplayName || '—'}</Text>
@@ -262,50 +322,57 @@ export default function CrmPartiesIndex() {
         {
             title: (
                 <FilterHeader label="ماهیت">
-                    <SelectFilterInput value={colF.values.nature} onChange={(v) => setColFilter('nature', v)} options={[{ value: 'INDIVIDUAL', label: 'حقیقی' }, { value: 'LEGAL', label: 'حقوقی' }]} />
+                    <CategoryFilter label="ماهیت جدول" value={categories.nature} onChange={(v) => setCategory('nature', v)} options={[{ value: 'INDIVIDUAL', label: 'حقیقی' }, { value: 'LEGAL', label: 'حقوقی' }]} />
                 </FilterHeader>
             ),
             key: 'nature',
+            sorter: (a, b) => compareGridValues(a.PartyNature, b.PartyNature),
             align: 'center',
             render: (_, p) => natureTag(p),
         },
         {
             title: <FilterHeader label="شناسه / کدِ ملی"><TextFilterInput value={colF.values.identifier} onChange={(v) => setColFilter('identifier', v)} /></FilterHeader>,
             key: 'identifier',
+            sorter: (a, b) => compareGridValues(a.IdentifierNumber, b.IdentifierNumber),
             render: (_, p) => (p.IdentifierNumber ? <Text dir="ltr">{p.IdentifierNumber}</Text> : <Text type="secondary">—</Text>),
         },
         {
             title: (
                 <FilterHeader label="گروه">
-                    <SelectFilterInput value={colF.values.type} onChange={(v) => setColFilter('type', v)} options={distinctListOptions(items, typeList)} />
+                    <CategoryFilter label="گروه" value={categories.type} onChange={(v) => setCategory('type', v)} options={distinctListOptions(items, typeList)} />
                 </FilterHeader>
             ),
             key: 'type',
+            sorter: (a, b) => compareGridValues(typeList(a)[0], typeList(b)[0]),
             // چند گروه → اولی نمایش داده می‌شود، بقیه در تولتیپ
             render: (_, p) => <FirstWithTooltipCell items={typeList(p)} />,
         },
         {
             title: (
                 <FilterHeader label="زیرگروه">
-                    <SelectFilterInput value={colF.values.activity} onChange={(v) => setColFilter('activity', v)} options={distinctListOptions(items, activityList)} />
+                    <CategoryFilter label="زیرگروه" value={categories.activity} onChange={(v) => setCategory('activity', v)} options={distinctListOptions(items, activityList)} />
                 </FilterHeader>
             ),
             key: 'activity',
+            sorter: (a, b) => compareGridValues(activityList(a)[0], activityList(b)[0]),
             render: (_, p) => <FirstWithTooltipCell items={activityList(p)} />,
         },
         {
             title: <FilterHeader label="فرد مرتبط"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
             key: 'person',
+            sorter: (a, b) => compareGridValues(a.PrimaryContactPersonName, b.PrimaryContactPersonName),
             render: (_, p) => p.PrimaryContactPersonName || <Text type="secondary">—</Text>,
         },
         {
             title: <FilterHeader label="تماسِ اصلی"><TextFilterInput value={colF.values.contact} onChange={(v) => setColFilter('contact', v)} placeholder="شماره، ایمیل، نوع…" /></FilterHeader>,
             key: 'contact',
+            sorter: (a, b) => compareGridValues(a.PrimaryContactValue, b.PrimaryContactValue),
             render: (_, p) => <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} />,
         },
         {
             title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهرستان، شهر، آدرس…" /></FilterHeader>,
             key: 'address',
+            sorter: (a, b) => compareGridValues([a.PrimaryAddressProvince,a.PrimaryAddressCounty,a.PrimaryAddressCity,a.PrimaryAddressText].filter(Boolean).join(" "), [b.PrimaryAddressProvince,b.PrimaryAddressCounty,b.PrimaryAddressCity,b.PrimaryAddressText].filter(Boolean).join(" ")),
             width: 260,
             render: (_, p) => (
                 <PrimaryAddressCell province={p.PrimaryAddressProvince} county={p.PrimaryAddressCounty} city={p.PrimaryAddressCity} text={p.PrimaryAddressText} title={p.PrimaryAddressTitle} />
@@ -314,12 +381,33 @@ export default function CrmPartiesIndex() {
         {
             title: (
                 <FilterHeader label="وضعیت">
-                    <SelectFilterInput value={colF.values.status} onChange={(v) => setColFilter('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
+                    <CategoryFilter label="وضعیت رکورد جدول" value={categories.status} onChange={(v) => setCategory('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
                 </FilterHeader>
             ),
             key: 'status',
+            sorter: (a, b) => compareGridValues(Number(toBool(a.IsActive)), Number(toBool(b.IsActive))),
             align: 'center',
             render: (_, p) => statusTag(p),
+        },
+        {
+            title: (
+                <FilterHeader label="وضعیت همکاری">
+                    <CategoryFilter
+                        testId="cooperation-filter-table"
+                        label="وضعیت همکاری جدول"
+                        value={categories.cooperation}
+                        onChange={(v) => setCategory('cooperation', v)}
+                        options={cooperationFilterOptions.slice(1)}
+                    />
+                </FilterHeader>
+            ),
+            key: 'cooperationStatus',
+            sorter: (a, b) => compareGridValues(Number(a.CooperationEndedAt != null), Number(b.CooperationEndedAt != null)),
+            align: 'center',
+            render: (_, p) => {
+                const ended = p.CooperationEndedAt != null;
+                return <Tag color={ended ? 'red' : 'success'}>{ended ? 'پایان‌یافته' : 'فعال'}</Tag>;
+            },
         },
         {
             title: 'عملیات',
@@ -357,10 +445,8 @@ export default function CrmPartiesIndex() {
             />
 
             <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
-                <Row gutter={[16, 16]} align="middle" justify={viewMode === 'grid' ? 'end' : 'start'}>
-                    {viewMode === 'cards' ? (
-                    <>
-                    <Col xs={24} sm={12} md={8}>
+                <Row gutter={[16, 16]} align="middle" justify="start">
+                    <Col xs={24} sm={12} md={6}>
                         <Input
                             placeholder="جستجو در نام، شناسه..."
                             prefix={searching ? <LoadingOutlined style={{ color: THEME.primary }} /> : <SearchOutlined />}
@@ -386,7 +472,7 @@ export default function CrmPartiesIndex() {
                     </Col>
                     <Col xs={24} sm={12} md={4}>
                         <Select
-                            placeholder="وضعیت"
+                            placeholder="وضعیتِ رکورد"
                             style={{ width: '100%' }}
                             size="large"
                             value={statusFilter ?? undefined}
@@ -399,40 +485,58 @@ export default function CrmPartiesIndex() {
                         />
                     </Col>
                     <Col xs={24} sm={12} md={4}>
+                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                            <Text type="secondary" style={{ fontSize: 12, lineHeight: '16px' }}>
+                                وضعیت همکاری
+                            </Text>
+                            <Select
+                                data-testid="cooperation-filter"
+                                aria-label="وضعیت همکاری"
+                                style={{ width: '100%' }}
+                                size="large"
+                                value={cooperationFilter}
+                                onChange={(v) => setCooperationFilter(v ?? 'all')}
+                                options={cooperationFilterOptions}
+                            />
+                        </Space>
+                    </Col>
+                    <Col xs={24} sm={12} md={3}>
                         <Button icon={<ReloadOutlined />} onClick={handleReset} size="large" block>
-                            بازنشانی
+                            بازنشانیِ همهٔ فیلترها
                         </Button>
                     </Col>
-                    </>
-                    ) : null}
-                    <Col xs={24} sm={12} md={4} style={{ textAlign: 'center' }}>
+                    <Col xs={24} sm={12} md={3} style={{ textAlign: 'center' }}>
                         <ListViewToggle value={viewMode} onChange={setViewMode} />
                     </Col>
                 </Row>
             </Card>
 
             <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
-                {searching ? (
+                {searching && viewMode !== 'grid' ? (
                     <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>
                         <LoadingOutlined style={{ fontSize: 20, color: THEME.primary }} />
                     </div>
-                ) : (items || []).length === 0 ? (
+                ) : (items || []).length === 0 && viewMode !== 'grid' ? (
                     <div style={{ textAlign: 'center', padding: '48px 0', color: THEME.textLight }}>هیچ طرف‌حسابی یافت نشد</div>
                 ) : viewMode === 'grid' ? (
                     <>
                     <Space size={8} wrap style={{ marginBottom: 8 }}>
-                        <Text type="secondary">{colF.hasAny ? `${colF.filtered.length} از ${items.length} ردیف` : `${items.length} ردیف`}</Text>
-                        {colF.hasAny ? (
-                            <Button size="small" icon={<ReloadOutlined />} onClick={() => { colF.clear(); setPage((pg) => ({ ...pg, current: 1 })); }}>پاک‌کردنِ فیلترهایِ جدول</Button>
-                        ) : null}
+                        <Text type="secondary">{hasGridFilters ? `${filteredRows.length} از ${items.length} ردیف` : `${items.length} ردیف`}</Text>
+                        <Button size="small" disabled={!hasGridFilters} icon={<ReloadOutlined />} onClick={clearGridFilters}>پاک‌کردنِ فیلترهایِ جدول</Button>
+                        {columnSettings.control}
                     </Space>
                     <Table
                         rowKey="PartyID"
-                        columns={columns}
-                        dataSource={colF.filtered}
+                        loading={searching}
+                        columns={columnSettings.visibility ? columns.map((column) => ({
+                            ...column,
+                            hidden: column.hidden || columnSettings.visibility?.[String(column.key)] === false,
+                        })) : columns}
+                        dataSource={filteredRows}
                         size="middle"
                         locale={{ emptyText: 'ردیفی با این فیلترها یافت نشد' }}
-                        scroll={{ x: 'max-content' }}
+                        tableLayout="fixed"
+                        scroll={{ x: 2200 }}
                         rowClassName={(p) => (toBool(p.IsActive) ? 'party-grid-row' : 'party-grid-row is-inactive')}
                         onRow={(p) => ({ onClick: () => router.visit(`/crm/parties/${p.PartyID}`) })}
                         onChange={(pg) => setPage({ current: pg.current ?? 1, pageSize: pg.pageSize ?? 20 })}
@@ -441,7 +545,7 @@ export default function CrmPartiesIndex() {
                             pageSize: page.pageSize,
                             showSizeChanger: true,
                             pageSizeOptions: [10, 20, 50, 100],
-                            showTotal: (total) => (colF.hasAny ? `${total} از ${items.length} طرف‌حساب` : `${total} طرف‌حساب`),
+                            showTotal: (total) => (hasGridFilters ? `${total} از ${items.length} طرف‌حساب` : `${total} طرف‌حساب`),
                         }}
                     />
                     </>

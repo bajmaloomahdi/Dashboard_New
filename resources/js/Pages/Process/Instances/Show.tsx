@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Table, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty, Grid } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty, Grid } from 'antd';
 import {
     ApartmentOutlined,
     UserOutlined,
@@ -380,7 +381,7 @@ export default function ProcessInstanceShow() {
                     {data.steps.length === 0 ? (
                         <Empty description="مرحله‌ای ثبت نشده است" />
                     ) : (
-                        <Table
+                        <PreferenceTable gridKey="workflow.instance-steps"
                             rowKey="StepInstanceID"
                             dataSource={data.steps}
                             columns={stepColumns}

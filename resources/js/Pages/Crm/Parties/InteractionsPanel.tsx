@@ -1,5 +1,8 @@
+import { compareGridValues } from '../../../Utils/gridSorting';
+import { newestFirst } from '../../../Utils/newestFirst';
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Table, Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Checkbox, TimePicker, Tooltip, Upload } from 'antd';
+import { Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Checkbox, TimePicker, Tooltip, Upload } from 'antd';
 import {
     PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, CheckOutlined,
     RedoOutlined, PhoneOutlined, TeamOutlined, FileTextOutlined, ClockCircleOutlined, PaperClipOutlined, DeleteOutlined, UndoOutlined,
@@ -422,6 +425,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         {
             title: 'تاریخ و ساعت',
             key: 'date',
+            sorter: (a, b) => compareGridValues(a.InteractionDate, b.InteractionDate),
             width: 150,
             render: (_, r) => {
                 const { date, time } = splitDateTime(r.InteractionDate);
@@ -432,6 +436,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         {
             title: 'نوع تعامل',
             key: 'type',
+            sorter: (a, b) => compareGridValues(a.InteractionTypeDisplayName, b.InteractionTypeDisplayName),
             width: 110,
             render: (_, r) => {
                 const visual = typeVisual(r.InteractionType);
@@ -445,13 +450,14 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         {
             title: 'موضوع',
             key: 'subject',
+            sorter: (a, b) => compareGridValues(a.Subject, b.Subject),
             render: (_, r) => (
                 <div>
                     <Text strong>{r.Subject}</Text>
                     {r.FollowUpOfSubject ? <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>ادامهٔ: {r.FollowUpOfSubject}</Text> : null}
                     {(r.Attachments || []).length ? (
                         <div className="crm-int-attach-list">
-                            {(r.Attachments || []).map((a) => (
+                            {newestFirst(r.Attachments || [], (a) => a.Date_InsertFirst, (a) => a.InteractionAttachmentID).map((a) => (
                                 <div key={a.InteractionAttachmentID} className="crm-int-attach-item">
                                     <PaperClipOutlined />
                                     <a href={a.DownloadUrl} title={`دانلودِ ${a.FileName} (${formatSize(a.FileSize)})`}>{a.FileName}</a>
@@ -467,6 +473,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
             ? [{
                   title: 'طرف‌حساب',
                   key: 'party',
+                  sorter: (a: Interaction, b: Interaction) => compareGridValues(a.PartyName, b.PartyName),
                   width: 170,
                   render: (_: unknown, r: Interaction) => (r.PartyID !== null ? <Text>{r.PartyName || '—'}</Text> : <Text type="secondary">مستقیم (بدونِ طرف‌حساب)</Text>),
               }]
@@ -474,6 +481,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         {
             title: 'پروژه',
             key: 'project',
+            sorter: (a, b) => compareGridValues(a.ProjectTitle, b.ProjectTitle),
             width: 160,
             render: (_, r) => r.ProjectTitle ? <Text>{r.ProjectTitle}</Text> : <Text type="secondary">—</Text>,
         },
@@ -716,7 +724,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
 
                     <div className="crm-int-attach">
                         <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>پیوست‌ها</Text>
-                        {existing.map((a) => {
+                        {newestFirst(existing, (a) => a.Date_InsertFirst, (a) => a.InteractionAttachmentID).map((a) => {
                             const removed = removedIds.includes(a.InteractionAttachmentID);
                             return (
                                 <div key={a.InteractionAttachmentID} className={`crm-int-attach-row${removed ? ' is-removed' : ''}`}>
@@ -793,7 +801,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                 </Space>
             ) : null}
 
-            <Table rowKey="InteractionID" columns={columns} dataSource={shown} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="تعاملی ثبت نشده است" /> }} />
+            <PreferenceTable gridKey={isPersonMode ? 'crm.persons.interactions' : 'crm.parties.interactions'} rowKey="InteractionID" columns={columns} dataSource={newestFirst(shown, (i) => i.InteractionDate, (i) => i.InteractionID)} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="تعاملی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

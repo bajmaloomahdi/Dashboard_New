@@ -297,6 +297,7 @@ export default function OrganizationalUnitsIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.units.list"
                     columns={[]}
                     dataSource={units}
                     loading={searching}

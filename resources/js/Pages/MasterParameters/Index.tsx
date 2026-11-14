@@ -395,6 +395,7 @@ export default function MasterParametersIndex() {
             {/* جدول با DataGrid یکپارچه */}
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.parameters.list"
                     columns={[]}
                     dataSource={masterParameters}
                     loading={searching}

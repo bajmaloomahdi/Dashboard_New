@@ -1,3 +1,4 @@
+import { newestFirst } from '../../Utils/newestFirst';
 import { useState } from 'react';
 import { Button, Input } from 'antd';
 import { EditOutlined, PaperClipOutlined } from '@ant-design/icons';
@@ -44,7 +45,7 @@ export default function EventAttachmentList({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-            {items.map((a) => {
+            {newestFirst(items, (a) => a.UploadedAt, (a) => a.CalendarEventAttachmentID).map((a) => {
                 const id = Number(a.CalendarEventAttachmentID);
                 const meta = [a.UploadedByName, a.UploadedAt ? gregorianToJalaliDateTimeDisplay(a.UploadedAt) : null].filter(Boolean).join(' — ');
                 return (

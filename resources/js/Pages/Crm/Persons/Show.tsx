@@ -36,7 +36,8 @@ interface PersonDetail extends Person {
 }
 
 export default function CrmPersonShow() {
-    const props = usePage().props as unknown as {
+    const page = usePage();
+    const props = page.props as unknown as {
         person: PersonDetail;
         contacts: any[];
         addresses: any[];
@@ -58,7 +59,7 @@ export default function CrmPersonShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>('contacts');
+    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'contacts');
 
     // طرف‌حساب‌هایی که تعاملِ جدیدِ این مخاطب می‌تواند به آن‌ها مربوط شود (فقط رابطه‌هایِ فعال)
     const personParties = (relations || [])

@@ -237,6 +237,7 @@ export default function MessageStatusesIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="messages.statuses"
                     columns={[]}
                     dataSource={filteredStatuses}
                     customColumns={customColumns}

@@ -1,5 +1,8 @@
 * text=auto eol=lf
 
+# Preserve the exact bytes verified by the SQL patch runner.
+/sql/144_project_parent_department.sql -text !eol
+
 *.blade.php diff=html
 *.css diff=css
 *.html diff=html

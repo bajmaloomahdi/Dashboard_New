@@ -295,10 +295,11 @@ class CrmStore
         ?bool $isActive = null,
         ?int $departmentId = null,
         ?string $partyNature = null,
+        ?bool $cooperationEnded = null,
     ): array {
         return DB::select(
-            'EXEC dbo.sp_Crm_GetParties @SearchText = ?, @IsActive = ?, @DepartmentID = ?, @PartyNature = ?',
-            [$search, $isActive, $departmentId, $partyNature]
+            'EXEC dbo.sp_Crm_GetParties @SearchText = ?, @IsActive = ?, @DepartmentID = ?, @PartyNature = ?, @CooperationEnded = ?',
+            [$search, $isActive, $departmentId, $partyNature, $cooperationEnded]
         );
     }
 

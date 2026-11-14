@@ -42,7 +42,8 @@ interface PartyDetail extends Party {
 }
 
 export default function CrmPartyShow() {
-    const props = usePage().props as unknown as {
+    const page = usePage();
+    const props = page.props as unknown as {
         party: PartyDetail;
         partyRoles: PartyRoleRow[];
         partyPositions: PartyPositionRow[];
@@ -82,7 +83,7 @@ export default function CrmPartyShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>('classifications');
+    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'classifications');
 
     const isActive = toBool(currentParty.IsActive);
 

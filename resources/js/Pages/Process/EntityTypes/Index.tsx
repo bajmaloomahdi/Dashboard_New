@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Table, Button, Input, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Card, Button, Input, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
 import {
     PlusOutlined,
     SaveOutlined,
@@ -257,7 +258,7 @@ export default function ProcessEntityTypesIndex() {
                     </Space>
                 ) : null}
 
-                <Table
+                <PreferenceTable gridKey="workflow.entity-types"
                     rowKey="EntityTypeID"
                     columns={columns}
                     dataSource={items}

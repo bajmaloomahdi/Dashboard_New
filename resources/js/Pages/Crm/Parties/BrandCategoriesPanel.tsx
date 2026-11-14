@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useMemo, useState } from 'react';
-import { Table, Button, Select, TreeSelect, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty, Tooltip, Switch } from 'antd';
+import { Button, Select, TreeSelect, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty, Tooltip, Switch } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, TagsOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { router } from '@inertiajs/react';
@@ -429,7 +430,7 @@ export default function BrandCategoriesPanel({ partyId, items, canManage, canDel
 
             {rowError ? <Alert type="error" showIcon message={rowError} closable onClose={() => setRowError(null)} style={{ marginBottom: 12, borderRadius: 8 }} /> : null}
 
-            <Table
+            <PreferenceTable gridKey="crm.parties.brand-categories"
                 rowKey="PartyBrandCategoryID"
                 size="small"
                 columns={columns}

@@ -33,16 +33,23 @@ class CrmPartyController extends CrmApiController
             'search' => 'nullable|string|max:200',
             'isActive' => 'nullable|boolean',
             'partyNature' => 'nullable|string|in:INDIVIDUAL,LEGAL',
+            'cooperationEnded' => 'nullable|boolean',
         ]);
 
+        $cooperationEnded = isset($validated['cooperationEnded'])
+            ? (bool) $validated['cooperationEnded']
+            : null;
+        $parties = $this->parties->listParties(
+            $validated['search'] ?? null,
+            array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+            null,
+            $validated['partyNature'] ?? null,
+            $cooperationEnded,
+        );
+
         return Inertia::render('Crm/Parties/Index', [
-            'parties' => $this->parties->listParties(
-                $validated['search'] ?? null,
-                array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
-                null,
-                $validated['partyNature'] ?? null,
-            ),
-            'filters' => $validated,
+            'parties' => $parties,
+            'filters' => array_merge($validated, ['cooperationEnded' => $cooperationEnded]),
             'canManage' => $this->userCan(self::PERM_MANAGE),
             'canDelete' => $this->userCan(CrmDeleteController::PERM_DELETE),
             // گزینه‌هایِ «نقش» و «سمت»ِ فرمِ ایجاد/ویرایشِ طرف‌حساب (فقط فعال‌ها؛ انتخابِ غیرفعالِ قبلی از خودِ طرف‌حساب می‌آید)
@@ -121,14 +128,24 @@ class CrmPartyController extends CrmApiController
             'search' => 'nullable|string|max:200',
             'isActive' => 'nullable|boolean',
             'partyNature' => 'nullable|string|in:INDIVIDUAL,LEGAL',
+            'cooperationEnded' => 'nullable|boolean',
         ]);
 
-        return $this->runCrm(fn () => ['items' => $this->parties->listParties(
-            $validated['search'] ?? null,
-            array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
-            null,
-            $validated['partyNature'] ?? null,
-        )]);
+        $cooperationEnded = isset($validated['cooperationEnded'])
+            ? (bool) $validated['cooperationEnded']
+            : null;
+
+        return $this->runCrm(function () use ($validated, $cooperationEnded) {
+            $parties = $this->parties->listParties(
+                $validated['search'] ?? null,
+                array_key_exists('isActive', $validated) ? (bool) $validated['isActive'] : null,
+                null,
+                $validated['partyNature'] ?? null,
+                $cooperationEnded,
+            );
+
+            return ['items' => $parties];
+        });
     }
 
     public function store(Request $request)

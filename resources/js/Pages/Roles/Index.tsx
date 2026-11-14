@@ -380,6 +380,7 @@ export default function RolesIndex() {
             {/* جدول با DataGrid یکپارچه */}
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.roles.list"
                     columns={[]}
                     dataSource={roles}
                     loading={searching}

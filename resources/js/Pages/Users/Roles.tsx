@@ -287,6 +287,7 @@ export default function UserRoles() {
                 </Row>
 
                 <DataGrid
+                    gridKey="admin.users.roles"
                     columns={[]}
                     dataSource={filteredRoles}
                     customColumns={customColumns}

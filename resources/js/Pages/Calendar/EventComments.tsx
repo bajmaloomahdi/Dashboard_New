@@ -1,3 +1,4 @@
+import { newestFirst } from '../../Utils/newestFirst';
 import { useEffect, useState } from 'react';
 import { Avatar, Button, Empty, Input, Spin, Tabs, Typography } from 'antd';
 import { EditOutlined, SendOutlined } from '@ant-design/icons';
@@ -109,7 +110,7 @@ export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { e
                 {items.length === 0 && !loading ? (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="هنوز توضیحی ثبت نشده است" />
                 ) : (
-                    items.map((c) => (
+                    newestFirst(items, (c) => c.CreatedAt, (c) => c.CommentID).map((c) => (
                         <div key={c.CommentID} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid #F0F0F0' }}>
                             <Avatar size={32} style={{ background: '#7C6FE8', flexShrink: 0 }}>{(c.UserName || '؟').trim().charAt(0)}</Avatar>
                             <div style={{ flex: 1, minWidth: 0 }}>

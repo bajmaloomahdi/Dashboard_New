@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useRef, useState } from 'react';
-import { Card, Table, Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Row, Col } from 'antd';
+import { Card, Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Row, Col } from 'antd';
 import {
     PlusOutlined,
     EditOutlined,
@@ -287,7 +288,7 @@ export default function ProcessTemplatesIndex() {
                     </Col>
                 </Row>
 
-                <Table
+                <PreferenceTable gridKey="workflow.templates"
                     rowKey="LetterTemplateID"
                     columns={columns}
                     dataSource={letterTemplates || []}

@@ -1,5 +1,6 @@
+import PreferenceTable from '../../Components/PreferenceTable';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Col, Input, Modal, Radio, Row, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, Input, Modal, Radio, Row, Select, Space, Tag, Tooltip, Typography } from 'antd';
 import { NotificationOutlined, ReloadOutlined, SendOutlined, TeamOutlined } from '@ant-design/icons';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
@@ -327,7 +328,7 @@ export default function PushBroadcasts() {
                             </Button>
                         }
                     >
-                        <Table<Broadcast>
+                        <PreferenceTable<Broadcast> gridKey="push.broadcasts"
                             rowKey="PushBroadcastID"
                             size="small"
                             columns={columns}

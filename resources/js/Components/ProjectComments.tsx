@@ -47,6 +47,7 @@ function toTime(v: string): number {
 
 interface ProjectCommentsProps {
     projectId: number;
+    onCount?: (count: number) => void;
 }
 
 function getXsrfToken(): string {
@@ -66,7 +67,7 @@ function formatFileSize(bytes: number): string {
     return `${size.toFixed(1)} ${units[i]}`;
 }
 
-export default function ProjectComments({ projectId }: ProjectCommentsProps) {
+export default function ProjectComments({ projectId, onCount }: ProjectCommentsProps) {
     const [comments, setComments] = useState<ProjectComment[]>([]);
     const [attachments, setAttachments] = useState<ProjectAttachment[]>([]);
     const [loading, setLoading] = useState(false);
@@ -90,6 +91,7 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
                 credentials: 'same-origin',
             });
             const data = await res.json();
+            if (res.ok) onCount?.((data.comments?.length ?? 0) + (data.attachments?.length ?? 0));
             setComments(data.comments || []);
             setAttachments(data.attachments || []);
         } catch {
@@ -142,12 +144,12 @@ export default function ProjectComments({ projectId }: ProjectCommentsProps) {
         }
     };
 
-    // نظرها و ضمیمه‌ها در یک فهرستِ زمانی: قدیمی‌ترین بالا، تازه‌ترین پایین (کنارِ کادرِ ثبت)؛
+    // نظرها و ضمیمه‌ها در یک فهرستِ زمانی: تازه‌ترین بالا، قدیمی‌ترین پایین؛
     // در زمانِ یکسان (نظر و ضمیمه با هم ثبت شده‌اند) اول نظر، بعد ضمیمه‌هایش
     const timeline: TimelineItem[] = [
         ...comments.map((c) => ({ kind: 'comment' as const, key: `c-${c.ProjectCommentID}`, at: toTime(c.CreateDate), id: Number(c.ProjectCommentID), comment: c })),
         ...attachments.map((a) => ({ kind: 'file' as const, key: `f-${a.ProjectAttachmentID}`, at: toTime(a.CreateDate), id: Number(a.ProjectAttachmentID), file: a })),
-    ].sort((x, y) => x.at - y.at || (x.kind === y.kind ? 0 : x.kind === 'comment' ? -1 : 1) || x.id - y.id);
+    ].sort((x, y) => y.at - x.at || (x.kind === y.kind ? 0 : x.kind === 'comment' ? -1 : 1) || y.id - x.id);
 
     const hasComment = text.trim() !== '';
     const hasFiles = files.length > 0;

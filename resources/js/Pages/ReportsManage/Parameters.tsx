@@ -342,6 +342,7 @@ export default function Parameters() {
                 </Row>
 
                 <DataGrid
+                    gridKey="reports.parameters"
                     columns={[]}
                     dataSource={filteredParameters}
                     customColumns={customColumns}

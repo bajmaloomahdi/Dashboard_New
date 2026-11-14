@@ -267,6 +267,7 @@ export default function UserPositions() {
                 </Row>
 
                 <DataGrid
+                    gridKey="admin.users.positions"
                     columns={[]}
                     dataSource={filteredPositions}
                     customColumns={customColumns}

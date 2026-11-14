@@ -162,8 +162,17 @@ class ConditionDataTypeCaster
         if (is_int($raw) && $raw > 0) {
             return self::ok($raw);
         }
-        if (is_string($raw) && preg_match('/^\d+$/', $raw) === 1 && (int) $raw > 0) {
-            return self::ok((int) $raw);
+        if (is_string($raw) && preg_match('/^\d+$/', $raw) === 1) {
+            // صفرهایِ ابتدایی را مثلِ قبل می‌پذیریم، اما پیش از Cast محدودهٔ PHP_INT را می‌سنجیم.
+            $normalized = ltrim($raw, '0');
+            if ($normalized === '') {
+                return self::fail('مقدار باید یک شناسهٔ عددیِ معتبر باشد.');
+            }
+
+            $id = filter_var($normalized, FILTER_VALIDATE_INT);
+            if ($id !== false && $id > 0) {
+                return self::ok($id);
+            }
         }
 
         return self::fail('مقدار باید یک شناسهٔ عددیِ معتبر باشد.');

@@ -322,6 +322,7 @@ export default function ProcessInstancesIndex() {
                     <Empty description="نمونه‌ای یافت نشد" />
                 ) : (
                     <DataGrid
+                        gridKey="workflow.instances"
                         columns={[]}
                         dataSource={props.instances}
                         loading={loading}

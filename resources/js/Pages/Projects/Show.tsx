@@ -7,6 +7,8 @@ import {
     Typography,
     Progress,
     Descriptions,
+    Select,
+    message,
 } from 'antd';
 import {
     ProjectOutlined,
@@ -14,6 +16,7 @@ import {
     TeamOutlined,
     UserOutlined,
     CalendarOutlined,
+    ClockCircleOutlined,
     UsergroupAddOutlined,
     ThunderboltOutlined,
     InfoCircleOutlined,
@@ -21,10 +24,11 @@ import {
     SolutionOutlined,
     BankOutlined,
 } from '@ant-design/icons';
-import { router, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import DataGrid from '../../Components/DataGrid';
 import PageHeader from '../../Components/PageHeader';
+import ProjectFormModal from './ProjectFormModal';
 import ChipTabs from '../../Components/ChipTabs';
 import ProjectMembersModal from './ProjectMembersModal';
 import ProjectContractorsModal from './ProjectContractorsModal';
@@ -44,6 +48,9 @@ import type { CalendarPermission } from '../../Types';
 const { Title, Text } = Typography;
 
 interface Project {
+    DepartmentID?: number | string | null;
+    DepartmentName?: string | null;
+    ProjectStatusID: number;
     ProjectID: number;
     ProjectCode: string;
     ProjectTitle: string;
@@ -124,7 +131,14 @@ interface InteractionTypeOption {
 }
 
 export default function ProjectShow() {
-    const { project, members, users, msgPriorities, contractors, interactionTypes, owner, allBrands, auth, calendarPermissions } = usePage().props as unknown as {
+    const { project, members, users, msgPriorities, contractors, interactionTypes, owner, allBrands, auth, calendarPermissions, projectStatuses, parentProject, childProjects, parentOptions, editStatuses, editPriorities, departmentOptions } = usePage().props as unknown as {
+        departmentOptions?: { DepartmentID: number | string; DisplayName: string }[];
+        parentOptions: { id: number | string; title: string; parentId: number | string | null }[];
+        editStatuses: { ProjectStatusID: number; Title: string }[];
+        editPriorities: { ProjectPriorityID: number; Name: string; ColorHex: string }[];
+        parentProject?: { ProjectID: number; ProjectTitle: string } | null;
+        childProjects?: { id: number; title: string }[];
+        projectStatuses: { ProjectStatusID: number; Title: string }[];
         project: Project;
         members: Member[];
         users: UserOption[];
@@ -139,6 +153,7 @@ export default function ProjectShow() {
     };
 
     const [membersModalOpen, setMembersModalOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
     const [contractorsModalOpen, setContractorsModalOpen] = useState(false);
     const [interactionModalFor, setInteractionModalFor] = useState<Contractor | null>(null);
     const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -146,6 +161,26 @@ export default function ProjectShow() {
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'info' | 'owner' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
+    const [eventCount, setEventCount] = useState<number | null>(null);
+    const [commentsAndAttachmentsCount, setCommentsAndAttachmentsCount] = useState<number | null>(null);
+    const [now, setNow] = useState(Date.now);
+    const [statusFormOpen, setStatusFormOpen] = useState(false);
+    const statusForm = useForm<{ ProjectStatusID: number | null }>({ ProjectStatusID: null });
+    const [statusMessage, statusMessageHolder] = message.useMessage();
+    const plannedDate = project.PlannedEndDate?.slice(0, 10);
+    const deadline = plannedDate ? Date.parse(`${plannedDate}T23:59:59+03:30`) : NaN;
+    const remainingHours = Math.ceil(Math.max(0, deadline - now) / 3_600_000);
+    const formatCount = (value: number) => value.toLocaleString('fa-IR');
+    const countdown = project.ActualEndDate ? 'پروژه پایان یافته'
+        : !Number.isFinite(deadline) ? '—'
+        : deadline <= now ? 'مهلت گذشته است'
+        : `${formatCount(Math.floor(remainingHours / 24))} روز و ${formatCount(remainingHours % 24)} ساعت`;
+
+    useEffect(() => {
+        if (!Number.isFinite(deadline) || project.ActualEndDate) return;
+        const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+        return () => window.clearInterval(timer);
+    }, [deadline, project.ActualEndDate]);
 
     const activeMembers = (members || []).filter((m) => toBool(m.IsActive));
     const activeContractors = (contractors || []).filter((c) => toBool(c.IsActive));
@@ -301,8 +336,7 @@ export default function ProjectShow() {
                       key: 'actions',
                       width: 130,
                       align: 'center' as const,
-                      render: (_: any, rec: Member) =>
-                          Number(rec.UserID) === currentUserId ? null : (
+                      render: (_: any, rec: Member) => (
                               <Button
                                   size="small"
                                   icon={<ThunderboltOutlined />}
@@ -323,8 +357,8 @@ export default function ProjectShow() {
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
         { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
-        { key: 'events' as const, label: 'رویدادها', icon: <CalendarOutlined />, count: null },
-        { key: 'comments' as const, label: 'نظرات و ضمیمه‌ها', icon: <CommentOutlined />, count: null },
+        { key: 'events' as const, label: 'رویدادها', icon: <CalendarOutlined />, count: eventCount },
+        { key: 'comments' as const, label: 'نظرات و ضمیمه‌ها', icon: <CommentOutlined />, count: commentsAndAttachmentsCount },
     ];
 
     const contractorColumns: ColumnsType<Contractor> = [
@@ -336,7 +370,7 @@ export default function ProjectShow() {
                     <SolutionOutlined style={{ color: '#667eea' }} />
                     <div>
                         <div>
-                            {rec.OfficialName || `طرف‌حسابِ #${rec.PartyID}`}
+                            <a href={`/crm/parties/${rec.PartyID}?tab=interactions`}>{rec.OfficialName || `طرف‌حسابِ #${rec.PartyID}`}</a>
                             {!toBool(rec.PartyIsActive) ? (
                                 <Tag color="red" style={{ marginInlineStart: 6 }}>غیرفعال در «مخاطبین و ارتباطات»</Tag>
                             ) : null}
@@ -382,11 +416,47 @@ export default function ProjectShow() {
 
     return (
         <MainLayout>
+            {statusMessageHolder}
             <PageHeader
                 icon={<ProjectOutlined />}
                 title={project.ProjectTitle}
                 backHref="/projects"
                 backLabel="بازگشت به لیست"
+                actions={(
+                    <Space wrap>
+                        <Button onClick={() => setEditOpen(true)}>ویرایش پروژه</Button>
+                        {isResponsible && !!projectStatuses?.length && (statusFormOpen ? (
+                            <>
+                                <Select
+                                    aria-label="وضعیت جدید پروژه"
+                                    placeholder="وضعیت جدید پروژه"
+                                    style={{ minWidth: 160 }}
+                                    value={statusForm.data.ProjectStatusID ?? undefined}
+                                    disabled={statusForm.processing}
+                                    status={statusForm.errors.ProjectStatusID ? 'error' : undefined}
+                                    onChange={(value) => statusForm.setData('ProjectStatusID', value)}
+                                    options={projectStatuses.map((status) => ({ value: Number(status.ProjectStatusID), label: status.Title }))}
+                                />
+                                <Button loading={statusForm.processing} disabled={statusForm.data.ProjectStatusID === null}
+                                    onClick={() => statusForm.patch(`/projects/${project.ProjectID}/status`, {
+                                        preserveScroll: true,
+                                        onSuccess: () => {
+                                            setStatusFormOpen(false);
+                                            statusForm.reset();
+                                            statusMessage.success('وضعیت پروژه ذخیره شد.');
+                                        },
+                                        onError: (errors) => statusMessage.error(errors.ProjectStatusID || 'ذخیرهٔ وضعیت پروژه انجام نشد.'),
+                                    })}
+                                >ذخیره وضعیت</Button>
+                                <Button disabled={statusForm.processing} onClick={() => {
+                                    statusForm.reset();
+                                    statusForm.clearErrors();
+                                    setStatusFormOpen(false);
+                                }}>انصراف</Button>
+                            </>
+                        ) : <Button onClick={() => setStatusFormOpen(true)}>تغییر وضعیت</Button>)}
+                    </Space>
+                )}
                 tags={[
                     { label: project.ProjectCode },
                     { label: project.ProjectStatusTitle },
@@ -401,6 +471,8 @@ export default function ProjectShow() {
                         label: 'تاریخ ایجاد',
                         value: project.Date_InsertFirst ? gregorianToJalaliDisplay(project.Date_InsertFirst) : '—',
                     },
+                    { icon: <CalendarOutlined />, label: 'پایان پیش‌بینی‌شده', value: plannedDate ? gregorianToJalaliDisplay(plannedDate) : '—' },
+                    { icon: <ClockCircleOutlined />, label: 'زمان باقی‌مانده', value: countdown },
                 ]}
                 aside={
                     <>
@@ -417,6 +489,9 @@ export default function ProjectShow() {
                 }
             />
 
+            <ProjectFormModal open={editOpen} onClose={() => setEditOpen(false)}
+                editingProject={project} users={users || []} statuses={editStatuses || []}
+                priorities={editPriorities || []} parentOptions={parentOptions || []} departmentOptions={departmentOptions} returnToDetails />
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
             {activeTab === 'info' && (
                 <Card style={STYLES.card}>
@@ -444,6 +519,14 @@ export default function ProjectShow() {
                         </Descriptions.Item>
                         <Descriptions.Item label="پیشرفت" span={2}>
                             <Progress percent={Number(project.ProgressPercent) || 0} />
+                        </Descriptions.Item>
+                        <Descriptions.Item label="دپارتمان">{project.DepartmentName || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="پروژهٔ والد">
+                            {parentProject ? <a href={`/projects/${parentProject.ProjectID}`}>{parentProject.ProjectTitle}</a> : '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="زیرپروژه‌ها" span={2}>
+                            <Space wrap>{childProjects?.length ? childProjects.map((child) =>
+                                <a key={child.id} href={`/projects/${child.id}`}>{child.title}</a>) : '—'}</Space>
                         </Descriptions.Item>
                         {project.Description ? (
                             <Descriptions.Item label="توضیحات" span={3}>
@@ -480,6 +563,7 @@ export default function ProjectShow() {
                     <DataGrid
                         columns={[]}
                         dataSource={activeMembers}
+                        gridKey="projects.details.members"
                         customColumns={columns}
                         rowKey="ProjectMemberID"
                         showColumnSearch={false}
@@ -507,6 +591,7 @@ export default function ProjectShow() {
                     <DataGrid
                         columns={[]}
                         dataSource={activeContractors}
+                        gridKey="projects.details.contractors"
                         customColumns={contractorColumns}
                         rowKey="ProjectContractorID"
                         showColumnSearch={false}
@@ -519,6 +604,7 @@ export default function ProjectShow() {
                     <DataGrid
                         columns={[]}
                         dataSource={tasks}
+                        gridKey="projects.details.tasks"
                         customColumns={taskColumns}
                         rowKey="ProjectMessageID"
                         showColumnSearch={false}
@@ -527,10 +613,12 @@ export default function ProjectShow() {
                 </Card>
             )}
 
-            {activeTab === 'events' && (
-                <ProjectEventsTab projectId={Number(project.ProjectID)} currentUserId={Number(currentUserId)} permissions={calendarPermissions || []} />
-            )}
-            {activeTab === 'comments' && <ProjectComments projectId={project.ProjectID} />}
+            <div hidden={activeTab !== 'events'}>
+                <ProjectEventsTab key={project.ProjectID} projectId={Number(project.ProjectID)} currentUserId={Number(currentUserId)} permissions={calendarPermissions || []} onCount={setEventCount} />
+            </div>
+            <div hidden={activeTab !== 'comments'}>
+                <ProjectComments key={project.ProjectID} projectId={project.ProjectID} onCount={setCommentsAndAttachmentsCount} />
+            </div>
 
             <ProjectMembersModal
                 open={membersModalOpen}

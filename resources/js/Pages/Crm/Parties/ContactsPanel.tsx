@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useRef, useState } from 'react';
-import { Table, Button, Input, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Button, Input, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
 import type { InputRef } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -196,7 +197,9 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
             title: 'فرد مرتبط',
             key: 'relatedPerson',
             dataIndex: 'RelatedPersonName',
-            render: (v: string | null) => v || <Text type="secondary">—</Text>,
+            render: (v: string | null, row: Contact) => v && row.RelatedPersonID
+                ? <a href={`/crm/persons/${row.RelatedPersonID}?tab=interactions`}>{v}</a>
+                : v || <Text type="secondary">—</Text>,
         }] : []),
         {
             title: 'وضعیت',
@@ -351,7 +354,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                 </Space>
             ) : null}
 
-            <Table rowKey="ContactID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="اطلاعاتِ تماسی ثبت نشده است" /> }} />
+            <PreferenceTable gridKey="crm.parties.contacts" rowKey="ContactID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="اطلاعاتِ تماسی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

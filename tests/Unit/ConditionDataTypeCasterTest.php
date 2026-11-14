@@ -99,6 +99,40 @@ class ConditionDataTypeCasterTest extends TestCase
         $this->assertFalse(ConditionDataTypeCaster::cast('DECIMAL', '۱۵۰۰.۲۵')['ok']);
     }
 
+    /* ==================== SELECT — membership is exact ==================== */
+
+    public function test_select_accepts_an_allowed_value_and_rejects_a_case_variant(): void
+    {
+        $allowedValues = ['active', 'inactive'];
+
+        $accepted = ConditionDataTypeCaster::cast('SELECT', 'active', $allowedValues);
+        $this->assertSame(['ok' => true, 'value' => 'active', 'error' => null], $accepted);
+
+        $rejected = ConditionDataTypeCaster::cast('SELECT', 'Active', $allowedValues);
+        $this->assertFalse($rejected['ok']);
+        $this->assertNull($rejected['value']);
+        $this->assertNotNull($rejected['error']);
+    }
+
+    /* ==================== USER / UNIT — integer range ==================== */
+
+    public function test_reference_id_accepts_positive_integer_strings_with_leading_zeros(): void
+    {
+        $this->assertSame(42, ConditionDataTypeCaster::cast('USER', '00042')['value']);
+        $this->assertSame(42, ConditionDataTypeCaster::cast('UNIT', '00042')['value']);
+    }
+
+    public function test_reference_id_rejects_values_above_php_integer_max(): void
+    {
+        $outOfRange = str_repeat('9', strlen((string) PHP_INT_MAX) + 1);
+
+        $userResult = ConditionDataTypeCaster::cast('USER', $outOfRange);
+        $unitResult = ConditionDataTypeCaster::cast('UNIT', $outOfRange);
+
+        $this->assertFalse($userResult['ok']);
+        $this->assertFalse($unitResult['ok']);
+    }
+
     /* ==================== DecimalMath — مقایسهٔ دقیق بدونِ float ==================== */
 
     public function test_decimal_math_treats_differently_formatted_equal_values_as_equal(): void

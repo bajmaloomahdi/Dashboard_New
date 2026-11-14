@@ -1,12 +1,15 @@
+import { withGridSorting } from '../Utils/gridSorting';
 import { useMemo, useState, useEffect } from 'react';
 import { Table, Input, Typography, Tag, Empty } from 'antd';
 import { SearchOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { useGridColumnSettings } from './GridColumnSettings';
 import { THEME, STYLES, TABLE_CLASS_NAME, TABLE_CSS, columnHelpers } from '../theme';
 
 const { Text } = Typography;
 
 interface DataGridProps {
+    gridKey?: string;
     columns: string[];
     dataSource: any[];
     loading?: boolean;
@@ -24,6 +27,7 @@ interface DataGridProps {
 }
 
 export default function DataGrid({
+    gridKey,
     columns,
     dataSource,
     loading = false,
@@ -37,6 +41,7 @@ export default function DataGrid({
     rowClassName,
     onRowClick,
 }: DataGridProps) {
+    const columnSettings = useGridColumnSettings(gridKey);
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
 
     // نگهداری صفحه جاری و تعداد در صفحه در استیت (با ذخیره در localStorage برای ماندگاری انتخاب کاربر)
@@ -130,12 +135,17 @@ export default function DataGrid({
 
     const totalCount = dataSource?.length || 0;
     const filteredCount = filteredData?.length || 0;
+    const sortableColumns = withGridSorting(tableColumns, filteredData);
 
     return (
         <>
+            {columnSettings.control}
             <Table
                 className={TABLE_CLASS_NAME}
-                columns={tableColumns}
+                columns={columnSettings.visibility ? sortableColumns.map((column) => ({
+                    ...column,
+                    hidden: column.hidden || columnSettings.visibility?.[String(column.key)] === false,
+                })) : sortableColumns}
                 dataSource={filteredData.map((row, index) => ({ ...row, __key: index }))}
                 rowKey={rowKey === '__key' ? '__key' : rowKey}
                 loading={{

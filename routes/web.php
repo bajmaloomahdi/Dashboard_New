@@ -67,6 +67,8 @@ Route::middleware('guest')->group(function () {
 
 // --- مسیرهای احراز هویت‌شده ---
 Route::middleware('auth')->group(function () {
+    Route::match(['get', 'put', 'delete'], '/grid-column-preferences/{gridKey}', \App\Http\Controllers\GridColumnPreferenceController::class)
+        ->where('gridKey', '[a-z0-9._-]{1,128}');
 
     // جست‌وجویِ سراسری — پیش‌فرض خاموش (GLOBAL_SEARCH_ENABLED)؛ خاموش = 404
     // پاسخِ JSONِ خالص است؛ HandleInertiaRequests لازم نیست (و هدرِ Vary را بازنویسی می‌کند).
@@ -244,6 +246,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/projects', [ProjectsController::class, 'store'])->name('projects.store');
     Route::get('/projects/{id}', [ProjectsController::class, 'show'])->name('projects.show');
     Route::put('/projects/{id}', [ProjectsController::class, 'update'])->name('projects.update');
+    Route::patch('/projects/{id}/status', [ProjectsController::class, 'update'])->whereNumber('id')->name('projects.status.update');
     Route::post('/projects/{id}/toggle', [ProjectsController::class, 'toggleActive'])->name('projects.toggle-active');
     Route::get('/projects/{id}/members', [ProjectsController::class, 'members'])->name('projects.members');
     Route::post('/projects/{id}/members', [ProjectsController::class, 'addMember'])->name('projects.members.add');
@@ -271,6 +274,7 @@ Route::middleware('auth')->group(function () {
     // ───────────────────────── تقویم و یادآوری‌ها ─────────────────────────
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
     Route::get('/calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
+    Route::put('/calendar/color-palette', [CalendarController::class, 'saveColorPalette'])->name('calendar.color-palette');
 
     // یادآوری‌ها (قبل از مسیرهای {id} رویداد تا تداخل نداشته باشند)
     Route::get('/calendar/reminders/due', [CalendarController::class, 'dueReminders'])->name('calendar.reminders.due');

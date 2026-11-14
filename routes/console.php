@@ -12,145 +12,6 @@ Artisan::command('inspire', function () {
 
 /*
 |--------------------------------------------------------------------------
-| ۱. دستور اعمال پچ‌های دیتابیس روی سرور شرکت‌ها
-|--------------------------------------------------------------------------
-*/
-Artisan::command('db:patch {--status : فقط نمایش وضعیت پچ‌ها بدون اجرا}', function () {
-    $this->info('==================================================');
-    $this->info('   بررسی و اعمال پچ‌های دیتابیس (SQL Server)    ');
-    $this->info('==================================================');
-
-    $tableExists = DB::select("
-        SELECT 1 
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_NAME = 'SysPatches'
-    ");
-
-    if (empty($tableExists)) {
-        $this->warn('جدول SysPatches یافت نشد، در حال ساخت جدول رهگیری...');
-
-        DB::unprepared("
-            CREATE TABLE [dbo].[SysPatches] (
-                [PatchID] INT IDENTITY(1,1) PRIMARY KEY,
-                [PatchName] NVARCHAR(255) NOT NULL,
-                [AppliedAt] DATETIME NOT NULL DEFAULT GETDATE(),
-                [AppVersion] NVARCHAR(50) NULL,
-                [ExecutionMs] INT NULL,
-                [Status] NVARCHAR(20) NOT NULL,
-                [ErrorMessage] NVARCHAR(MAX) NULL
-            );
-        ");
-
-        $this->info('جدول SysPatches با موفقیت در دیتابیس ساخته شد.');
-    }
-
-    $patchPath = base_path('sql/patches');
-    if (!File::exists($patchPath)) {
-        $patchPath = base_path('sql');
-    }
-
-    if (!File::exists($patchPath)) {
-        $this->error("پوشه اسکریپت‌های SQL در مسیر {$patchPath} یافت نشد.");
-        return 1;
-    }
-
-    $files = collect(File::files($patchPath))
-        ->filter(fn($file) => strtolower($file->getExtension()) === 'sql')
-        ->sortBy(fn($file) => $file->getFilename())
-        ->values();
-
-    if ($files->isEmpty()) {
-        $this->warn('هیچ فایل اسکریپت SQL برای اجرا در پوشه یافت نشد.');
-        return 0;
-    }
-
-    $appliedPatches = DB::table('SysPatches')
-        ->where('Status', 'SUCCESS')
-        ->pluck('PatchName')
-        ->toArray();
-
-    if ($this->option('status')) {
-        $rows = [];
-        foreach ($files as $file) {
-            $name = $file->getFilename();
-            $isApplied = in_array($name, $appliedPatches);
-            $rows[] = [$name, $isApplied ? '<fg=green>اجرا شده (Applied)</>' : '<fg=yellow>در انتظار اجرا (Pending)</>'];
-        }
-        $this->table(['نام فایل پچ', 'وضعیت'], $rows);
-        return 0;
-    }
-
-    $appliedCount = 0;
-    $skippedCount = 0;
-
-    foreach ($files as $file) {
-        $filename = $file->getFilename();
-
-        if (in_array($filename, $appliedPatches)) {
-            $this->line(" <fg=gray>[SKIP]</> {$filename} (قبلاً اجرا شده)");
-            $skippedCount++;
-            continue;
-        }
-
-        $this->info(" <fg=yellow>[RUNNING]</> در حال اجرای {$filename} ...");
-        $startTime = microtime(true);
-
-        $sqlContent = File::get($file->getRealPath());
-        $batches = preg_split('/^\s*GO\s*$/mi', $sqlContent);
-
-        try {
-            foreach ($batches as $batch) {
-                $cleanBatch = trim($batch);
-                $cleanBatch = preg_replace('/^\s*USE\s+\[?[^\];\r\n]+\]?;?\s*$/mi', '', $cleanBatch);
-                $cleanBatch = trim($cleanBatch);
-
-                if (!empty($cleanBatch)) {
-                    DB::unprepared($cleanBatch);
-                }
-            }
-
-            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-
-            DB::table('SysPatches')->insert([
-                'PatchName'   => $filename,
-                'AppliedAt'   => now(),
-                'AppVersion'  => config('app.version', '1.0.0'),
-                'ExecutionMs' => $durationMs,
-                'Status'      => 'SUCCESS',
-                'ErrorMessage'=> null,
-            ]);
-
-            $this->line(" <fg=green>[SUCCESS]</> {$filename} با موفقیت در {$durationMs}ms اجرا شد.");
-            $appliedCount++;
-
-        } catch (\Throwable $e) {
-            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
-
-            try {
-                DB::table('SysPatches')->insert([
-                    'PatchName'   => $filename,
-                    'AppliedAt'   => now(),
-                    'AppVersion'  => config('app.version', '1.0.0'),
-                    'ExecutionMs' => $durationMs,
-                    'Status'      => 'FAILED',
-                    'ErrorMessage'=> substr($e->getMessage(), 0, 1000),
-                ]);
-            } catch (\Throwable $inner) {}
-
-            $this->error(" <fg=red>[FAILED]</> خطا در اجرای {$filename}:");
-            $this->error($e->getMessage());
-            $this->error('عملیات متوقف شد تا دیتابیس دچار مغایرت نشود.');
-            return 1;
-        }
-    }
-
-    $this->info('--------------------------------------------------');
-    $this->info("نتیجه: {$appliedCount} پچ جدید اجرا شد | {$skippedCount} پچ از قبل اجرا شده بود.");
-    return 0;
-})->purpose('اجرا و اعمال خودکار تغییرات جداول و Stored Procedureها روی دیتابیس شرکت');
-
-/*
-|--------------------------------------------------------------------------
 | ۲. فعال‌سازی ردیاب خودکار تغییرات دیتابیس در محیط توسعه (DDL Trigger)
 |--------------------------------------------------------------------------
 */
@@ -223,14 +84,14 @@ Artisan::command('db:make-patch {name? : نام پچ به انگلیسی}', func
     $this->info('   تولید خودکار فایل پچ از تغییرات اخیر دیتابیس   ');
     $this->info('==================================================');
 
-    $hasTable = DB::select("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'DevChangeLog'");
+    $hasTable = DB::select("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'DevChangeLog'");
     if (empty($hasTable)) {
         $this->error('ردیاب فعال نیست. لطفاً ابتدا دستور زیر را بزنید:');
         $this->line('docker exec dashboard_app php artisan db:init-tracker');
         return 1;
     }
 
-    $changes = DB::table('DevChangeLog')
+    $changes = DB::table('dbo.DevChangeLog')
         ->where('IsExported', 0)
         ->orderBy('LogID', 'asc')
         ->get();
@@ -244,72 +105,23 @@ Artisan::command('db:make-patch {name? : نام پچ به انگلیسی}', func
     if (!$name) {
         $name = $this->ask('یک نام کوتاه انگلیسی برای این پچ وارد کنید (مثلاً update_messages):', 'update_database');
     }
-    $cleanName = Str::slug($name, '_');
+    $cleanName = Str::slug($name, '_') ?: 'update_database';
+    $directory = storage_path('app/patch-drafts');
+    File::ensureDirectoryExists($directory);
+    $filename = $cleanName.'_'.Str::uuid().'.sql';
+    $content = "-- Draft for review. Choose a release number only when publishing.\n\n";
 
-    $patchPath = base_path('sql');
-    if (!File::exists($patchPath)) {
-        File::makeDirectory($patchPath, 0755, true);
-    }
-
-    $existingFiles = collect(File::files($patchPath))
-        ->map(fn($f) => $f->getFilename())
-        ->filter(fn($f) => preg_match('/^(\d+)_.*\.sql$/', $f))
-        ->map(function ($f) {
-            preg_match('/^(\d+)_/', $f, $m);
-            return (int) $m[1];
-        });
-
-    $nextNumber = ($existingFiles->max() ?? 0) + 1;
-    $numberPrefix = str_pad((string) $nextNumber, 3, '0', STR_PAD_LEFT);
-    $filename = "{$numberPrefix}_{$cleanName}.sql";
-    $fullPath = $patchPath . DIRECTORY_SEPARATOR . $filename;
-
-    $content = "/* ==========================================================================\n";
-    $content .= "   پچ خودکار شماره: {$numberPrefix} | نام: {$cleanName}\n";
-    $content .= "   تاریخ: " . now()->toDateTimeString() . " | شامل {$changes->count()} دستور SQL\n";
-    $content .= "   ========================================================================== */\n\n";
-
-    $idsToUpdate = [];
     foreach ($changes as $change) {
-        $idsToUpdate[] = $change->LogID;
-        $content .= "-- [{$change->EventType}] روی {$change->ObjectType}: {$change->ObjectName}\n";
-
-        $cleanCmd = trim($change->TSQLCommand);
-        $cleanCmd = preg_replace('/^\s*USE\s+\[?[^\];\r\n]+\]?;?\s*$/mi', '', $cleanCmd);
-        $cleanCmd = trim($cleanCmd);
-
-        $content .= $cleanCmd . "\nGO\n\n";
+        $content .= "-- DevChangeLog LogID: ".(int) $change->LogID."\n";
+        $content .= rtrim($change->TSQLCommand)."\nGO\n\n";
     }
 
-    File::put($fullPath, $content);
+    if (File::put($directory.DIRECTORY_SEPARATOR.$filename, $content, true) !== strlen($content)) {
+        $this->error('Draft could not be written.');
+        return 1;
+    }
 
-    // علامت‌گذاری تغییرات به عنوان اکسپورت شده
-    DB::table('DevChangeLog')
-        ->whereIn('LogID', $idsToUpdate)
-        ->update([
-            'IsExported' => 1,
-            'ExportedAt' => now(),
-        ]);
-
-    // ثبت در SysPatches همین سیستم برای جلوگیری از اجرای مجدد در توسعه
-    DB::table('SysPatches')->updateOrInsert(
-        ['PatchName' => $filename],
-        [
-            'AppliedAt'   => now(),
-            'AppVersion'  => config('app.version', '1.0.0'),
-            'ExecutionMs' => 0,
-            'Status'      => 'SUCCESS',
-            'ErrorMessage'=> null,
-        ]
-    );
-
-    $this->info(" <fg=green>[SUCCESS]</> فایل پچ با موفقیت به صورت خودکار ساخته شد:");
-    $this->line(" <fg=yellow>sql/{$filename}</> (شامل {$changes->count()} تغییر دیتابیس)");
-    $this->info('--------------------------------------------------');
-    $this->info('حالا فقط کافیست برای ارسال به گیت‌هاب بنویسید:');
-    $this->line(" git add sql/{$filename}");
-    $this->line(" git commit -m \"db: {$name}\"");
-    $this->line(" git push origin main");
+    $this->info("Draft saved: {$directory}/{$filename}");
     return 0;
 })->purpose('تولید خودکار فایل پچ از تغییرات اخیر دیتابیس');
 

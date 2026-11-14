@@ -349,7 +349,8 @@ export default function EventDetailsModal({
 
     return (
         <>
-            <Modal open={open} onCancel={onClose} title={event?.Title || 'جزئیات رویداد'} width={580} footer={footer.length ? footer : null}>
+            <Modal open={open} onCancel={onClose} title={event?.Title || 'جزئیات رویداد'} width={580}
+                style={{ maxWidth: 'calc(100vw - 24px)' }} footer={footer.length ? footer : null}>
                 <Spin spinning={loading}>
                     {!event && !loading ? (
                         <Empty description="رویداد یافت نشد" />
@@ -405,7 +406,8 @@ export default function EventDetailsModal({
                                 <Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 16 }}>{event.Description}</Paragraph>
                             )}
 
-                            <Descriptions column={1} size="small" bordered>
+                            <Descriptions column={1} size="small" bordered
+                                styles={{ label: { overflowWrap: 'anywhere' }, content: { minWidth: 0, overflowWrap: 'anywhere' } }}>
                                 {event.RecurrenceType !== 'NONE' && occurrence && occurrence.start.slice(0, 19) !== String(event.StartDateTime).slice(0, 19) && (
                                     <Descriptions.Item label={<><ClockCircleOutlined /> این وقوع</>}>
                                         {Number(event.IsAllDay) === 1
@@ -432,20 +434,22 @@ export default function EventDetailsModal({
                                 {([
                                     ['PROJECT', 'پروژه', (id: number) => `/projects/${id}`],
                                     ['MESSAGE', 'وظیفه', (id: number) => `/messages/${id}`],
-                                    ['PARTY', 'طرف‌حساب', (id: number) => `/crm/parties/${id}`],
-                                    ['PERSON', 'افرادِ مرتبط', (id: number) => `/crm/persons/${id}`],
+                                    ['PARTY', 'طرف‌حساب', (id: number) => `/crm/parties/${id}?tab=interactions`],
+                                    ['PERSON', 'افرادِ مرتبط', (id: number) => `/crm/persons/${id}?tab=interactions`],
                                 ] as const).map(([type, label, href]) => {
                                     const items = links.filter((l) => l.LinkType === type);
                                     if (!items.length) return null;
                                     return (
                                         <Descriptions.Item key={type} label={label}>
-                                            <Space size={[6, 4]} wrap>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 6px', minWidth: 0, maxWidth: '100%' }}>
                                                 {items.map((l) => (
-                                                    <a key={l.EntityID} href={href(Number(l.EntityID))}>
-                                                        <Tag style={{ cursor: 'pointer', marginInlineEnd: 0 }}>{l.DisplayName || l.EntityID}</Tag>
+                                                    <a key={l.EntityID} href={href(Number(l.EntityID))} style={{ minWidth: 0, maxWidth: '100%' }}>
+                                                        <Tag style={{ display: 'block', cursor: 'pointer', marginInlineEnd: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                                            {l.DisplayName || l.EntityID}
+                                                        </Tag>
                                                     </a>
                                                 ))}
-                                            </Space>
+                                            </div>
                                         </Descriptions.Item>
                                     );
                                 })}

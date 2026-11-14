@@ -392,6 +392,7 @@ export default function ReportsManageIndex() {
             {/* جدول با DataGrid یکپارچه */}
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="reports.manage"
                     columns={[]}
                     dataSource={reports}
                     loading={searching}

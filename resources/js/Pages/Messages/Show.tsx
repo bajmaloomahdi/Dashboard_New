@@ -1,3 +1,5 @@
+import { newestFirst } from '../../Utils/newestFirst';
+import PreferenceTable from '../../Components/PreferenceTable';
 import { useState, useEffect } from 'react';
 import {
     Card,
@@ -8,7 +10,6 @@ import {
     Row,
     Col,
     Empty,
-    Table,
     Avatar,
     Select,
     Input,
@@ -155,10 +156,10 @@ export default function MessageShow() {
     const msg: MessageHeader = message;
     const detailList: MessageDetail[] = details || [];
     const copyList: CopyItem[] = copies || [];
-    const attachmentList: Attachment[] = attachments || [];
+    const attachmentList = newestFirst<Attachment>(attachments || [], (a) => a.CreateDate, (a) => a.MessageAttachmentID);
     const statusList: StatusItem[] = statuses || [];
     const userList: UserItem[] = users || [];
-    const commentList: CommentItem[] = comments || [];
+    const commentList = newestFirst<CommentItem>(comments || [], (c) => c.CreateDate, (c) => c.MessageCommentID);
     const priorityList: PriorityItem[] = priorities || [];
 
     // فیلتر ضمیمه‌های عکس
@@ -547,7 +548,7 @@ export default function MessageShow() {
                 {detailList.length === 0 ? (
                     <Empty description="گردشی ثبت نشده است" />
                 ) : (
-                    <Table
+                    <PreferenceTable gridKey="messages.details.history"
                         rowKey="MessageDetailID"
                         dataSource={detailList}
                         pagination={false}
@@ -646,7 +647,7 @@ export default function MessageShow() {
                 {copyList.length === 0 ? (
                     <Empty description="رونوشتی ثبت نشده است" />
                 ) : (
-                    <Table
+                    <PreferenceTable gridKey="messages.details.recipients"
                         rowKey="MessageCopyID"
                         dataSource={copyList}
                         pagination={false}
@@ -872,7 +873,7 @@ export default function MessageShow() {
                 {attachmentList.length === 0 ? (
                     <Empty description="ضمیمه‌ای ثبت نشده است" />
                 ) : (
-                    <Table
+                    <PreferenceTable gridKey="messages.details.attachments"
                         rowKey="MessageAttachmentID"
                         dataSource={attachmentList}
                         pagination={false}

@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Table, Typography, Empty } from 'antd';
+import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Typography, Empty } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -221,7 +222,7 @@ export default function CrmProductCategoriesIndex() {
             </Card>
 
             <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
-                <Table<CategoryNode>
+                <PreferenceTable<CategoryNode> gridKey="crm.product-categories"
                     rowKey="key"
                     columns={columns}
                     dataSource={tree}

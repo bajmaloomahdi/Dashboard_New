@@ -422,6 +422,7 @@ export default function UsersIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.users.list"
                     columns={[]}
                     dataSource={users}
                     loading={searching}

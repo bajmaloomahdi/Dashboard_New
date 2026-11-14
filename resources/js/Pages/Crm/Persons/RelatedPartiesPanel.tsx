@@ -1,4 +1,5 @@
-import { Table, Tag, Space, Typography, Empty } from 'antd';
+import PreferenceTable from '../../../Components/PreferenceTable';
+import { Tag, Space, Typography, Empty } from 'antd';
 import { CheckCircleOutlined, StopOutlined, StarFilled, BankOutlined, UserOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { router } from '@inertiajs/react';
@@ -71,7 +72,7 @@ export default function RelatedPartiesPanel({ items }: RelatedPartiesPanelProps)
     ];
 
     return (
-        <Table
+        <PreferenceTable gridKey="crm.persons.parties"
             rowKey="RelationID"
             columns={columns}
             dataSource={items}

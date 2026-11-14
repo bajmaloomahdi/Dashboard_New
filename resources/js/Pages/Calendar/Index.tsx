@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Checkbox, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, Tooltip, message } from 'antd';
+import { Alert, Badge, Button, Card, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, Tooltip, message } from 'antd';
 import {
     MailOutlined,
     CalendarOutlined,
@@ -35,7 +35,7 @@ import {
     toApiDate,
 } from '../../Utils/jalaliCalendar';
 import { toEnglishDigits } from '../../Utils/jalali';
-import PersianDateInput from '../../Components/PersianDateInput';
+import AgendaFilters from './AgendaFilters';
 import { NOTIFY_DURATION_SECONDS, NOTIFY_HOOK_CONFIG } from '../../Utils/notify';
 import { STYLES, THEME } from '../../theme';
 import {
@@ -132,12 +132,12 @@ async function fetchEvents(from: Date, to: Date, userId: number): Promise<Calend
  * جست‌وجو در «توضیحات»ِ رویدادها: موضوع و متن در مرورگر جست‌وجو می‌شوند؛ رویدادهایی که فقط با توضیحاتشان پیدا می‌شوند
  * را سرور برمی‌گرداند (از میانِ همان رویدادهایِ قابلِ دیدن، با دسترسیِ دیدنِ توضیحات).
  */
-function useCommentMatches(query: string, candidates: CalendarEvent[] | null): Set<number> {
+function useCommentMatches(query: string, candidates: CalendarEvent[] | null, colorNames: Record<string, string>): Set<number> {
     const [hits, setHits] = useState<Set<number>>(() => new Set());
     const q = query.trim();
     const ids = useMemo(
-        () => (q && candidates ? Array.from(new Set(candidates.filter((ev) => !matchesSearch(ev, q)).map((ev) => Number(ev.EventID)))).slice(0, 3000) : []),
-        [q, candidates],
+        () => (q && candidates ? Array.from(new Set(candidates.filter((ev) => !matchesSearch(ev, q, colorNames)).map((ev) => Number(ev.EventID)))).slice(0, 3000) : []),
+        [q, candidates, colorNames],
     );
     const idsKey = ids.join(',');
     useEffect(() => {
@@ -208,8 +208,10 @@ export default function CalendarIndex() {
         currentUserId: number;
         viewingAccess?: string;
         canLinkCrm?: boolean;
+        colorPalette?: { customColors?: string[]; colorNames?: Record<string, string> };
     };
     const { initialEvents, users, reminderOptions, permissions, viewableUsers, currentUserId, canLinkCrm = false } = props;
+    const [colorNames, setColorNames] = useState(props.colorPalette?.colorNames ?? {});
     const can = (p: CalendarPermission) => permissions.includes(p);
 
     const screens = Grid.useBreakpoint();
@@ -271,6 +273,22 @@ export default function CalendarIndex() {
     const [invitesCount, setInvitesCount] = useState(0);
     // Inertia هنگامِ رفتن به همین صفحه (اعلانِ داخلِ برنامه → /calendar?invites=1) کامپوننت را دوباره نمی‌سازد؛ با تغییرِ URL باز شود
     const pageUrl = usePage().url;
+    const canEditEvents = can('CALENDAR_EDIT') || can('CALENDAR_EDIT_CONTENT');
+    const handleEditFromDetails = useCallback((eventId: number) => {
+        setDetailsOpen(false);
+        setEditingEventId(eventId);
+        setDefaultSlotDate(null);
+        setFormOpen(true);
+    }, []);
+
+    useEffect(() => {
+        const url = new URL(pageUrl, window.location.origin);
+        const editEventId = url.searchParams.get('editEventId');
+        if (!canEditEvents || !editEventId || !/^[1-9]\d*$/.test(editEventId)) return;
+        const eventId = Number(editEventId);
+        if (Number.isSafeInteger(eventId)) handleEditFromDetails(eventId);
+    }, [pageUrl, canEditEvents, handleEditFromDetails]);
+
     useEffect(() => {
         if (new URLSearchParams(pageUrl.split('?')[1] || '').get('invites') === '1') setInvitesOpen(true);
     }, [pageUrl]);
@@ -455,16 +473,16 @@ export default function CalendarIndex() {
         [visibleEvents, agendaStatuses],
     );
     // جست‌وجو در موضوع، متن و توضیحاتِ رویداد (توضیحات از سرور)
-    const agendaCommentHits = useCommentMatches(view === 'agenda' ? agendaQuery : '', agendaByStatus);
+    const agendaCommentHits = useCommentMatches(view === 'agenda' ? agendaQuery : '', agendaByStatus, colorNames);
     const agendaEvents = useMemo(
-        () => agendaByStatus.filter((ev) => matchesSearch(ev, agendaQuery) || agendaCommentHits.has(Number(ev.EventID))),
-        [agendaByStatus, agendaQuery, agendaCommentHits],
+        () => agendaByStatus.filter((ev) => matchesSearch(ev, agendaQuery, colorNames) || agendaCommentHits.has(Number(ev.EventID))),
+        [agendaByStatus, agendaQuery, agendaCommentHits, colorNames],
     );
     const searchPool = useMemo(() => (searching && searchEvents ? applyFilters(searchEvents, filters, '') : null), [searching, searchEvents, filters]);
-    const searchCommentHits = useCommentMatches(searching ? query : '', searchPool);
+    const searchCommentHits = useCommentMatches(searching ? query : '', searchPool, colorNames);
     const searchResults = useMemo(
-        () => (searchPool ? searchPool.filter((ev) => matchesSearch(ev, query) || searchCommentHits.has(Number(ev.EventID))) : []),
-        [searchPool, query, searchCommentHits],
+        () => (searchPool ? searchPool.filter((ev) => matchesSearch(ev, query, colorNames) || searchCommentHits.has(Number(ev.EventID))) : []),
+        [searchPool, query, searchCommentHits, colorNames],
     );
 
     const eventDays = useMemo(() => {
@@ -525,13 +543,12 @@ export default function CalendarIndex() {
         setFormOpen(false);
         setEditingEventId(null);
         setDefaultSlotDate(null);
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('editEventId')) {
+            url.searchParams.delete('editEventId');
+            window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+        }
         if (changed) refreshAll();
-    };
-    const handleEditFromDetails = (eventId: number) => {
-        setDetailsOpen(false);
-        setEditingEventId(eventId);
-        setDefaultSlotDate(null);
-        setFormOpen(true);
     };
 
     const blockReason = useCallback((ev: CalendarEvent) => dragBlockReason(ev, permissions, isReadOnly), [permissions, isReadOnly]);
@@ -737,37 +754,9 @@ export default function CalendarIndex() {
                             <Spin spinning={loading}>
                                 {view === 'agenda' ? (
                                     <>
-                                    <div className="cal-agenda-filters">
-                                        <div className="cal-agenda-from">
-                                            <span>از تاریخ:</span>
-                                            <PersianDateInput value={agendaFrom} onChange={setAgendaFrom} size="middle" placeholder="همهٔ رویدادها" />
-                                            {agendaFrom && (
-                                                <Button size="small" type="link" onClick={() => setAgendaFrom(null)}>
-                                                    همه
-                                                </Button>
-                                            )}
-                                        </div>
-                                        <Input
-                                            allowClear
-                                            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                                            placeholder="جستجو در موضوع، متن و توضیحات…"
-                                            value={agendaQuery}
-                                            onChange={(e) => setAgendaQuery(e.target.value)}
-                                            className="cal-agenda-search"
-                                        />
-                                    </div>
-                                    <div className="cal-agenda-statuses">
-                                        <span>وضعیت:</span>
-                                        <Checkbox.Group
-                                            value={agendaStatuses}
-                                            onChange={(v) => changeAgendaStatuses(v as string[])}
-                                            options={[
-                                                { label: 'ثبت شده', value: 'CONFIRMED' },
-                                                { label: 'انجام شده', value: 'DONE' },
-                                                { label: 'لغو شده', value: 'CANCELLED' },
-                                            ]}
-                                        />
-                                    </div>
+                                    <AgendaFilters agendaFrom={agendaFrom} setAgendaFrom={setAgendaFrom}
+                                        agendaQuery={agendaQuery} setAgendaQuery={setAgendaQuery}
+                                        agendaStatuses={agendaStatuses} setAgendaStatuses={changeAgendaStatuses} />
                                     <AgendaView
                                         events={agendaEvents}
                                         from={range.from}
@@ -817,6 +806,10 @@ export default function CalendarIndex() {
             )}
 
             <EventFormModal
+                key={currentUserId}
+                initialCustomColors={props.colorPalette?.customColors ?? []}
+                initialColorNames={props.colorPalette?.colorNames ?? {}}
+                onPaletteSaved={setColorNames}
                 open={formOpen}
                 onClose={handleFormClose}
                 users={users || []}
@@ -867,10 +860,6 @@ export default function CalendarIndex() {
                 .cal-main-card > .ant-card-body > .ant-spin > .ant-spin-container,
                 .cal-main-card > .ant-card-body > .ant-spin-nested-loading,
                 .cal-main-card > .ant-card-body > .ant-spin-nested-loading > .ant-spin-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-                .cal-agenda-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
-                .cal-agenda-from { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
-                .cal-agenda-search { flex: 1; min-width: 200px; max-width: 360px; }
-                .cal-agenda-statuses { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
                 .cal-toolbar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; }
                 .cal-toolbar-title { font-weight: 700; font-size: 16px; margin-inline-start: 4px; }
                 .cal-toolbar-mobile { display: flex; gap: 8px; width: 100%; align-items: center; }

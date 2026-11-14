@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Table, Button, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Divider } from 'antd';
+import { Button, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
@@ -212,7 +213,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                 </Space>
             ) : null}
 
-            <Table rowKey="ClassificationID" columns={deptColumns} dataSource={departmentRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="دپارتمانی ثبت نشده است" /> }} />
+            <PreferenceTable gridKey="crm.parties.departments" rowKey="ClassificationID" columns={deptColumns} dataSource={departmentRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="دپارتمانی ثبت نشده است" /> }} />
 
             <Divider />
 
@@ -261,7 +262,7 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
                 </Space>
             ) : null}
 
-            <Table rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="گروهی ثبت نشده است" /> }} />
+            <PreferenceTable gridKey="crm.parties.classifications" rowKey="ClassificationID" columns={typeColumns} dataSource={typeActivityRows} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="گروهی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

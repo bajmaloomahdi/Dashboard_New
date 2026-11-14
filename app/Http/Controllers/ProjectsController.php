@@ -38,6 +38,12 @@ class ProjectsController extends Controller
             ]
         );
 
+        foreach ($projects as $project) {
+            $project->MemberNames = collect(DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$project->ProjectID]))
+                ->filter(fn ($member) => (int) $member->IsActive === 1)
+                ->pluck('FullName')->filter()->unique()->values();
+        }
+
         $users = DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1');
         $this->attachPositionTitles($users);
 
@@ -46,9 +52,13 @@ class ProjectsController extends Controller
 
         return Inertia::render('Projects/Index', [
             'projects'   => $projects,
+            'departmentOptions' => DB::select('EXEC dbo.sp_Crm_GetDepartments @IsActive = 1'),
+            'parentOptions' => collect(DB::select('EXEC sp_GetProjects @UserID = ?', [Auth::id()]))
+                ->map(fn ($p) => ['id' => $p->ProjectID, 'title' => $p->ProjectTitle, 'parentId' => $p->ParentProjectID])->values(),
             'users'      => $users,
             'statuses'   => $statuses,
             'priorities' => $priorities,
+            'canLinkCrm' => $this->canLinkProjectCrm(),
             'filters'    => [
                 'search'            => $search,
                 'is_active'         => $isActive,
@@ -89,7 +99,17 @@ class ProjectsController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project'          => $project,
+            'departmentOptions' => DB::select('EXEC dbo.sp_Crm_GetDepartments @IsActive = 1'),
+            'parentProject'    => collect($projects)->firstWhere('ProjectID', $project->ParentProjectID),
+            'childProjects'    => collect($projects)->filter(fn ($p) => (string) $p->ParentProjectID === (string) $id)
+                ->map(fn ($p) => ['id' => $p->ProjectID, 'title' => $p->ProjectTitle])->values(),
+            'parentOptions'    => collect($projects)
+                ->map(fn ($p) => ['id' => $p->ProjectID, 'title' => $p->ProjectTitle, 'parentId' => $p->ParentProjectID])->values(),
+            'editStatuses'     => DB::select('EXEC sp_GetProjectStatuses @IsActive = NULL'),
+            'editPriorities'   => DB::select('EXEC sp_GetProjectPriorities @IsActive = NULL'),
             'members'          => $members,
+            'projectStatuses'  => $this->canManageProjectTeam($members, (int) Auth::id())
+                ? DB::select('EXEC sp_GetProjectStatuses @IsActive = 1') : [],
             'users'            => $users,
             'msgPriorities'    => $msgPriorities,
             'contractors'      => $contractors,
@@ -410,6 +430,8 @@ class ProjectsController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'ParentProjectID'   => 'nullable|integer|min:1',
+            'DepartmentID'      => 'nullable|integer|min:1|max:2147483647',
             'ProjectCode'      => 'nullable|string|max:50',
             'ProjectTitle'     => 'required|string|max:250',
             'Description'      => 'nullable|string',
@@ -423,50 +445,118 @@ class ProjectsController extends Controller
             'ResponsibleUserID' => 'required|integer',
             'MemberUserIDs'    => 'nullable|array',
             'MemberUserIDs.*'  => 'integer',
+            'OwnerPartyID'     => 'nullable|integer|min:1',
+            'ContractorPartyIDs' => 'nullable|array|max:50',
+            'ContractorPartyIDs.*' => 'integer|min:1|distinct',
         ]);
 
-        $result = DB::select(
-            'EXEC sp_InsertProject
-                @ProjectCode = ?, @ProjectTitle = ?, @Description = ?, @StartDate = ?,
-                @PlannedEndDate = ?, @ActualEndDate = ?, @ProjectStatusID = ?, @ProjectPriorityID = ?,
-                @ProgressPercent = ?, @IsActive = ?, @ResponsibleUserID = ?, @MemberUserIDs = ?, @CreateUser = ?, @Year = ?',
-            [
-                $validated['ProjectCode'] ?? null,
-                $validated['ProjectTitle'],
-                $validated['Description'] ?? null,
-                $validated['StartDate'] ?? null,
-                $validated['PlannedEndDate'] ?? null,
-                $validated['ActualEndDate'] ?? null,
-                $validated['ProjectStatusID'],
-                $validated['ProjectPriorityID'] ?? null,
-                $validated['ProgressPercent'] ?? 0,
-                $validated['IsActive'] ?? true,
-                $validated['ResponsibleUserID'],
-                isset($validated['MemberUserIDs']) ? implode(',', $validated['MemberUserIDs']) : null,
-                Auth::id(),
-                $this->getJalaliYear(now()),
-            ]
-        );
+        $owner = $validated['OwnerPartyID'] ?? null;
+        $contractors = $validated['ContractorPartyIDs'] ?? [];
+        abort_if(($owner || $contractors) && !$this->canLinkProjectCrm(), 403);
 
-        $response = (array) ($result[0] ?? []);
+        $response = DB::transaction(function () use ($validated, $owner, $contractors) {
+            $result = DB::select(
+                'EXEC sp_InsertProject
+                    @ProjectCode = ?, @ProjectTitle = ?, @Description = ?, @StartDate = ?,
+                    @PlannedEndDate = ?, @ActualEndDate = ?, @ProjectStatusID = ?, @ProjectPriorityID = ?,
+                    @ProgressPercent = ?, @IsActive = ?, @ResponsibleUserID = ?, @MemberUserIDs = ?, @CreateUser = ?, @Year = ?, @ParentProjectID = ?, @DepartmentID = ?',
+                [
+                    $validated['ProjectCode'] ?? null,
+                    $validated['ProjectTitle'],
+                    $validated['Description'] ?? null,
+                    $validated['StartDate'] ?? null,
+                    $validated['PlannedEndDate'] ?? null,
+                    $validated['ActualEndDate'] ?? null,
+                    $validated['ProjectStatusID'],
+                    $validated['ProjectPriorityID'] ?? null,
+                    $validated['ProgressPercent'] ?? 0,
+                    $validated['IsActive'] ?? true,
+                    $validated['ResponsibleUserID'],
+                    isset($validated['MemberUserIDs']) ? implode(',', $validated['MemberUserIDs']) : null,
+                    Auth::id(),
+                    $this->getJalaliYear(now()),
+                    $validated['ParentProjectID'] ?? null,
+                    $validated['DepartmentID'] ?? null,
+                ]
+            );
 
-        if (empty($response['Success'])) {
-            return back()->withErrors([
-                'ProjectTitle' => $response['Message'] ?? 'خطا در ایجاد پروژه',
-            ]);
-        }
+            $response = (array) ($result[0] ?? []);
+
+            if (empty($response['Success'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    (!empty($response['DepartmentError']) ? 'DepartmentID' : (!empty($response['ParentError']) ? 'ParentProjectID' : 'ProjectTitle')) => $response['Message'] ?? 'خطا در ایجاد پروژه',
+                ]);
+            }
+
+            $projectId = (int) ($response['NewProjectID'] ?? 0);
+            $actor = (int) Auth::id();
+            abort_unless($projectId > 0, 500);
+            if ($owner) {
+                $this->requireProjectCreationStep(DB::selectOne(
+                    'EXEC sp_SaveProjectOwner @ProjectID = ?, @OwnerPartyID = ?, @OwnerBrandID = NULL, @UserID = ?',
+                    [$projectId, $owner, $actor]
+                ), 'OwnerPartyID', 'ذخیرهٔ مالک پروژه انجام نشد.');
+            }
+            foreach ($contractors as $partyId) {
+                $this->requireProjectCreationStep(DB::selectOne(
+                    'EXEC sp_AddProjectContractor @ProjectID = ?, @PartyID = ?, @CreateUser = ?',
+                    [$projectId, $partyId, $actor]
+                ), 'ContractorPartyIDs', 'ذخیرهٔ پیمانکار پروژه انجام نشد.');
+            }
+            if (!empty($validated['PlannedEndDate'])) {
+                $this->createProjectDeadlineEvent($projectId, $actor, $validated, array_filter([$owner, ...$contractors]));
+            }
+            return $response;
+        });
 
         return redirect()->route('projects.index')
             ->with('success', $response['Message'] ?? 'پروژه با موفقیت ایجاد شد.');
     }
 
+    private function canLinkProjectCrm(): bool
+    {
+        return collect(DB::select('EXEC sp_GetUserPermissions @UserID = ?', [Auth::id()]))
+            ->contains('PermissionCode', 'CRM_VIEW');
+    }
+
+    private function requireProjectCreationStep(?object $result, string $field, string $message): void
+    {
+        if (empty($result->Success)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([$field => $result->Message ?? $message]);
+        }
+    }
+
+    private function createProjectDeadlineEvent(int $projectId, int $actor, array $project, array $partyIds): void
+    {
+        $date = \Illuminate\Support\Carbon::parse($project['PlannedEndDate'])->toDateString();
+        $members = collect(DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$projectId]))
+            ->filter(fn ($member) => (int) $member->IsActive === 1)->pluck('UserID')->unique();
+        $event = DB::selectOne(
+            "EXEC sp_InsertCalendarEvent
+                @Title = ?, @StartDateTime = ?, @EndDateTime = ?, @IsAllDay = 0,
+                @Status = N'CONFIRMED', @RecurrenceType = N'NONE',
+                @OwnerUserID = ?, @AttendeeUserIDs = ?, @CreateUser = ?, @IsPrivate = 0",
+            [mb_substr('موعد پایان پروژه: '.$project['ProjectTitle'], 0, 250), "$date 13:00:00", "$date 13:30:00",
+                $project['ResponsibleUserID'], $members->implode(','), $actor]
+        );
+        $this->requireProjectCreationStep($event, 'PlannedEndDate', 'ایجاد رویداد موعد پایان انجام نشد.');
+        $this->requireProjectCreationStep(DB::selectOne(
+            'EXEC dbo.sp_Calendar_SetEventLinks @EventID = ?, @UserID = ?, @PartyIDs = ?, @ProjectIDs = ?',
+            [$event->NewEventID, $actor, implode(',', array_unique($partyIds)), (string) $projectId]
+        ), 'PlannedEndDate', 'ارتباط رویداد موعد پایان با پروژه ذخیره نشد.');
+        DB::statement('EXEC dbo.sp_SyncProjectDeadlineEvent @ProjectID = ?, @ActorUserID = ?, @EventID = ?',
+            [$projectId, $actor, $event->NewEventID]);
+    }
+
     /**
-     * ویرایش فیلدهای پروژه (بدون دست‌زدن به اعضا)
+     * ویرایش مشخصات پروژه و تغییر اختیاری ترکیب اعضا.
      */
     public function update(Request $request, int $id)
     {
-        $validated = $request->validate([
-            'ProjectCode'      => 'required|string|max:50',
+        $statusOnly = $request->routeIs('projects.status.update');
+        $validated = $request->validate($statusOnly ? ['ProjectStatusID' => 'required|integer|min:1'] : [
+            'ParentProjectID'   => 'sometimes|nullable|integer|min:1',
+            'DepartmentID'      => 'sometimes|nullable|integer|min:1|max:2147483647',
             'ProjectTitle'     => 'required|string|max:250',
             'Description'      => 'nullable|string',
             'StartDate'        => 'nullable|date',
@@ -476,38 +566,80 @@ class ProjectsController extends Controller
             'ProjectPriorityID' => 'nullable|integer',
             'ProgressPercent'  => 'nullable|numeric|min:0|max:100',
             'IsActive'         => 'boolean',
+            'ResponsibleUserID' => 'required_with:MemberUserIDs|integer|min:1',
+            'MemberUserIDs'     => 'array',
+            'MemberUserIDs.*'   => 'integer|min:1|distinct',
         ]);
 
-        $result = DB::select(
-            'EXEC sp_UpdateProject
-                @ProjectID = ?, @ProjectCode = ?, @ProjectTitle = ?, @Description = ?,
-                @StartDate = ?, @PlannedEndDate = ?, @ActualEndDate = ?, @ProjectStatusID = ?, @ProjectPriorityID = ?,
-                @ProgressPercent = ?, @IsActive = ?, @ModifyUser = ?',
-            [
-                $id,
-                $validated['ProjectCode'],
-                $validated['ProjectTitle'],
-                $validated['Description'] ?? null,
-                $validated['StartDate'] ?? null,
-                $validated['PlannedEndDate'] ?? null,
-                $validated['ActualEndDate'] ?? null,
-                $validated['ProjectStatusID'],
-                $validated['ProjectPriorityID'] ?? null,
-                $validated['ProgressPercent'] ?? 0,
-                $validated['IsActive'] ?? true,
-                Auth::id(),
-            ]
-        );
+        $actor = (int) Auth::id();
+        $current = collect(DB::select(
+            'EXEC sp_GetProjects @SearchText = NULL, @IsActive = NULL, @ProjectStatusID = NULL, @UserID = ?',
+            [$actor]
+        ))->firstWhere('ProjectID', $id);
+        abort_if($current === null, 404);
 
-        $response = (array) ($result[0] ?? []);
+        $response = DB::transaction(function () use ($id, $actor, $current, $validated, $statusOnly) {
+            $updateTeam = array_key_exists('ResponsibleUserID', $validated) || array_key_exists('MemberUserIDs', $validated);
+            $members = [];
+            $statusChanged = (int) $validated['ProjectStatusID'] !== (int) $current->ProjectStatusID;
+            if ($updateTeam || $statusChanged || $statusOnly) {
+                $members = DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$id]);
+                abort_unless($this->canManageProjectTeam($members, $actor), 403);
+            }
+            if ($statusChanged) {
+                $statuses = DB::select('EXEC sp_GetProjectStatuses @IsActive = 1');
+                if (!collect($statuses)->contains(fn ($status) => (int) $status->ProjectStatusID === (int) $validated['ProjectStatusID'])) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['ProjectStatusID' => 'وضعیت انتخاب‌شده فعال یا معتبر نیست.']);
+                }
+            } elseif ($statusOnly) {
+                return ['Message' => 'وضعیت پروژه بدون تغییر است.'];
+            }
+            if ($updateTeam) {
+                if (! isset($validated['ResponsibleUserID'], $validated['MemberUserIDs'])) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'MemberUserIDs' => 'مسئول و فهرست اعضا را با هم ارسال کنید.',
+                    ]);
+                }
+            }
+            $value = fn (string $key) => array_key_exists($key, $validated) ? $validated[$key] : $current->{$key};
+            $result = DB::select(
+                'EXEC sp_UpdateProject
+                    @ProjectID = ?, @ProjectCode = ?, @ProjectTitle = ?, @Description = ?,
+                    @StartDate = ?, @PlannedEndDate = ?, @ActualEndDate = ?, @ProjectStatusID = ?, @ProjectPriorityID = ?,
+                    @ProgressPercent = ?, @IsActive = ?, @ModifyUser = ?, @ParentProjectID = ?, @SetParentProject = ?, @DepartmentID = ?, @SetDepartment = ?',
+                [
+                    $id,
+                    $current->ProjectCode,
+                    $value('ProjectTitle'),
+                    $value('Description'),
+                    $value('StartDate'),
+                    $value('PlannedEndDate'),
+                    $value('ActualEndDate'),
+                    $validated['ProjectStatusID'],
+                    $value('ProjectPriorityID'),
+                    $value('ProgressPercent') ?? $current->ProgressPercent,
+                    $value('IsActive'),
+                    $actor,
+                    $validated['ParentProjectID'] ?? null,
+                    (int) array_key_exists('ParentProjectID', $validated),
+                    $validated['DepartmentID'] ?? null,
+                    (int) array_key_exists('DepartmentID', $validated),
+                ]
+            );
 
-        if (empty($response['Success'])) {
-            return back()->withErrors([
-                'ProjectTitle' => $response['Message'] ?? 'خطا در ویرایش پروژه',
-            ]);
-        }
+            $response = (array) ($result[0] ?? []);
+            if (empty($response['Success'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    (!empty($response['DepartmentError']) ? 'DepartmentID' : (!empty($response['ParentError']) ? 'ParentProjectID' : ($statusOnly ? 'ProjectStatusID' : 'ProjectTitle'))) => $response['Message'] ?? 'خطا در ویرایش پروژه',
+                ]);
+            }
+            if ($updateTeam) {
+                $this->updateProjectTeam($id, $actor, $members, (int) $validated['ResponsibleUserID'], $validated['MemberUserIDs']);
+            }
+            return $response;
+        });
 
-        return redirect()->route('projects.index')
+        return (($statusOnly || $request->boolean('returnToDetails')) ? redirect()->route('projects.show', $id) : redirect()->route('projects.index'))
             ->with('success', $response['Message'] ?? 'پروژه با موفقیت ویرایش شد.');
     }
 
@@ -535,7 +667,56 @@ class ProjectsController extends Controller
         $members = DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$id]);
         $this->attachPositionTitles($members);
 
-        return response()->json(['members' => $members]);
+        return response()->json(['members' => $members, 'canManage' => $this->canManageProjectTeam($members, (int) Auth::id())]);
+    }
+
+    private function canManageProjectTeam(array $members, int $actor): bool
+    {
+        return $actor > 0 && collect($members)->contains(fn ($member) =>
+            (int) $member->UserID === $actor && (int) $member->IsActive === 1 && (int) $member->IsResponsible === 1);
+    }
+
+    private function updateProjectTeam(int $projectId, int $actor, array $members, int $responsible, array $memberIds): void
+    {
+        $active = collect($members)->filter(fn ($row) => (int) $row->IsActive === 1);
+        $desired = array_unique([$responsible, ...array_map('intval', $memberIds)]);
+        $existing = $active->map(fn ($row) => (int) $row->UserID)->all();
+        $currentResponsible = (int) ($active->first(fn ($row) => (int) $row->IsResponsible === 1)->UserID ?? 0);
+        $added = array_diff($desired, $existing);
+        if ($added !== []) {
+            $eligible = array_map(fn ($row) => (int) $row->UserID, DB::select('EXEC sp_GetUsers @SearchText = NULL, @IsActive = 1'));
+            if (array_diff($added, $eligible) !== []) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['MemberUserIDs' => 'کاربر جدید باید فعال باشد.']);
+            }
+        }
+        foreach ($desired as $id) {
+            if (! in_array($id, $existing, true)) {
+                $result = DB::selectOne('EXEC sp_AddProjectMember @ProjectID = ?, @UserID = ?, @IsResponsible = ?, @StartDate = NULL, @CreateUser = ?',
+                    [$projectId, $id, 0, $actor]);
+                $this->assertProjectTeamSaved($result);
+            }
+        }
+        if ($added !== []) {
+            DB::statement('EXEC dbo.sp_SyncProjectDeadlineEvent @ProjectID = ?, @ActorUserID = ?', [$projectId, $actor]);
+        }
+        if ($responsible !== $currentResponsible) {
+            $this->assertProjectTeamSaved(DB::selectOne(
+                'EXEC sp_AddProjectMember @ProjectID = ?, @UserID = ?, @IsResponsible = 1, @StartDate = NULL, @CreateUser = ?',
+                [$projectId, $responsible, $actor]
+            ));
+        }
+        foreach (array_diff($existing, $desired) as $id) {
+            $this->assertProjectTeamSaved(DB::selectOne('EXEC sp_RemoveProjectMember @ProjectID = ?, @UserID = ?, @ModifyUser = ?', [$projectId, $id, $actor]));
+        }
+    }
+
+    private function assertProjectTeamSaved(?object $result): void
+    {
+        if (empty($result->Success)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'MemberUserIDs' => $result->Message ?? 'ذخیرهٔ اعضای پروژه انجام نشد.',
+            ]);
+        }
     }
 
     /**
@@ -579,18 +760,37 @@ class ProjectsController extends Controller
             'StartDate'     => 'nullable|date',
         ]);
 
-        $result = DB::select(
-            'EXEC sp_AddProjectMember @ProjectID = ?, @UserID = ?, @IsResponsible = ?, @StartDate = ?, @CreateUser = ?',
-            [
-                $id,
-                $validated['UserID'],
-                $validated['IsResponsible'] ?? false,
-                $validated['StartDate'] ?? null,
-                Auth::id(),
-            ]
-        );
+        $response = DB::transaction(function () use ($id, $validated) {
+            $promote = (bool) ($validated['IsResponsible'] ?? false);
+            $actor = (int) Auth::id();
+            if ((int) $validated['UserID'] === $actor) {
+                // The current manager is already a member. Keep the manager role on repeat submissions.
+                return ['Success' => true, 'Message' => 'کاربر از قبل مسئول پروژه است.'];
+            }
+            $result = DB::select(
+                'EXEC sp_AddProjectMember @ProjectID = ?, @UserID = ?, @IsResponsible = ?, @StartDate = ?, @CreateUser = ?',
+                [
+                    $id,
+                    $validated['UserID'],
+                    false,
+                    $validated['StartDate'] ?? null,
+                    Auth::id(),
+                ]
+            );
 
-        $response = (array) ($result[0] ?? []);
+            $response = (array) ($result[0] ?? []);
+            if (!empty($response['Success'])) {
+                DB::statement('EXEC dbo.sp_SyncProjectDeadlineEvent @ProjectID = ?, @ActorUserID = ?', [$id, $actor]);
+                if ($promote) {
+                    $this->assertProjectTeamSaved(DB::selectOne(
+                        'EXEC sp_AddProjectMember @ProjectID = ?, @UserID = ?, @IsResponsible = 1, @StartDate = NULL, @CreateUser = ?',
+                        [$id, $validated['UserID'], $actor]
+                    ));
+                }
+            }
+
+            return $response;
+        });
         return response()->json([
             'success' => !empty($response['Success']),
             'message' => $response['Message'] ?? '',
@@ -681,12 +881,19 @@ class ProjectsController extends Controller
             'PartyID' => 'required|integer',
         ]);
 
-        $result = DB::select(
-            'EXEC sp_AddProjectContractor @ProjectID = ?, @PartyID = ?, @CreateUser = ?',
-            [$id, $validated['PartyID'], Auth::id()]
-        );
+        $response = DB::transaction(function () use ($id, $validated) {
+            $result = DB::select(
+                'EXEC sp_AddProjectContractor @ProjectID = ?, @PartyID = ?, @CreateUser = ?',
+                [$id, $validated['PartyID'], Auth::id()]
+            );
 
-        $response = (array) ($result[0] ?? []);
+            $response = (array) ($result[0] ?? []);
+            if (!empty($response['Success'])) {
+                DB::statement('EXEC dbo.sp_SyncProjectDeadlineEvent @ProjectID = ?, @ActorUserID = ?', [$id, Auth::id()]);
+            }
+
+            return $response;
+        });
         return response()->json([
             'success' => !empty($response['Success']),
             'message' => $response['Message'] ?? '',

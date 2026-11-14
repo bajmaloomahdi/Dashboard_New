@@ -525,6 +525,7 @@ export default function RolePermissions() {
                                     <DataGrid
                                         columns={[]}
                                         dataSource={filteredMenus}
+                                        gridKey="admin.roles.menus"
                                         customColumns={menuColumns}
                                         rowKey="MenuID"
                                         showRowNumber={false}
@@ -587,6 +588,7 @@ export default function RolePermissions() {
                                     <DataGrid
                                         columns={[]}
                                         dataSource={filteredReports}
+                                        gridKey="admin.roles.reports"
                                         customColumns={reportColumns}
                                         rowKey="ReportID"
                                         showRowNumber={false}
@@ -644,6 +646,7 @@ export default function RolePermissions() {
                                     <DataGrid
                                         columns={[]}
                                         dataSource={filteredPermissions}
+                                        gridKey="admin.roles.permissions"
                                         customColumns={permissionColumns}
                                         rowKey="PermissionID"
                                         showRowNumber={false}

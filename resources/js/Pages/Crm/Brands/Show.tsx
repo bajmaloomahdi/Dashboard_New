@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useState } from 'react';
-import { Card, Button, Descriptions, Table, Tag, Typography, Empty, Space } from 'antd';
+import { Card, Button, Descriptions, Tag, Typography, Empty, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
 import { TagsOutlined, EditOutlined, ApartmentOutlined, BankOutlined, UserOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -165,7 +166,7 @@ export default function CrmBrandShow() {
 
             {activeTab === 'parties' && (
                 <Card style={STYLES.card}>
-                    <Table
+                    <PreferenceTable gridKey="crm.brands.parties"
                         rowKey="PartyID"
                         columns={columns}
                         dataSource={parties || []}

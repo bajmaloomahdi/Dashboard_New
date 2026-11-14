@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox, ColorPicker, Space, Tooltip, Tag } from 'antd';
 import { BgColorsOutlined, PaperClipOutlined, TagOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -8,7 +8,7 @@ import NotificationModal, { NotificationType } from '../../Components/Notificati
 import type { CalendarEvent, CalendarPermission, ReminderOption } from '../../Types';
 import { WEEKDAY_LABELS_FA, toApiDateTime } from '../../Utils/jalaliCalendar';
 import { gregorianToJalaliDateTimeDisplay } from '../../Utils/jalali';
-import { getColorNames, jalaliWeekIndex, parseWeekDays, recurrenceSummary, setColorName } from './calendarUtils';
+import { jalaliWeekIndex, parseWeekDays, recurrenceSummary } from './calendarUtils';
 import { normalizeForSearch } from '../../Utils/persianSearch';
 import EventAttachmentList, { EventAttachment, uploadEventAttachments } from './EventAttachments';
 import EventLinksFields, { EventLink } from './EventLinksFields';
@@ -33,6 +33,9 @@ interface EventFormModalProps {
     units?: { UnitID: number; UnitName: string; CanManageEvents: boolean | number }[];
     /** پچِ ۱۳۸ — وصل کردنِ طرف‌حساب/فردِ مرتبط (CRM_VIEW) */
     canLinkCrm?: boolean;
+    initialCustomColors: string[];
+    initialColorNames: Record<string, string>;
+    onPaletteSaved: (names: Record<string, string>) => void;
 }
 
 /** «تقویمِ شخصی» در فیلدِ تقویم (۰ = بدونِ واحد) */
@@ -41,26 +44,8 @@ const PERSONAL_CALENDAR = 0;
 const COLOR_PRESETS = ['#1677ff', '#722ed1', '#13a8a8', '#52c41a', '#fa8c16', '#eb2f96', '#f5222d', '#595959'];
 
 /** رنگ‌هایی که کاربر از «پالتِ رنگ» ساخته — به فهرستِ رنگ‌ها افزوده می‌شوند (در همین مرورگر؛ تازه‌ترین اول، حداکثر ۱۶) */
-const CUSTOM_COLORS_KEY = 'raga360.calendar.customColors';
 const MAX_CUSTOM_COLORS = 16;
 const HEX_COLOR = /^#[0-9a-f]{6}$/;
-
-function loadCustomColors(): string[] {
-    try {
-        const list = JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY) || '[]');
-        return Array.isArray(list) ? list.map((c) => String(c).toLowerCase()).filter((c) => HEX_COLOR.test(c)).slice(0, MAX_CUSTOM_COLORS) : [];
-    } catch {
-        return [];
-    }
-}
-
-function saveCustomColors(list: string[]): void {
-    try {
-        localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(list));
-    } catch {
-        /* بی‌اهمیت */
-    }
-}
 const NO_REMINDER = '__none__';
 
 const STATUS_OPTIONS = [
@@ -139,22 +124,30 @@ export default function EventFormModal({
     defaultDate,
     units = [],
     canLinkCrm = false,
+    initialCustomColors,
+    initialColorNames,
+    onPaletteSaved,
 }: EventFormModalProps) {
     const [links, setLinks] = useState<EventLink[]>([]);
     // پالتِ رنگ: رنگِ ساخته‌شده به فهرست افزوده می‌شود
-    const [customColors, setCustomColors] = useState<string[]>(loadCustomColors);
-    // تگِ رنگ‌ها (نام) — در فهرست قابلِ جست‌وجو و در جست‌وجویِ تقویم هم
-    const [colorNames, setColorNames] = useState<Record<string, string>>(getColorNames);
+    const [customColors, setCustomColors] = useState(initialCustomColors);
+    const [colorNames, setColorNames] = useState(initialColorNames);
+    const pendingPalette = useRef(Promise.resolve());
+    const savePalette = (colors: string[], names: Record<string, string>) => {
+        pendingPalette.current = pendingPalette.current.then(async () => {
+            const result = await api('/calendar/color-palette', 'PUT', { customColors: colors, colorNames: names });
+            if (!result.success) throw new Error(result.message);
+            onPaletteSaved(names);
+        }).catch(() => showNotification('error', 'ذخیرهٔ رنگ‌های شخصی انجام نشد.'));
+    };
     const addCustomColor = (hex: string) => {
         const c = hex.toLowerCase();
         if (!HEX_COLOR.test(c)) return;
         form.setFieldValue('Color', c);
         if (COLOR_PRESETS.includes(c)) return;
-        setCustomColors((prev) => {
-            const next = [c, ...prev.filter((x) => x !== c)].slice(0, MAX_CUSTOM_COLORS);
-            saveCustomColors(next);
-            return next;
-        });
+        const next = [c, ...customColors.filter((x) => x !== c)].slice(0, MAX_CUSTOM_COLORS);
+        setCustomColors(next);
+        savePalette(next, colorNames);
     };
     const canForOthers = permissions.includes('CALENDAR_CREATE_FOR_OTHERS');
     // ویرایشِ رویدادِ موجود بدونِ «برای دیگران»: مالک و شرکت‌کنندگانِ فعلی دست‌نخورده فرستاده شوند (حذفِ بی‌صدا نشوند)
@@ -163,6 +156,7 @@ export default function EventFormModal({
     const [form] = Form.useForm<FormValues>();
     const [saving, setSaving] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [loadedEventId, setLoadedEventId] = useState<typeof eventId>(null);
     // ضمیمه‌ها (پچِ ۱۱۷): فایل‌هایِ قبلیِ رویداد + فایل‌هایِ تازه که پس از ذخیره بارگذاری می‌شوند
     const [existingFiles, setExistingFiles] = useState<EventAttachment[]>([]);
     const [newFiles, setNewFiles] = useState<File[]>([]);
@@ -257,14 +251,22 @@ export default function EventFormModal({
             return;
         }
 
+        const abort = new AbortController();
+        setLoadedEventId(null);
         setLoadingDetail(true);
         fetch(`/calendar/events/${eventId}`, {
+            signal: abort.signal,
             headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
             credentials: 'same-origin',
         })
-            .then((r) => r.json())
+            .then((r) => {
+                if (!r.ok) throw new Error('Event detail unavailable');
+                return r.json();
+            })
             .then((data) => {
+                if (abort.signal.aborted) return;
                 const ev = data.event as CalendarEvent;
+                if (Number(ev?.CanManage) !== 1) throw new Error('Event cannot be edited');
                 const evLinks: EventLink[] = data.links || [];
                 setLinks(evLinks);
                 const linkIds = (t: EventLink['LinkType']) => evLinks.filter((l) => l.LinkType === t).map((l) => Number(l.EntityID));
@@ -302,6 +304,7 @@ export default function EventFormModal({
                     ),
                 });
                 setExistingFiles(data.attachments || []);
+                setLoadedEventId(eventId);
                 setNewFiles([]);
                 setOriginal({
                     owner: Number(ev.OwnerUserID) || currentUserId,
@@ -310,8 +313,9 @@ export default function EventFormModal({
                     unitName: null,
                 });
             })
-            .catch(() => showNotification('error', 'خطا در دریافت اطلاعات رویداد'))
-            .finally(() => setLoadingDetail(false));
+            .catch(() => { if (!abort.signal.aborted) showNotification('error', 'خطا در دریافت اطلاعات رویداد'); })
+            .finally(() => { if (!abort.signal.aborted) setLoadingDetail(false); });
+        return () => abort.abort();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, eventId, defaultDate]);
 
@@ -328,6 +332,7 @@ export default function EventFormModal({
     }
 
     const handleSubmit = async () => {
+        if (isEdit && loadedEventId !== eventId) return;
         try {
             const values = await form.validateFields();
             setSaving(true);
@@ -381,9 +386,18 @@ export default function EventFormModal({
             // ویرایش: تاریخ/ساعت، تمام‌روز، وضعیت و رنگ (+ موضوع و متن با مجوزش)؛ بقیه در سرور همان مقدارِ فعلی می‌ماند
             const content = { Title: (values.Title || '').trim(), Description: (values.Description || '').trim() || null };
             // پچِ ۱۳۸ — ارتباط‌ها (طرف‌حساب/فرد فقط با CRM_VIEW؛ سرور هم همین را کنترل می‌کند)
+            const changedLinks = (value: number[] | undefined, type: EventLink['LinkType']) => {
+                if (!isEdit) return value;
+                if (value === undefined) return undefined;
+                const previous = new Set(links.filter((link) => link.LinkType === type).map((link) => Number(link.EntityID)));
+                return previous.size === value.length && value.every((id) => previous.has(Number(id))) ? undefined : value;
+            };
             const linkPayload = {
-                LinkedProjectIDs: values.LinkedProjectIDs || [],
-                ...(canLinkCrm ? { LinkedPartyIDs: values.LinkedPartyIDs || [], LinkedPersonIDs: values.LinkedPersonIDs || [] } : {}),
+                LinkedProjectIDs: changedLinks(values.LinkedProjectIDs, 'PROJECT'),
+                ...(canLinkCrm ? {
+                    LinkedPartyIDs: changedLinks(values.LinkedPartyIDs, 'PARTY'),
+                    LinkedPersonIDs: changedLinks(values.LinkedPersonIDs, 'PERSON'),
+                } : {}),
             };
             const payload = isEdit
                 ? {
@@ -460,6 +474,7 @@ export default function EventFormModal({
                 onCancel={() => onClose(false)}
                 onOk={handleSubmit}
                 confirmLoading={saving}
+                okButtonProps={{ disabled: isEdit && (loadingDetail || loadedEventId !== eventId) }}
                 okText={eventId ? 'ذخیره تغییرات' : 'ایجاد رویداد'}
                 cancelText="انصراف"
                 width={640}
@@ -578,7 +593,16 @@ export default function EventFormModal({
                                             maxLength={30}
                                             placeholder="نامِ این رنگ (تگ) — مثلاً «جلسهٔ مشتری»"
                                             value={colorNames[String(colorValue).toLowerCase()] || ''}
-                                            onChange={(e) => setColorNames(setColorName(String(colorValue), e.target.value))}
+                                            onChange={(e) => setColorNames({ ...colorNames, [String(colorValue).toLowerCase()]: e.target.value })}
+                                            onBlur={(e) => {
+                                                const key = String(colorValue).toLowerCase();
+                                                const next = { ...colorNames };
+                                                const name = e.target.value.trim();
+                                                if (name) next[key] = name;
+                                                else delete next[key];
+                                                setColorNames(next);
+                                                savePalette(customColors, next);
+                                            }}
                                         />
                                     ) : null}
                                 </Form.Item>
@@ -659,8 +683,6 @@ export default function EventFormModal({
                             </Form.Item>
                         )}
 
-                        <EventLinksFields open={open} canLinkCrm={canLinkCrm} links={links} />
-
                         <Form.Item name="ReminderOffsetMinutes" label="یادآوری من">
                             <Select
                                 size="large"
@@ -738,6 +760,7 @@ export default function EventFormModal({
                         </Row>
                         </>
                         )}
+                        <EventLinksFields open={open} canLinkCrm={canLinkCrm} links={links} />
                     </Form>
                 </Spin>
             </Modal>

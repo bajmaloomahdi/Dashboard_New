@@ -286,6 +286,7 @@ export default function MessageTypesIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="messages.types"
                     columns={[]}
                     dataSource={messageTypes}
                     loading={searching}

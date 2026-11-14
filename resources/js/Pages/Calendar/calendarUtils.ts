@@ -112,41 +112,12 @@ export function activeFilterCount(f: CalendarFilterState): number {
  * «تگِ» رنگ‌ها: نامی که کاربر برایِ هر رنگ می‌گذارد (مثلاً #fa8c16 = «جلسهٔ مشتری») — در فهرستِ رنگ‌هایِ فرم قابلِ جست‌وجو
  * و در جست‌وجویِ تقویم هم رویدادهایِ همان رنگ را پیدا می‌کند. در همین مرورگر ذخیره می‌شود.
  */
-const COLOR_NAMES_KEY = 'raga360.calendar.colorNames';
-let colorNamesCache: Record<string, string> | null = null;
-
-export function getColorNames(): Record<string, string> {
-    if (colorNamesCache) return colorNamesCache;
-    try {
-        const raw = JSON.parse(localStorage.getItem(COLOR_NAMES_KEY) || '{}');
-        colorNamesCache = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    } catch {
-        colorNamesCache = {};
-    }
-    return colorNamesCache!;
-}
-
-/** نامِ یک رنگ را ثبت یا (با متنِ خالی) پاک می‌کند؛ خروجی: نقشهٔ تازه */
-export function setColorName(hex: string, name: string): Record<string, string> {
-    const key = hex.toLowerCase();
-    const next = { ...getColorNames() };
-    const clean = name.trim().slice(0, 30);
-    if (clean) next[key] = clean;
-    else delete next[key];
-    colorNamesCache = next;
-    try {
-        localStorage.setItem(COLOR_NAMES_KEY, JSON.stringify(next));
-    } catch {
-        /* بی‌اهمیت */
-    }
-    return next;
-}
-
-export function matchesSearch(ev: CalendarEvent, query: string): boolean {
+export function matchesSearch(ev: CalendarEvent, query: string, colorNames: Record<string, string> = {}): boolean {
     const q = normalizeForSearch(query.trim());
     if (!q) return true;
-    const colorName = getColorNames()[String(ev.Color || '').toLowerCase()];
-    const haystack = normalizeForSearch([ev.Title, ev.Description, ev.CreatorName, ev.OwnerName, colorName].filter(Boolean).join(' '));
+    const colorName = colorNames[String(ev.Color || '').toLowerCase()];
+    const attendeeNames = Number(ev.IsBusyOnly) === 1 ? [] : ev.AttendeeNames ?? [];
+    const haystack = normalizeForSearch([ev.Title, ev.Description, ev.CreatorName, ev.OwnerName, colorName, ...attendeeNames].filter(Boolean).join(' '));
     return q.split(' ').filter(Boolean).every((token) => haystack.includes(token));
 }
 

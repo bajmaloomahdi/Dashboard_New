@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useRef, useState } from 'react';
-import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Typography, Table } from 'antd';
+import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -351,7 +352,7 @@ export default function CrmPersonsIndex() {
                             <Button size="small" icon={<ReloadOutlined />} onClick={() => { colF.clear(); setPage((pg) => ({ ...pg, current: 1 })); }}>پاک‌کردنِ فیلترهایِ جدول</Button>
                         ) : null}
                     </Space>
-                    <Table
+                    <PreferenceTable gridKey="crm.persons.list"
                         rowKey="PersonID"
                         columns={columns}
                         dataSource={colF.filtered}

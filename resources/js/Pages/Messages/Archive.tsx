@@ -410,6 +410,7 @@ export default function MessageArchive() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="messages.archive"
                     columns={[]}
                     dataSource={messages}
                     loading={searching}

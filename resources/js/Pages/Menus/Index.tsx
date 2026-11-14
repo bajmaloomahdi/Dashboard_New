@@ -418,6 +418,7 @@ export default function MenusIndex() {
             {/* جدول با DataGrid یکپارچه */}
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.menus.list"
                     columns={[]}
                     dataSource={filteredMenus}
                     customColumns={customColumns}

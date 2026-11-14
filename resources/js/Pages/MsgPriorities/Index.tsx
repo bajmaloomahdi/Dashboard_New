@@ -310,6 +310,7 @@ export default function MsgPrioritiesIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="messages.priorities"
                     columns={[]}
                     dataSource={filteredPriorities}
                     customColumns={customColumns}

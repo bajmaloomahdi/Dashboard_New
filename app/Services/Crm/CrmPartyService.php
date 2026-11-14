@@ -55,8 +55,9 @@ class CrmPartyService
         ?bool $isActive = null,
         ?int $departmentId = null,
         ?string $partyNature = null,
+        ?bool $cooperationEnded = null,
     ): array {
-        return $this->store->getParties($search, $isActive, $departmentId, $partyNature);
+        return $this->store->getParties($search, $isActive, $departmentId, $partyNature, $cooperationEnded);
     }
 
     public function getParty(int $partyId): ?object

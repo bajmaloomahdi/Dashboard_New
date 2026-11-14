@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Table, Typography, Popconfirm, Empty } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Typography, Popconfirm, Empty } from 'antd';
 import {
     ApartmentOutlined,
     EditOutlined,
@@ -289,7 +290,7 @@ export default function ProcessDefinitionShow() {
                 {data.versions.length === 0 ? (
                     <Empty description="هنوز نسخه‌ای ساخته نشده است" />
                 ) : (
-                    <Table rowKey="VersionID" dataSource={data.versions} columns={versionColumns} pagination={false} size="middle" scroll={{ x: 'max-content' }} />
+                    <PreferenceTable gridKey="workflow.definition-versions" rowKey="VersionID" dataSource={data.versions} columns={versionColumns} pagination={false} size="middle" scroll={{ x: 'max-content' }} />
                 )}
             </Card>
 

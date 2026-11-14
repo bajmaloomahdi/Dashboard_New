@@ -65,7 +65,7 @@ class CalendarController extends Controller
         $targetUser = collect($users)->firstWhere('UserID', $targetUserId);
 
         return Inertia::render('Calendar/Index', [
-            'initialEvents'   => $events,
+            'initialEvents'   => $this->withAttendeeNames($events),
             'initialFrom'     => $from->toDateString(),
             'initialTo'       => $to->toDateString(),
             'users'           => $users,
@@ -77,9 +77,34 @@ class CalendarController extends Controller
             'isReadOnly'      => $isOther,
             'viewableUsers'   => $canViewOthers ? $users : [],
             'currentUserId'   => $selfId,
+            'colorPalette'    => json_decode(DB::selectOne(
+                'EXEC dbo.sp_UserCalendarColorPreferences_Get @UserID = ?', [$selfId]
+            )->Palette ?? '{}'),
             // پچِ ۱۳۸ — وصل کردنِ طرف‌حساب/فردِ مرتبط به رویداد فقط با CRM_VIEW
             'canLinkCrm'      => $this->userCan('CRM_VIEW'),
         ]);
+    }
+
+    public function saveColorPalette(Request $request)
+    {
+        $this->authorizeCalendar('CALENDAR_VIEW');
+        $validated = $request->validate([
+            'customColors' => ['present', 'array', 'max:16'],
+            'customColors.*' => ['required', 'string', 'distinct', 'regex:/^#[0-9a-f]{6}$/D'],
+            'colorNames' => ['present', 'array', 'max:64'],
+            'colorNames.*' => ['required', 'string', 'max:30'],
+        ]);
+        foreach (array_keys($validated['colorNames']) as $color) {
+            abort_unless(preg_match('/^#[0-9a-f]{6}$/D', (string) $color), 422);
+        }
+        $palette = json_encode([
+            'customColors' => array_values($validated['customColors']),
+            'colorNames' => (object) $validated['colorNames'],
+        ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        abort_if(strlen(mb_convert_encoding($palette, 'UTF-16LE', 'UTF-8')) > 8000, 422);
+        DB::statement('EXEC dbo.sp_UserCalendarColorPreferences_Save @UserID = ?, @Palette = ?', [Auth::id(), $palette]);
+
+        return response()->json(['success' => true]);
     }
 
     /**
@@ -108,7 +133,7 @@ class CalendarController extends Controller
         $events = $this->fetchOccurrences($targetUserId, $from, $to);
 
         return response()->json([
-            'events' => $this->forViewer($events, $access),
+            'events' => $this->withAttendeeNames($this->forViewer($events, $access)),
             'access' => $access,
         ]);
     }
@@ -139,7 +164,7 @@ class CalendarController extends Controller
             return response()->json(['message' => 'دسترسی مجاز نیست.'], 403);
         }
 
-        return response()->json(['events' => $this->expandRows($rows, $from, $to)]);
+        return response()->json(['events' => $this->withAttendeeNames($this->expandRows($rows, $from, $to))]);
     }
 
     /** منابعِ تقویم برایِ پنلِ «تقویم‌ها»: اشتراک‌گذاشته‌شده با من + واحدهایِ من (عضویتِ مستقیم) */
@@ -286,7 +311,9 @@ class CalendarController extends Controller
     /** پچِ ۱۳۸ — ثبتِ ارتباط‌ها اگر در درخواست آمده؛ طرف‌حساب/فرد فقط با CRM_VIEW (وگرنه همان قبلی) */
     private function saveEventLinks(int $eventId, Request $request): void
     {
-        $csv = fn (string $key) => $request->exists($key) ? implode(',', array_map('intval', (array) $request->input($key, []))) : null;
+        $csv = fn (string $key) => is_array($request->input($key))
+            ? implode(',', array_map('intval', $request->input($key)))
+            : null;
         $crm = $this->userCan('CRM_VIEW');
         $projects = $csv('LinkedProjectIDs');
         $parties = $crm ? $csv('LinkedPartyIDs') : null;
@@ -354,7 +381,25 @@ class CalendarController extends Controller
         $rows = DB::select('EXEC dbo.sp_Calendar_GetProjectEvents @ProjectID = ?, @FromDate = ?, @ToDate = ?, @ViewerID = ?',
             [$id, $from->toDateTimeString(), $to->toDateTimeString(), Auth::id()]);
 
-        return response()->json(['events' => $this->expandRows($rows, $from, $to)]);
+        $events = $this->expandRows($rows, $from, $to);
+        $eventIds = collect($events)->pluck('EventID')->map(fn ($eventId) => (int) $eventId)->unique();
+        $commentCounts = null;
+        if ($this->userCan('CALENDAR_COMMENT_VIEW')) {
+            $commentCounts = [];
+            $commentEventIds = collect($events)->reject(fn ($event) => data_get($event, 'IsBusyOnly'))
+                ->pluck('EventID')->map(fn ($eventId) => (int) $eventId)->unique();
+            foreach ($commentEventIds as $eventId) {
+                if ($this->canViewEventDetails($eventId)) {
+                    $commentCounts[$eventId] = count(DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$eventId]));
+                }
+            }
+        }
+
+        return response()->json([
+            'events' => $this->withAttendeeNames($events),
+            'eventCount' => $eventIds->count(),
+            'commentCounts' => $commentCounts,
+        ]);
     }
 
     // ================= اطلاعِ فعالیتِ رویداد (پچِ ۱۳۰) =================
@@ -1342,6 +1387,23 @@ class CalendarController extends Controller
     // ================= داخلی =================
 
     /** بسط تکرارها و واکشی رویدادهای بازه */
+    private function withAttendeeNames(array $events): array
+    {
+        $namesByEvent = [];
+        foreach ($events as $event) {
+            $id = (int) ($event->EventID ?? 0);
+            if ($id <= 0 || (int) ($event->IsBusyOnly ?? 0) === 1) {
+                continue;
+            }
+            $namesByEvent[$id] ??= collect(DB::select('EXEC dbo.sp_GetCalendarEventAttendees @EventID = ?', [$id]))
+                ->reject(fn ($attendee) => $attendee->RelationType === 'ORGANIZER')
+                ->pluck('FullName')->filter()->unique()->values()->all();
+            $event->AttendeeNames = $namesByEvent[$id];
+        }
+
+        return $events;
+    }
+
     private function fetchOccurrences(int $userId, Carbon $from, Carbon $to): array
     {
         $rows = DB::select(

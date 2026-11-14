@@ -356,6 +356,7 @@ export default function PositionsIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey="admin.positions.list"
                     columns={[]}
                     dataSource={positions}
                     loading={searching}

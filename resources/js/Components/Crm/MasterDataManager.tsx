@@ -1,9 +1,10 @@
+import PreferenceTable from '../PreferenceTable';
 import { useEffect, useState } from 'react';
-import { Table, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from './crmApi';
-import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, filterHeaderCss } from './tableFilters';
+import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, filterHeaderCss, normalizeForFilter } from './tableFilters';
 import CrmDeleteButton, { type CrmDeleteEntity } from './CrmDeleteButton';
 import NotificationModal, { NotificationType } from '../NotificationModal';
 import { toBool } from '../../Utils/bool';
@@ -160,7 +161,36 @@ export default function MasterDataManager({
         ...(numberField ? { number: { get: (r: MasterDataRow) => r[numberField.dataIndex], mode: 'text' as const } } : {}),
         status: { get: (r) => (toBool(r.IsActive) ? '1' : '0'), mode: 'exact' },
     });
-    const displayedItems = colF.filtered;
+    const isGeography = apiBase.startsWith('/crm/geography/');
+    const [selections, setSelections] = useState<Record<string, string[]>>({});
+    const categoryValue = (value: unknown) => String(value ?? '');
+    const category = (key: string, label: string, field: string, fixedOptions?: { label: string; value: string }[]) => (
+        <Select<string[]> mode="multiple" size="small" allowClear showSearch placeholder="همه"
+            aria-label={label} style={{ width: '100%' }} maxTagCount={1} popupMatchSelectWidth={false}
+            value={selections[key] ?? []}
+            onChange={(value) => setSelections((current) => ({ ...current, [key]: value }))}
+            options={fixedOptions ?? [...new Set(items.map((row) => categoryValue(row[field])))]
+                .sort((a, b) => a.localeCompare(b, 'fa', { numeric: true }))
+                .map((value) => ({ value, label: value || '—' }))}
+            filterOption={(input, option) => normalizeForFilter(option?.label).includes(normalizeForFilter(input))}
+        />
+    );
+    const fields: Record<string, string | undefined> = {
+        grand: grandCol?.dataIndex, parent: parentCol?.dataIndex, name: 'DisplayName', number: numberField?.dataIndex,
+    };
+    const displayedItems = !isGeography ? colF.filtered : colF.filtered.filter((row) =>
+        Object.entries(selections).every(([key, selected]) => {
+            if (!selected.length) return true;
+            const field = fields[key];
+            const value = key === 'status' ? (toBool(row.IsActive) ? '1' : '0') : categoryValue(field ? row[field] : null);
+            return selected.includes(value);
+        }),
+    );
+    const hasFilters = colF.hasAny || Object.values(selections).some((values) => values.length);
+    const clearFilters = () => {
+        colF.clear();
+        setSelections({});
+    };
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -260,14 +290,14 @@ export default function MasterDataManager({
         { title: 'ردیف', key: 'row', width: 64, align: 'center', render: (_, __, i) => i + 1 },
         ...(grandCol
             ? [{
-                  title: <FilterHeader label={grandCol.title}><TextFilterInput value={colF.values.grand} onChange={(v) => colF.setValue('grand', v)} /></FilterHeader>,
+                  title: <FilterHeader label={grandCol.title}>{isGeography ? category('grand', grandCol.title, grandCol.dataIndex) : <TextFilterInput value={colF.values.grand} onChange={(v) => colF.setValue('grand', v)} />}</FilterHeader>,
                   dataIndex: grandCol.dataIndex,
                   key: grandCol.dataIndex,
               }]
             : []),
         ...(parentCol
             ? [{
-                  title: <FilterHeader label={parentCol.title}><TextFilterInput value={colF.values.parent} onChange={(v) => colF.setValue('parent', v)} /></FilterHeader>,
+                  title: <FilterHeader label={parentCol.title}>{isGeography ? category('parent', parentCol.title, parentCol.dataIndex) : <TextFilterInput value={colF.values.parent} onChange={(v) => colF.setValue('parent', v)} />}</FilterHeader>,
                   dataIndex: parentCol.dataIndex,
                   key: parentCol.dataIndex,
               }]
@@ -280,13 +310,13 @@ export default function MasterDataManager({
             render: (v: string) => <Text code dir="ltr" style={{ whiteSpace: 'nowrap' }}>{v}</Text>,
         },
         {
-            title: <FilterHeader label={`نامِ ${entityLabel}`}><TextFilterInput value={colF.values.name} onChange={(v) => colF.setValue('name', v)} /></FilterHeader>,
+            title: <FilterHeader label={`نامِ ${entityLabel}`}>{isGeography ? category('name', entityLabel, 'DisplayName') : <TextFilterInput value={colF.values.name} onChange={(v) => colF.setValue('name', v)} />}</FilterHeader>,
             dataIndex: 'DisplayName',
             key: 'DisplayName',
         },
         ...(numberField
             ? [{
-                  title: <FilterHeader label={numberField.title}><TextFilterInput value={colF.values.number} onChange={(v) => colF.setValue('number', v)} /></FilterHeader>,
+                  title: <FilterHeader label={numberField.title}>{isGeography ? category('number', numberField.title, numberField.dataIndex) : <TextFilterInput value={colF.values.number} onChange={(v) => colF.setValue('number', v)} />}</FilterHeader>,
                   dataIndex: numberField.dataIndex,
                   key: numberField.dataIndex,
                   align: 'left' as const,
@@ -296,7 +326,7 @@ export default function MasterDataManager({
         {
             title: (
                 <FilterHeader label="وضعیت">
-                    <SelectFilterInput value={colF.values.status} onChange={(v) => colF.setValue('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
+                    {isGeography ? category('status', 'وضعیت', 'IsActive', [{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]) : <SelectFilterInput value={colF.values.status} onChange={(v) => colF.setValue('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />}
                 </FilterHeader>
             ),
             key: 'status',
@@ -358,10 +388,10 @@ export default function MasterDataManager({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                 <Space size={8} wrap>
                     <Text type="secondary">
-                        {colF.hasAny ? `${displayedItems.length} از ${items.length} ردیف` : `${items.length} ردیف`}
+                        {hasFilters ? `${displayedItems.length} از ${items.length} ردیف` : `${items.length} ردیف`}
                     </Text>
-                    {colF.hasAny ? (
-                        <Button size="small" icon={<ReloadOutlined />} onClick={colF.clear}>پاک‌کردنِ فیلترها</Button>
+                    {hasFilters ? (
+                        <Button size="small" icon={<ReloadOutlined />} onClick={clearFilters}>پاک‌کردنِ فیلترها</Button>
                     ) : null}
                 </Space>
                 {canManage ? (
@@ -434,13 +464,13 @@ export default function MasterDataManager({
                 </Space>
             ) : null}
 
-            <Table
+            <PreferenceTable gridKey={apiBase.slice(1).replaceAll('/', '.')}
                 rowKey={idField}
                 columns={columns}
                 dataSource={displayedItems}
                 pagination={false}
                 scroll={{ x: true }}
-                locale={{ emptyText: <Empty description={colF.hasAny ? 'ردیفی با این فیلترها یافت نشد' : `${entityLabel}ی ثبت نشده است`} /> }}
+                locale={{ emptyText: <Empty description={hasFilters ? 'ردیفی با این فیلترها یافت نشد' : `${entityLabel}ی ثبت نشده است`} /> }}
             />
 
             <NotificationModal key={notificationKey} open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />

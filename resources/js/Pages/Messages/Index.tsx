@@ -443,6 +443,7 @@ export default function MessagesIndex() {
 
             <Card style={STYLES.card}>
                 <DataGrid
+                    gridKey={activeMode === 'sent' ? 'messages.sent' : 'messages.inbox'}
                     columns={[]}
                     dataSource={messages}
                     loading={searching}

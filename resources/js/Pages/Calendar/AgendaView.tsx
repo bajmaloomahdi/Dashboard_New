@@ -176,6 +176,9 @@ export default function AgendaView({
                                             <span style={{ textDecoration: ev.Status === 'CANCELLED' ? 'line-through' : 'none', color: ev.Status === 'CANCELLED' ? '#6B7280' : undefined }}>{ev.Title}</span>
                                         </div>
                                         <div className="cal-agenda-meta">
+                                            {Number(ev.IsBusyOnly) !== 1 && !!ev.AttendeeNames?.length && (
+                                                <span><UserOutlined /> کاربران مرتبط: {ev.AttendeeNames.join('، ')}</span>
+                                            )}
                                             {ev.SourceLabel && <span style={{ color: ev.Color }}>● {ev.SourceLabel}</span>}
                                             {Number(ev.IsPrivate) === 1 && <span><LockOutlined /> خصوصی</span>}
                                             {isRecurring(ev) && <span><SyncOutlined /> تکرارشونده</span>}

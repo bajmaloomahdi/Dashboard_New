@@ -1,5 +1,6 @@
+import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Table, Button, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty, Input, Divider } from 'antd';
+import { Button, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty, Input, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled, UserAddOutlined, PhoneOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
@@ -243,7 +244,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
             render: (_, r) => (
                 <Space size={4}>
                     {toBool(r.IsPrimaryContact) ? <StarFilled style={{ color: '#F59E0B', fontSize: 12 }} /> : null}
-                    <Text>{r.PersonName}</Text>
+                    <a href={`/crm/persons/${r.PersonID}?tab=interactions`}>{r.PersonName}</a>
                 </Space>
             ),
         },
@@ -441,7 +442,7 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                 </Space>
             ) : null}
 
-            <Table rowKey="RelationID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="فرد مرتبطی ثبت نشده است" /> }} />
+            <PreferenceTable gridKey="crm.parties.relations" rowKey="RelationID" columns={columns} dataSource={items} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description="فرد مرتبطی ثبت نشده است" /> }} />
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
         </div>

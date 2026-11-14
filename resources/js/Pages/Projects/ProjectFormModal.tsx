@@ -11,8 +11,14 @@ import {
 import { useForm } from '@inertiajs/react';
 import PersianDateInput from '../../Components/PersianDateInput';
 import { getUserOptionLabel } from '../../Utils/userHelpers';
+import { toBool } from '../../Utils/bool';
+import { useCrmSearch } from '../Calendar/EventLinksFields';
 
 interface Project {
+    DepartmentID?: number | string | null;
+    DepartmentName?: string | null;
+    ParentProjectID?: number | string | null;
+    HasParentProject?: boolean | number | string;
     ProjectID: number;
     ProjectCode: string;
     ProjectTitle: string;
@@ -45,12 +51,16 @@ interface PriorityOption {
 }
 
 interface ProjectFormModalProps {
+    departmentOptions?: { DepartmentID: number | string; DisplayName: string }[];
+    returnToDetails?: boolean;
+    parentOptions: { id: number | string; title: string; parentId: number | string | null }[];
     open: boolean;
     onClose: () => void;
     editingProject: Project | null;
     users: Option[];
     statuses: StatusOption[];
     priorities: PriorityOption[];
+    canLinkCrm?: boolean;
 }
 
 export default function ProjectFormModal({
@@ -60,14 +70,23 @@ export default function ProjectFormModal({
     users,
     statuses,
     priorities,
+    parentOptions,
+    returnToDetails = false,
+    departmentOptions = [],
+    canLinkCrm = false,
 }: ProjectFormModalProps) {
     const [form] = Form.useForm();
     const isEdit = !!editingProject;
+    const partySearch = useCrmSearch('/crm/parties-list', 'PartyID', open && !isEdit && canLinkCrm);
 
     const [codeError, setCodeError] = useState<string>('');
+    const [currentMembers, setCurrentMembers] = useState<Option[]>([]);
+    const [team, setTeam] = useState<{ responsible: number | null; members: number[]; canManage: boolean } | null>(null);
 
-    const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, put, transform, processing, errors, reset, clearErrors } = useForm({
         ProjectCode: '',
+        ParentProjectID: null as string | null,
+        DepartmentID: null as number | null,
         ProjectTitle: '',
         Description: '',
         ProjectStatusID: 1, // «ثبت‌شده» — وضعیت پیش‌فرضِ پروژه‌ی جدید
@@ -79,6 +98,8 @@ export default function ProjectFormModal({
         IsActive: true,
         ResponsibleUserID: null as number | null,
         MemberUserIDs: [] as number[],
+        OwnerPartyID: null as number | null,
+        ContractorPartyIDs: [] as number[],
     });
 
     useEffect(() => {
@@ -86,6 +107,8 @@ export default function ProjectFormModal({
             if (editingProject) {
                 const d = {
                     ProjectCode: editingProject.ProjectCode || '',
+                    ParentProjectID: editingProject.ParentProjectID == null ? null : String(editingProject.ParentProjectID),
+                    DepartmentID: editingProject.DepartmentID == null ? null : Number(editingProject.DepartmentID),
                     ProjectTitle: editingProject.ProjectTitle || '',
                     Description: editingProject.Description || '',
                     ProjectStatusID: editingProject.ProjectStatusID ?? 1,
@@ -94,17 +117,14 @@ export default function ProjectFormModal({
                     StartDate: editingProject.StartDate || null,
                     PlannedEndDate: editingProject.PlannedEndDate || null,
                     ActualEndDate: editingProject.ActualEndDate || null,
-                    IsActive: editingProject.IsActive ? true : false,
+                    IsActive: toBool(editingProject.IsActive),
                     ResponsibleUserID: null,
                     MemberUserIDs: [],
+                    OwnerPartyID: null,
+                    ContractorPartyIDs: [],
                 };
                 setData(d);
-                form.setFieldsValue({
-                    ProjectTitle: d.ProjectTitle,
-                    Description: d.Description,
-                    ProgressPercent: d.ProgressPercent,
-                    IsActive: d.IsActive,
-                });
+                form.setFieldsValue(d);
             } else {
                 reset();
                 form.resetFields();
@@ -118,6 +138,28 @@ export default function ProjectFormModal({
         }
     }, [open, editingProject]);
 
+    useEffect(() => {
+        setTeam(null);
+        if (!open || !editingProject) return;
+        const abort = new AbortController();
+        fetch(`/projects/${editingProject.ProjectID}/members`, {
+            signal: abort.signal, headers: { Accept: 'application/json' },
+        }).then((res) => {
+            if (!res.ok) throw new Error('Could not load project members');
+            return res.json();
+        }).then(({ members, canManage }) => {
+            if (abort.signal.aborted) return;
+            const active = (members as (Option & { IsActive: boolean | number; IsResponsible: boolean | number })[])
+                .filter((member) => toBool(member.IsActive));
+            const responsible = active.find((member) => toBool(member.IsResponsible))?.UserID ?? null;
+            const ids = active.filter((member) => Number(member.UserID) !== Number(responsible)).map((member) => Number(member.UserID));
+            setCurrentMembers(active);
+            setTeam({ responsible: responsible == null ? null : Number(responsible), members: ids, canManage: canManage === true });
+            setData((current) => ({ ...current, ResponsibleUserID: responsible == null ? null : Number(responsible), MemberUserIDs: ids }));
+        }).catch(() => { /* Scalar edits can be saved without replacing team data. */ });
+        return () => abort.abort();
+    }, [open, editingProject]);
+
     const handleSubmit = () => {
         form.validateFields().then(() => {
             if (!isEdit && !data.ResponsibleUserID) {
@@ -125,6 +167,17 @@ export default function ProjectFormModal({
                 return;
             }
             const options = { preserveScroll: true, onSuccess: () => onClose() };
+            transform((values) => {
+                if (!isEdit) return values;
+                const { ResponsibleUserID, MemberUserIDs, OwnerPartyID, ContractorPartyIDs, ParentProjectID, DepartmentID, ...fields } = values;
+                const parentChanged = ParentProjectID !== (editingProject?.ParentProjectID == null ? null : String(editingProject.ParentProjectID));
+                const departmentChanged = DepartmentID !== (editingProject?.DepartmentID == null ? null : Number(editingProject.DepartmentID));
+                const projectFields = { ...fields, ...(parentChanged ? { ParentProjectID } : {}), ...(departmentChanged ? { DepartmentID } : {}), returnToDetails };
+                const members = MemberUserIDs.filter((id) => id !== ResponsibleUserID);
+                const changed = team?.canManage && (ResponsibleUserID !== team.responsible
+                    || members.length !== team.members.length || members.some((id) => !team.members.includes(id)));
+                return changed ? { ...projectFields, ResponsibleUserID, MemberUserIDs: members } : projectFields;
+            });
             if (isEdit) {
                 put(`/projects/${editingProject!.ProjectID}`, options);
             } else {
@@ -142,7 +195,10 @@ export default function ProjectFormModal({
     };
 
     // گزینه‌های اعضا = همه کاربران به جز مسئول انتخاب‌شده
-    const memberOptions = (users || []).filter(
+    const userOptions = Array.from(new Map(
+        [...(isEdit ? currentMembers : []), ...(users || [])].map((user) => [Number(user.UserID), { ...user, UserID: Number(user.UserID) }]),
+    ).values());
+    const memberOptions = userOptions.filter(
         (u) => u.UserID !== data.ResponsibleUserID
     );
 
@@ -217,6 +273,21 @@ export default function ProjectFormModal({
                     </Col>
 
                     <Col span={24}>
+                        <Form.Item label="پروژهٔ والد" validateStatus={errors.ParentProjectID ? 'error' : undefined}
+                            help={errors.ParentProjectID ?? (toBool(editingProject?.HasParentProject) && editingProject?.ParentProjectID == null ? 'والد فعلی در فهرست پروژه‌های قابل دسترس شما نیست.' : undefined)}>
+                            <Select aria-label="پروژهٔ والد" allowClear showSearch optionFilterProp="label"
+                                placeholder="بدون والد" value={data.ParentProjectID ?? undefined}
+                                onChange={(value) => setData('ParentProjectID', value ?? null)}
+                                options={parentOptions.filter(({ id }) => String(id) !== String(editingProject?.ProjectID))
+                                    .map(({ id, title }) => ({ value: String(id), label: title }))} />
+                        </Form.Item>
+                        <Form.Item label="دپارتمان" validateStatus={errors.DepartmentID ? 'error' : undefined} help={errors.DepartmentID}>
+                            <Select aria-label="دپارتمان" allowClear showSearch optionFilterProp="label"
+                                placeholder="بدون دپارتمان" value={data.DepartmentID ?? undefined}
+                                onChange={(value) => setData('DepartmentID', value ?? null)}
+                                options={departmentOptions.map((department) => ({ value: Number(department.DepartmentID), label: department.DisplayName }))}>
+                            </Select>
+                        </Form.Item>
                         <Form.Item label="توضیحات" name="Description">
                             <Input.TextArea
                                 placeholder="توضیحات اختیاری..."
@@ -315,7 +386,9 @@ export default function ProjectFormModal({
                     </Col>
 
                     <Col xs={24} md={8}>
-                        <Form.Item label="تاریخ پایان پیش‌بینی" name="PlannedEndDate">
+                        <Form.Item label="تاریخ پایان پیش‌بینی" name="PlannedEndDate"
+                            validateStatus={errors.PlannedEndDate ? 'error' : undefined}
+                            help={errors.PlannedEndDate || (!isEdit ? 'با انتخاب تاریخ، رویداد موعد پایان ساعت ۱۳ ثبت می‌شود.' : undefined)}>
                             <PersianDateInput
                                 value={data.PlannedEndDate}
                                 onChange={(v) => setData('PlannedEndDate', v)}
@@ -334,8 +407,7 @@ export default function ProjectFormModal({
                         </Form.Item>
                     </Col>
 
-                    {/* فقط در حالت ایجاد: انتخاب مسئول و اعضا */}
-                    {!isEdit && (
+                    {(!isEdit || team?.canManage) && (
                         <>
                             <Col xs={24} md={12}>
                                 <Form.Item
@@ -345,16 +417,23 @@ export default function ProjectFormModal({
                                         </span>
                                     }
                                     required
-                                    validateStatus={codeError ? 'error' : ''}
-                                    help={codeError || 'مسئول می‌تواند بعداً اعضا را مدیریت کند'}
+                                    validateStatus={codeError || errors.ResponsibleUserID ? 'error' : ''}
+                                    help={errors.ResponsibleUserID || codeError || 'مسئول می‌تواند بعداً اعضا را مدیریت کند'}
                                 >
                                     <Select
                                         placeholder="انتخاب مسئول"
                                         showSearch
                                         optionFilterProp="label"
-                                        options={(users || []).map((u) => ({ value: u.UserID, label: getUserOptionLabel(u) }))}
+                                        options={userOptions.map((u) => ({ value: u.UserID, label: getUserOptionLabel(u) }))}
                                         value={data.ResponsibleUserID}
-                                        onChange={(v) => setData('ResponsibleUserID', v)}
+                                        onChange={(v) => setData((current) => ({
+                                            ...current,
+                                            ResponsibleUserID: v,
+                                            MemberUserIDs: [...new Set([
+                                                ...current.MemberUserIDs,
+                                                ...(isEdit && current.ResponsibleUserID != null ? [current.ResponsibleUserID] : []),
+                                            ])].filter((id) => id !== v),
+                                        }))}
                                         size="large"
                                         disabled={processing}
                                     />
@@ -363,6 +442,8 @@ export default function ProjectFormModal({
 
                             <Col xs={24} md={12}>
                                 <Form.Item
+                                    validateStatus={errors.MemberUserIDs ? 'error' : ''}
+                                    help={errors.MemberUserIDs}
                                     label={
                                         <span>
                                             <TeamOutlined /> اعضای پروژه
@@ -385,6 +466,26 @@ export default function ProjectFormModal({
                         </>
                     )}
                 </Row>
+                {!isEdit && canLinkCrm && (
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="مالک پروژه" help={errors.OwnerPartyID} validateStatus={errors.OwnerPartyID ? 'error' : undefined}>
+                                <Select aria-label="مالک پروژه" allowClear showSearch filterOption={false}
+                                    placeholder="جست‌وجوی طرف‌حساب" options={partySearch.options} loading={partySearch.loading}
+                                    value={data.OwnerPartyID ?? undefined} onSearch={partySearch.search} onFocus={() => partySearch.search('')}
+                                    onChange={(value) => setData('OwnerPartyID', value ?? null)} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                            <Form.Item label="پیمانکاران" help={errors.ContractorPartyIDs} validateStatus={errors.ContractorPartyIDs ? 'error' : undefined}>
+                                <Select aria-label="پیمانکاران" mode="multiple" allowClear showSearch filterOption={false}
+                                    placeholder="جست‌وجوی پیمانکاران" options={partySearch.options} loading={partySearch.loading}
+                                    value={data.ContractorPartyIDs} onSearch={partySearch.search} onFocus={() => partySearch.search('')}
+                                    onChange={(value) => setData('ContractorPartyIDs', value)} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                )}
             </Form>
         </Modal>
     );

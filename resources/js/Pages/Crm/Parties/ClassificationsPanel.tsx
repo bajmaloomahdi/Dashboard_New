@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Button, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Divider } from 'antd';
+import { Button, Select, Space, Tag, Typography, Alert, Empty, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
@@ -150,9 +151,9 @@ export default function ClassificationsPanel({ partyId, items: initialItems, dep
             return (
                 <Space>
                     <Button type="text" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)} />
-                    <Popconfirm title={active ? 'غیرفعال‌کردن' : 'فعال‌کردن'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
+                    <Confirmation title={active ? 'غیرفعال‌کردن' : 'فعال‌کردن'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                         <Button type="text" size="small" danger={active} loading={togglingId === r.ClassificationID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                    </Popconfirm>
+                    </Confirmation>
                     {canDelete ? <CrmDeleteButton entity="classification" id={r.ClassificationID} label="دسته‌بندی" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                 </Space>
             );

@@ -15,6 +15,20 @@ notification.config({ duration: NOTIFY_DURATION_SECONDS });
 // این‌طوری با VITE_APP_NAME (که ممکنه هنوز "Laravel" پیش‌فرض باشه) قاطی نمی‌شه.
 const appName = document.title || 'داشبورد مدیریت';
 
+const appTheme = {
+    token: {
+        colorPrimary: THEME?.primary || '#667eea',
+        fontFamily: 'Vazirmatn, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+        borderRadius: 8,
+    },
+};
+
+ConfigProvider.config({
+    holderRender: (children) => (
+        <ConfigProvider locale={faIR} direction="rtl" theme={appTheme}>{children}</ConfigProvider>
+    ),
+});
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => {

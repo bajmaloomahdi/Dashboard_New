@@ -1,14 +1,15 @@
+import RecordHistoryPanel from '../../../Components/Crm/RecordHistoryPanel';
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Tag, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined, ProjectOutlined } from '@ant-design/icons';
+import { UserOutlined, BankOutlined, EditOutlined, TagOutlined, EnvironmentOutlined, PhoneOutlined, TeamOutlined, ApartmentOutlined, CommentOutlined, PaperClipOutlined, ProjectOutlined, IdcardOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
-import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import PartyFormModal, { Party, PartyRoleRow, PartyPositionRow } from './PartyFormModal';
 import BrandCategoriesPanel, { BrandCategoryRow } from './BrandCategoriesPanel';
 import AddressesPanel from './AddressesPanel';
@@ -83,7 +84,7 @@ export default function CrmPartyShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'classifications');
+    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
 
     const isActive = toBool(currentParty.IsActive);
 
@@ -92,6 +93,8 @@ export default function CrmPartyShow() {
     );
 
     const tabDefs = [
+        { key: 'profile' as const, label: 'پروفایل', icon: <IdcardOutlined /> },
+        { key: 'history' as const, label: 'تاریخچه' },
         { key: 'classifications' as const, label: 'دسته‌بندی‌ها', icon: <ApartmentOutlined />, count: (classifications || []).length },
         { key: 'relations' as const, label: 'افراد مرتبط', icon: <TeamOutlined />, count: (relations || []).length },
         { key: 'interactions' as const, label: 'تعاملات', icon: <CommentOutlined />, count: (interactions || []).length },
@@ -105,9 +108,7 @@ export default function CrmPartyShow() {
     const handleEditSuccess = (message: string) => {
         setEditOpen(false);
         setNotification({ open: true, type: 'success', message });
-        // بازخوانیِ Propِ 'party' از همان اکشنِ show — بدونِ نیازِ به جست‌وجویِ
-        // شکننده بر اساسِ شناسه (که اگر خودِ شناسه ویرایش شده بود پیدا نمی‌کرد).
-        router.reload({ only: ['party', 'partyRoles', 'partyPositions'] });
+        router.reload();
     };
 
     const renderTags = (rows: { DisplayName: string; IsActive: boolean | number | string }[]) =>
@@ -162,68 +163,73 @@ export default function CrmPartyShow() {
                 }
             />
 
-            <Card style={{ marginBottom: 16, ...STYLES.card }}>
-                <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
-                    <Descriptions.Item label={isLegal ? 'شناسهٔ ملی' : 'کدِ ملی'}>
-                        {currentParty.IdentifierNumber ? <Text dir="ltr">{currentParty.IdentifierNumber}</Text> : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="تاریخِ ایجاد">
-                        {currentParty.Date_InsertFirst ? gregorianToJalaliDisplay(currentParty.Date_InsertFirst) : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={dateLabel}>
-                        {currentParty.IdentifierDate ? gregorianToJalaliDisplay(currentParty.IdentifierDate) : '—'}
-                    </Descriptions.Item>
-                    {isLegal ? (
-                        <>
-                            <Descriptions.Item label="نامِ تجاری">{currentParty.TradeName || '—'}</Descriptions.Item>
-                            <Descriptions.Item label="شمارهٔ ثبت"><Text dir="ltr">{currentParty.RegistrationNumber || '—'}</Text></Descriptions.Item>
-                            <Descriptions.Item label="کدِ اقتصادی"><Text dir="ltr">{currentParty.EconomicCode || '—'}</Text></Descriptions.Item>
-                        </>
-                    ) : (
-                        // حقیقی: شناسه ۱ و ۲ (متنی، پچِ ۱۲۴)
-                        <>
-                            <Descriptions.Item label="شناسه ۱">{currentParty.Identifier1 || '—'}</Descriptions.Item>
-                            <Descriptions.Item label="شناسه ۲">{currentParty.Identifier2 || '—'}</Descriptions.Item>
-                        </>
-                    )}
-                    <Descriptions.Item label="کاربر">
-                        <CrmLinkedUserAction
-                            entity="parties"
-                            id={currentParty.PartyID}
-                            userId={currentParty.LinkedUserID}
-                            userName={currentParty.LinkedUserName}
-                            canManage={canManage}
-                            onSaved={(message, ok) => {
-                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
-                                if (ok) router.reload({ only: ['party'] });
-                            }}
-                        />
-                    </Descriptions.Item>
-                    <Descriptions.Item label="قطعِ همکاری">
-                        <CooperationEndedAction
-                            entity="parties"
-                            id={currentParty.PartyID}
-                            at={currentParty.CooperationEndedAt}
-                            canManage={canManage}
-                            onSaved={(message, ok) => {
-                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
-                                if (ok) router.reload({ only: ['party'] });
-                            }}
-                        />
-                    </Descriptions.Item>
-                    <Descriptions.Item label="نقش‌ها" span={3}>{renderTags(partyRoles || [])}</Descriptions.Item>
-                    <Descriptions.Item label="سمت‌ها" span={3}>{renderTags(partyPositions || [])}</Descriptions.Item>
-                    <Descriptions.Item label="توضیحات" span={3}>{currentParty.Description || '—'}</Descriptions.Item>
-                    <Descriptions.Item label="ایجادکننده">
-                        {currentParty.CreatedByName || '—'} — {currentParty.Date_InsertFirst ? gregorianToJalaliDisplay(currentParty.Date_InsertFirst) : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="آخرین ویرایش">
-                        {currentParty.Date_LastUpdate ? `${currentParty.ModifiedByName || '—'} — ${gregorianToJalaliDisplay(currentParty.Date_LastUpdate)}` : '—'}
-                    </Descriptions.Item>
-                </Descriptions>
-            </Card>
-
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
+
+            {activeTab === 'history' && (
+                <Card style={STYLES.card}>
+                    <RecordHistoryPanel key={currentParty.PartyID} entityType="party" entityId={currentParty.PartyID} />
+                </Card>
+            )}
+
+            {activeTab === 'profile' && (
+                <Card style={STYLES.card}>
+                    <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
+                        <Descriptions.Item label={isLegal ? 'شناسهٔ ملی' : 'کدِ ملی'}>
+                            {currentParty.IdentifierNumber ? <Text dir="ltr">{currentParty.IdentifierNumber}</Text> : '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label={dateLabel}>
+                            {currentParty.IdentifierDate ? gregorianToJalaliDisplay(currentParty.IdentifierDate) : '—'}
+                        </Descriptions.Item>
+                        {isLegal ? (
+                            <>
+                                <Descriptions.Item label="نامِ تجاری">{currentParty.TradeName || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="شمارهٔ ثبت"><Text dir="ltr">{currentParty.RegistrationNumber || '—'}</Text></Descriptions.Item>
+                                <Descriptions.Item label="کدِ اقتصادی"><Text dir="ltr">{currentParty.EconomicCode || '—'}</Text></Descriptions.Item>
+                            </>
+                        ) : (
+                            // حقیقی: شناسه ۱ و ۲ (متنی، پچِ ۱۲۴)
+                            <>
+                                <Descriptions.Item label="شناسه ۱">{currentParty.Identifier1 || '—'}</Descriptions.Item>
+                                <Descriptions.Item label="شناسه ۲">{currentParty.Identifier2 || '—'}</Descriptions.Item>
+                            </>
+                        )}
+                        <Descriptions.Item label="کاربر">
+                            <CrmLinkedUserAction
+                                entity="parties"
+                                id={currentParty.PartyID}
+                                userId={currentParty.LinkedUserID}
+                                userName={currentParty.LinkedUserName}
+                                canManage={canManage}
+                                onSaved={(message, ok) => {
+                                    setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                    if (ok) router.reload({ only: ['party'] });
+                                }}
+                            />
+                        </Descriptions.Item>
+                        <Descriptions.Item label="قطعِ همکاری">
+                            <CooperationEndedAction
+                                entity="parties"
+                                id={currentParty.PartyID}
+                                at={currentParty.CooperationEndedAt}
+                                canManage={canManage}
+                                onSaved={(message, ok) => {
+                                    setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                    if (ok) router.reload({ only: ['party'] });
+                                }}
+                            />
+                        </Descriptions.Item>
+                        <Descriptions.Item label="نقش‌ها" span={3}>{renderTags(partyRoles || [])}</Descriptions.Item>
+                        <Descriptions.Item label="سمت‌ها" span={3}>{renderTags(partyPositions || [])}</Descriptions.Item>
+                        <Descriptions.Item label="توضیحات" span={3}>{currentParty.Description || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="ایجادکننده">
+                            {currentParty.CreatedByName || '—'} — <bdi dir="ltr">{gregorianToJalaliDateTimeDisplay(currentParty.Date_InsertFirst) || '—'}</bdi>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="آخرین ویرایش">
+                            {currentParty.Date_LastUpdate ? `${currentParty.ModifiedByName || '—'} — ${gregorianToJalaliDisplay(currentParty.Date_LastUpdate)}` : '—'}
+                        </Descriptions.Item>
+                    </Descriptions>
+                </Card>
+            )}
 
             {activeTab === 'classifications' && (
                 <Card style={STYLES.card}>

@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Popconfirm, Modal, Input, Empty, Grid } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Modal, Input, Empty, Grid } from 'antd';
 import {
     ApartmentOutlined,
     UserOutlined,
@@ -309,9 +310,9 @@ export default function ProcessInstanceShow() {
                                 </Button>
                             )}
                             {canResume && (
-                                <Popconfirm title="ازسرگیریِ فرایند" description="فرایند دوباره در جریان قرار می‌گیرد. ادامه می‌دهید؟" onConfirm={() => runLifecycle('resume', false)} okText="بله" cancelText="انصراف">
+                                <Confirmation title="ازسرگیریِ فرایند" description="فرایند دوباره در جریان قرار می‌گیرد. ادامه می‌دهید؟" onConfirm={() => runLifecycle('resume', false)} okText="بله" cancelText="انصراف">
                                     <Button icon={<PlayCircleOutlined />} loading={busy === 'resume'}>ازسرگیری</Button>
-                                </Popconfirm>
+                                </Confirmation>
                             )}
                             {canCancel && (
                                 <Button danger icon={<StopOutlined />} loading={busy === 'cancel'} onClick={() => setLifecycleModal('cancel')}>
@@ -447,6 +448,7 @@ export default function ProcessInstanceShow() {
             {/* Modalِ Cancel/Suspend (با دلیلِ اختیاری) */}
             <Modal
                 open={lifecycleModal !== null}
+                centered
                 title={lifecycleModal === 'cancel' ? 'لغوِ فرایند' : 'تعلیقِ فرایند'}
                 onCancel={() => (busy ? undefined : setLifecycleModal(null))}
                 onOk={() => lifecycleModal && runLifecycle(lifecycleModal, true)}

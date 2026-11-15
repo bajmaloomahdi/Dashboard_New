@@ -28,7 +28,7 @@ import DataGrid from '../../Components/DataGrid';
 import DueDateBadge from '../../Components/DueDateBadge';
 import PriorityTag, { getPriorityPalette } from '../../Components/PriorityTag';
 import { THEME, STYLES } from '../../theme';
-import { MessageChangeTag, messageRowClass, messageAttention, MESSAGE_ROW_CSS } from '../../Components/MessageReadBadges';
+import { MessageContentIndicators, MessageChangeTag, messageRowClass, messageAttention, MESSAGE_ROW_CSS } from '../../Components/MessageReadBadges';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -37,7 +37,6 @@ interface Message {
     MessageID: number;
     MessageNumber: string | null;
     Subject: string;
-    MessageText: string | null;
     MessageTypeID: number;
     MessageTypeName: string;
     msgPriorityID: number | null;
@@ -53,6 +52,8 @@ interface Message {
     IsRead: boolean | number;
     /** تغییرِ خوانده‌نشده (توضیح/ضمیمهٔ تازه، ارجاع، تغییرِ وضعیت، رونوشت) */
     HasUnread?: boolean | number;
+    HasDescription?: boolean | number;
+    HasAttachment?: boolean | number;
 }
 
 interface FilterItem {
@@ -162,6 +163,13 @@ export default function MessageArchive() {
 
     const customColumns: ColumnsType<Message> = [
         {
+            title: 'مشاهده',
+            key: 'read-status',
+            width: 140,
+            align: 'center',
+            render: (_, record) => <MessageChangeTag record={record} />,
+        },
+        {
             title: 'شماره',
             dataIndex: 'MessageNumber',
             key: 'MessageNumber',
@@ -230,7 +238,6 @@ export default function MessageArchive() {
                                 <Text strong style={{ fontWeight: messageAttention(record) ? 700 : 400 }}>
                                     {record.Subject}
                                 </Text>
-                                <MessageChangeTag record={record} />
                                 {record.IsCopy === 1 || record.IsCopy === true ? (
                                     <Tag icon={<CopyOutlined />} color="cyan" style={{ borderRadius: 6, marginInlineEnd: 0 }}>
                                         رونوشت
@@ -238,17 +245,17 @@ export default function MessageArchive() {
                                 ) : null}
 
                             </Space>
-                            {record.MessageText && (
-                                <Text type="secondary" style={{ fontSize: 11 }}>
-                                    {record.MessageText.length > 70
-                                        ? record.MessageText.substring(0, 70) + '...'
-                                        : record.MessageText}
-                                </Text>
-                            )}
                         </div>
                     </div>
                 );
             },
+        },
+        {
+            title: 'توضیحات و ضمیمه',
+            key: 'content-indicators',
+            align: 'center',
+            width: 145,
+            render: (_, record) => <MessageContentIndicators record={record} />,
         },
         {
             title: 'فرستنده',

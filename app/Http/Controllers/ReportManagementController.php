@@ -14,6 +14,7 @@ class ReportManagementController extends Controller
      */
     public function index(Request $request)
     {
+        PivotReportSource::manage();
         $searchText = $request->input('search');
         $isActive = $request->input('is_active');
 
@@ -35,6 +36,7 @@ class ReportManagementController extends Controller
         return Inertia::render('ReportsManage/Index', [
             'reports' => $reports,
             'availableMenus' => $menus,
+            'pivotMasters' => DB::select('EXEC dbo.sp_GetMasterParameters @SearchText = NULL, @IsActive = 1'),
             'filters' => [
                 'search' => $searchText,
                 'is_active' => $isActive,
@@ -47,11 +49,12 @@ class ReportManagementController extends Controller
      */
     public function store(Request $request)
     {
+        PivotReportSource::manage();
         $validated = $request->validate([
             'MenuID' => 'required|integer',
             'ReportCode' => 'required|string|max:50',
             'ReportTitle' => 'required|string|max:200',
-            'ProcedureName' => 'required|string|max:200',
+            'ProcedureName' => 'required_unless:ReportType,PIVOT,CHART|nullable|string|max:200',
             'CommandTimeout' => 'nullable|integer|min:30|max:600',
             'AllowExcel' => 'boolean',
             'AllowPdf' => 'boolean',
@@ -60,6 +63,7 @@ class ReportManagementController extends Controller
             'Description' => 'nullable|string|max:500',
         ]);
 
+        $definition = PivotReportSource::definition($request);
         $result = DB::select(
             'EXEC sp_InsertReport 
                 @MenuID = ?, 
@@ -72,12 +76,12 @@ class ReportManagementController extends Controller
                 @AllowPrint = ?, 
                 @CacheDuration = ?, 
                 @Description = ?, 
-                @CreateUser = ?',
+                @CreateUser = ?, @ReportType = ?, @ViewSchema = ?, @ViewName = ?, @PivotConfig = ?',
             [
                 $validated['MenuID'],
                 $validated['ReportCode'],
                 $validated['ReportTitle'],
-                $validated['ProcedureName'],
+                $validated['ProcedureName'] ?? '',
                 $validated['CommandTimeout'] ?? 120,
                 $validated['AllowExcel'] ?? true,
                 $validated['AllowPdf'] ?? false,
@@ -85,6 +89,7 @@ class ReportManagementController extends Controller
                 $validated['CacheDuration'] ?? 0,
                 $validated['Description'] ?? null,
                 Auth::id(),
+                ...$definition,
             ]
         );
 
@@ -105,11 +110,12 @@ class ReportManagementController extends Controller
      */
     public function update(Request $request, int $id)
     {
+        PivotReportSource::manage();
         $validated = $request->validate([
             'MenuID' => 'required|integer',
             'ReportCode' => 'required|string|max:50',
             'ReportTitle' => 'required|string|max:200',
-            'ProcedureName' => 'required|string|max:200',
+            'ProcedureName' => 'required_unless:ReportType,PIVOT,CHART|nullable|string|max:200',
             'CommandTimeout' => 'nullable|integer|min:30|max:600',
             'AllowExcel' => 'boolean',
             'AllowPdf' => 'boolean',
@@ -118,6 +124,7 @@ class ReportManagementController extends Controller
             'Description' => 'nullable|string|max:500',
         ]);
 
+        $definition = PivotReportSource::definition($request);
         $result = DB::select(
             'EXEC sp_UpdateReport 
                 @ReportID = ?, 
@@ -131,13 +138,13 @@ class ReportManagementController extends Controller
                 @AllowPrint = ?, 
                 @CacheDuration = ?, 
                 @Description = ?, 
-                @ModifyUser = ?',
+                @ModifyUser = ?, @ReportType = ?, @ViewSchema = ?, @ViewName = ?, @PivotConfig = ?',
             [
                 $id,
                 $validated['MenuID'],
                 $validated['ReportCode'],
                 $validated['ReportTitle'],
-                $validated['ProcedureName'],
+                $validated['ProcedureName'] ?? '',
                 $validated['CommandTimeout'] ?? 120,
                 $validated['AllowExcel'] ?? true,
                 $validated['AllowPdf'] ?? false,
@@ -145,6 +152,7 @@ class ReportManagementController extends Controller
                 $validated['CacheDuration'] ?? 0,
                 $validated['Description'] ?? null,
                 Auth::id(),
+                ...$definition,
             ]
         );
 
@@ -165,6 +173,7 @@ class ReportManagementController extends Controller
      */
     public function toggleActive(int $id)
     {
+        PivotReportSource::manage();
         $result = DB::select(
             'EXEC sp_ToggleReportActive @ReportID = ?, @ModifyUser = ?',
             [$id, Auth::id()]
@@ -185,6 +194,7 @@ class ReportManagementController extends Controller
      */
     public function parameters(int $id)
     {
+        PivotReportSource::manage();
         $reports = DB::select(
             'EXEC sp_GetReports @SearchText = NULL, @IsActive = NULL, @MenuID = NULL'
         );
@@ -212,6 +222,7 @@ class ReportManagementController extends Controller
      */
     public function saveParameters(Request $request, int $id)
     {
+        PivotReportSource::manage();
         $validated = $request->validate([
             'master_ids' => 'nullable|array',
             'master_ids.*' => 'integer',
@@ -241,6 +252,7 @@ class ReportManagementController extends Controller
      */
     public function updateParameterSettings(Request $request, int $id, int $paramId)
     {
+        PivotReportSource::manage();
         $validated = $request->validate([
             'IsRequired' => 'boolean',
             'IsVisible' => 'boolean',

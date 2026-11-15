@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useState } from 'react';
-import { Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Row, Col } from 'antd';
+import { Button, Input, Select, Space, Tag, Typography, Alert, Empty, Row, Col } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
@@ -262,9 +263,9 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
                 return (
                     <Space>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ آدرس' : 'فعال‌کردنِ آدرس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ آدرس' : 'فعال‌کردنِ آدرس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.AddressID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="address" id={r.AddressID} label="آدرس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );

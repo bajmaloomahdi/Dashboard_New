@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useRef, useState } from 'react';
-import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Typography } from 'antd';
+import { Card, Button, Input, Row, Col, Select, Tag, Space, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -180,7 +181,7 @@ export default function CrmPersonsIndex() {
                         <Tooltip title="ویرایش">
                             <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(p, e)} />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={active ? 'غیرفعال‌کردنِ فرد مرتبط' : 'فعال‌کردنِ فرد مرتبط'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggle(p)}
@@ -193,7 +194,7 @@ export default function CrmPersonsIndex() {
                                 loading={togglingId === p.PersonID}
                                 style={{ color: active ? THEME.error : THEME.success }}
                             />
-                        </Popconfirm>
+                        </Confirmation>
                     </>
                 )}
                 {canDelete && (

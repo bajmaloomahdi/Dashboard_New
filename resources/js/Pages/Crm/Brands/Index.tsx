@@ -1,5 +1,6 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { useEffect, useRef, useState } from 'react';
-import { Card, Button, Input, Row, Col, Select, Popconfirm, Tooltip, Typography } from 'antd';
+import { Card, Button, Input, Row, Col, Select, Tooltip, Typography } from 'antd';
 import {
     PlusOutlined,
     SearchOutlined,
@@ -246,7 +247,7 @@ export default function CrmBrandsIndex() {
                                             <Tooltip title="ویرایش">
                                                 <Button type="text" size="small" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(b, e)} />
                                             </Tooltip>
-                                            <Popconfirm
+                                            <Confirmation
                                                 title={active ? 'غیرفعال‌کردنِ برند' : 'فعال‌کردنِ برند'}
                                                 description="آیا مطمئن هستید؟"
                                                 onConfirm={() => handleToggle(b)}
@@ -262,7 +263,7 @@ export default function CrmBrandsIndex() {
                                                         style={{ color: active ? THEME.error : THEME.success }}
                                                     />
                                                 </Tooltip>
-                                            </Popconfirm>
+                                            </Confirmation>
                                             </>
                                             )}
                                             {canDelete && (

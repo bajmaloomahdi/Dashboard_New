@@ -53,6 +53,19 @@ class ReportController extends Controller
                 ->with('error', 'خطا در بارگذاری گزارش: ' . $e->getMessage());
         }
 
+        if (in_array($reportInfo['ReportType'] ?? 'NORMAL', ['PIVOT','CHART'], true)) {
+            [$labels, $measures, $pivotParameters] = PivotReportSource::context((object) $reportInfo);
+            foreach ($pivotParameters as &$parameter) {
+                if (!empty($parameter['master'])) $parameter['options'] = PivotReportSource::lookup($parameter);
+            }
+            unset($parameter);
+            return Inertia::render($reportInfo['ReportType'] === 'CHART' ? 'SalesReport/Chart' : 'SalesReport/Index', [
+                'fields' => array_keys($labels), 'fieldLabels' => $labels, 'measureFields' => array_keys($measures),
+                'userId' => (string) $userId, 'reportCode' => $code, 'title' => $reportInfo['ReportTitle'],
+                'allowExcel' => (bool) $reportInfo['AllowExcel'], 'parameters' => $pivotParameters,
+            ]);
+        }
+        abort_unless(($reportInfo['ReportType'] ?? 'NORMAL') === 'NORMAL', 404);
         return Inertia::render('Reports/Show', [
             'report' => $reportInfo,
             'parameters' => $parameters,
@@ -80,6 +93,15 @@ class ReportController extends Controller
         }
 
         $report = (array) $reports[0];
+        if (in_array($report['ReportType'] ?? 'NORMAL', ['PIVOT','CHART'], true)) {
+            [$labels, $measures, $parameters] = PivotReportSource::context($reports[0]);
+            $query = PivotReportSource::query($reports[0], $parameters, $request);
+            if ($report['ReportType'] === 'CHART') {
+                return ChartReport::execute($request, $query, array_keys($labels), array_keys($measures));
+            }
+            return app(SalesReportController::class)->pivot($request, $query, array_keys($labels), $measures);
+        }
+        abort_unless(($report['ReportType'] ?? 'NORMAL') === 'NORMAL', 404);
         $procedureName = $report['ProcedureName'];
         $commandTimeout = $report['CommandTimeout'] ?? 120;
 
@@ -139,6 +161,15 @@ class ReportController extends Controller
      * نام Stored Procedure هرگز از Request خوانده نمی‌شود؛ فقط از metadata همان
      * ReportParameter (خروجی sp_GetReportInfo) استخراج و پس از اعتبارسنجی اجرا می‌شود.
      */
+    public function pivotOptions(Request $request, string $code)
+    {
+        $report = DB::selectOne('EXEC dbo.sp_GetReportInfo @ReportCode = ?, @UserID = ?', [$code, Auth::id()]);
+        abort_unless($report, 403);
+        [$labels, , $parameters] = PivotReportSource::context($report);
+        $query = PivotReportSource::query($report, $parameters, $request);
+        return app(SalesReportController::class)->options($request, $query, array_keys($labels));
+    }
+
     public function lookup(Request $request)
     {
         $validated = $request->validate([

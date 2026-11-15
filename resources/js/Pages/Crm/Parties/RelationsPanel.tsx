@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Button, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty, Input, Divider } from 'antd';
+import { Button, Select, Checkbox, Space, Tag, Typography, Alert, Empty, Input, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled, UserAddOutlined, PhoneOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from '../../../Components/Crm/crmApi';
@@ -287,9 +288,9 @@ export default function RelationsPanel({ partyId, items: initialItems, positions
                 return (
                     <Space>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ رابطه' : 'فعال‌کردنِ رابطه'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ رابطه' : 'فعال‌کردنِ رابطه'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.RelationID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="relation" id={r.RelationID} label="فرد مرتبط" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );

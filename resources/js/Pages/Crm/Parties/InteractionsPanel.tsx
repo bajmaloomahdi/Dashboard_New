@@ -1,8 +1,9 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { compareGridValues } from '../../../Utils/gridSorting';
 import { newestFirst } from '../../../Utils/newestFirst';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Button, Input, Select, Space, Tag, Popconfirm, Typography, Alert, Empty, Checkbox, TimePicker, Tooltip, Upload } from 'antd';
+import { Button, Input, Select, Space, Tag, Typography, Alert, Empty, Checkbox, TimePicker, Tooltip, Upload } from 'antd';
 import {
     PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, CheckOutlined,
     RedoOutlined, PhoneOutlined, TeamOutlined, FileTextOutlined, ClockCircleOutlined, PaperClipOutlined, DeleteOutlined, UndoOutlined,
@@ -500,21 +501,21 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                     <Space size={0}>
                         {planned ? (
                             <>
-                                <Popconfirm title="انجام شد؟" onConfirm={() => changeStatus(r, 'DONE')} okText="بله" cancelText="خیر">
+                                <Confirmation title="انجام شد؟" onConfirm={() => changeStatus(r, 'DONE')} okText="بله" cancelText="خیر">
                                     <Tooltip title="انجام شد"><Button type="text" size="small" style={{ color: '#16a34a' }} loading={busyId === r.InteractionID} icon={<CheckOutlined />} /></Tooltip>
-                                </Popconfirm>
-                                <Popconfirm title="لغو شود؟" onConfirm={() => changeStatus(r, 'CANCELED')} okText="بله" cancelText="خیر">
+                                </Confirmation>
+                                <Confirmation title="لغو شود؟" onConfirm={() => changeStatus(r, 'CANCELED')} okText="بله" cancelText="خیر">
                                     <Tooltip title="لغو"><Button type="text" size="small" danger icon={<CloseOutlined />} /></Tooltip>
-                                </Popconfirm>
+                                </Confirmation>
                             </>
                         ) : null}
                         {r.InteractionType !== 'NOTE' ? (
                             <Tooltip title="پیگیریِ جدید"><Button type="text" size="small" icon={<RedoOutlined />} onClick={() => openFollowUpOf(r)} /></Tooltip>
                         ) : null}
                         <Tooltip title="ویرایش"><Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /></Tooltip>
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ تعامل' : 'فعال‌کردنِ تعامل'} onConfirm={() => toggleActive(r)} okText="بله" cancelText="خیر">
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ تعامل' : 'فعال‌کردنِ تعامل'} onConfirm={() => toggleActive(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="interaction" id={r.InteractionID} label="تعامل" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null}
                     </Space>
                 );

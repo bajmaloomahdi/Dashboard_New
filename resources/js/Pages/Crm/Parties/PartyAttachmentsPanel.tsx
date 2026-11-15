@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { newestFirst } from '../../../Utils/newestFirst';
 import { useRef, useState } from 'react';
-import { Button, Space, Typography, Empty, Popconfirm, Spin, Input, Tooltip } from 'antd';
+import { Button, Space, Typography, Empty, Spin, Input, Tooltip } from 'antd';
 import {
     PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined, CloseOutlined, PaperClipOutlined, DownloadOutlined,
     FileOutlined, FilePdfOutlined, FileWordOutlined, FileExcelOutlined, FilePptOutlined, FileZipOutlined, FileImageOutlined, FileTextOutlined,
@@ -238,9 +239,9 @@ export default function PartyAttachmentsPanel({ partyId, items: initialItems, ca
                                             <Tooltip title="ویرایشِ توضیحات">
                                                 <Button type="primary" size="small" shape="circle" icon={<EditOutlined />} onClick={() => startEdit(f)} />
                                             </Tooltip>
-                                            <Popconfirm title="این فایل حذف شود؟" onConfirm={() => handleDelete(f.PartyAttachmentID)} okText="بله" cancelText="خیر">
+                                            <Confirmation title="این فایل حذف شود؟" onConfirm={() => handleDelete(f.PartyAttachmentID)} okText="بله" cancelText="خیر">
                                                 <Button danger type="primary" size="small" shape="circle" loading={busyId === f.PartyAttachmentID} icon={<DeleteOutlined />} />
-                                            </Popconfirm>
+                                            </Confirmation>
                                         </>
                                     ) : null}
                                 </Space>

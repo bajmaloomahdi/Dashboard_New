@@ -32,8 +32,9 @@ import {
     UserAddOutlined,
     PictureOutlined,
     PlayCircleOutlined,
+    ProjectOutlined,
 } from '@ant-design/icons';
-import { router, usePage, useForm } from '@inertiajs/react';
+import { Link, router, usePage, useForm } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import PageHeader from '../../Components/PageHeader';
 import ChipTabs from '../../Components/ChipTabs';
@@ -69,6 +70,8 @@ interface MessageHeader {
     SenderName: string;
     CreateDate: string;
     DueDate: string | null;
+    ProjectID?: number | string | null;
+    ProjectTitle?: string | null;
 }
 
 interface MessageDetail {
@@ -404,6 +407,11 @@ export default function MessageShow() {
                 stats={[
                     { icon: <UserOutlined />, label: 'فرستنده', value: msg.SenderName },
                     { icon: <ClockCircleOutlined />, label: 'تاریخ ارسال', value: new Date(msg.CreateDate).toLocaleString('fa-IR') },
+                    ...(isTask && msg.ProjectID && msg.ProjectTitle ? [{
+                        icon: <ProjectOutlined />,
+                        label: 'پروژه',
+                        value: <Link href={`/projects/${msg.ProjectID}`} style={{ color: 'inherit', textDecoration: 'underline' }}>{msg.ProjectTitle}</Link>,
+                    }] : []),
                     ...(isTask && msg.DueDate
                         ? [{
                             icon: <ClockCircleOutlined />,

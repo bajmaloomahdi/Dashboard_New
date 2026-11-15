@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Button, Input, Row, Col, Select, Tag, Popconfirm, Space, Tooltip, Typography, Empty } from 'antd';
+import { Card, Button, Input, Row, Col, Select, Tag, Space, Tooltip, Typography, Empty } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -158,7 +159,7 @@ export default function CrmProductCategoriesIndex() {
                         <Tooltip title="ویرایش / تغییرِ والد">
                             <Button type="text" size="small" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => openEdit(r)} />
                         </Tooltip>
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ دسته‌بندی' : 'فعال‌کردنِ دسته‌بندی'} description="آیا مطمئن هستید؟" onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ دسته‌بندی' : 'فعال‌کردنِ دسته‌بندی'} description="آیا مطمئن هستید؟" onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button
                                 type="text"
                                 size="small"
@@ -166,7 +167,7 @@ export default function CrmProductCategoriesIndex() {
                                 icon={active ? <StopOutlined /> : <CheckCircleOutlined />}
                                 style={{ color: active ? THEME.error : THEME.success }}
                             />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="product-category" id={r.ProductCategoryID} label="گروهِ کالایی" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) reload(); }} /> : null}
                     </Space>
                 );

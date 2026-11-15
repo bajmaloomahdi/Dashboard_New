@@ -1,5 +1,6 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { useRef, useState } from 'react';
-import { Button, Image, Space, Typography, Empty, Popconfirm, Spin, Input, Tooltip } from 'antd';
+import { Button, Image, Space, Typography, Empty, Spin, Input, Tooltip } from 'antd';
 import { PlusOutlined, DeleteOutlined, PictureOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
@@ -215,7 +216,7 @@ export default function PartyImagesPanel({ partyId, items: initialItems, canMana
                                             <Tooltip title="ویرایشِ توضیحات">
                                                 <Button type="primary" size="small" shape="circle" icon={<EditOutlined />} onClick={() => startEdit(img)} />
                                             </Tooltip>
-                                            <Popconfirm title="این تصویر حذف شود؟" onConfirm={() => handleDelete(img.PartyImageID)} okText="بله" cancelText="خیر">
+                                            <Confirmation title="این تصویر حذف شود؟" onConfirm={() => handleDelete(img.PartyImageID)} okText="بله" cancelText="خیر">
                                                 <Button
                                                     danger
                                                     type="primary"
@@ -224,7 +225,7 @@ export default function PartyImagesPanel({ partyId, items: initialItems, canMana
                                                     loading={busyId === img.PartyImageID}
                                                     icon={<DeleteOutlined />}
                                                 />
-                                            </Popconfirm>
+                                            </Confirmation>
                                         </Space>
                                     ) : null}
                                 </div>

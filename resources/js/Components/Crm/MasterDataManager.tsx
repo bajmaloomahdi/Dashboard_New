@@ -1,6 +1,7 @@
+import { Confirmation } from '../Confirmation';
 import PreferenceTable from '../PreferenceTable';
-import { useEffect, useState } from 'react';
-import { Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, Input, InputNumber, Select, Space, Tag, Typography, Alert, Empty } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { crmApi } from './crmApi';
@@ -86,6 +87,7 @@ interface MasterDataManagerProps {
     grandParentSelect?: GrandParentSelectConfig;
     namePlaceholder?: string;
     numberField?: NumberFieldConfig;
+    onFilteredPopulationChange?: (total: number) => void;
 }
 
 interface RowDraft {
@@ -118,6 +120,7 @@ export default function MasterDataManager({
     grandParentSelect,
     namePlaceholder,
     numberField,
+    onFilteredPopulationChange,
 }: MasterDataManagerProps) {
     const [items, setItems] = useState<MasterDataRow[]>(initialItems || []);
     const [formOpen, setFormOpen] = useState(false);
@@ -162,16 +165,27 @@ export default function MasterDataManager({
         status: { get: (r) => (toBool(r.IsActive) ? '1' : '0'), mode: 'exact' },
     });
     const isGeography = apiBase.startsWith('/crm/geography/');
+    const isCityGrid = apiBase === '/crm/geography/cities';
     const [selections, setSelections] = useState<Record<string, string[]>>({});
     const categoryValue = (value: unknown) => String(value ?? '');
+    const categoryOptions = useMemo(() => {
+        if (!isGeography) return {};
+        const result: Record<string, { label: string; value: string }[]> = {};
+        const collator = new Intl.Collator('fa', { numeric: true });
+        for (const field of [grandCol?.dataIndex, parentCol?.dataIndex, 'DisplayName', numberField?.dataIndex]) {
+            if (!field || result[field]) continue;
+            result[field] = [...new Set(items.map(row => categoryValue(row[field])))]
+                .sort(collator.compare)
+                .map(value => ({ value, label: value || '—' }));
+        }
+        return result;
+    }, [items, isGeography, grandCol?.dataIndex, parentCol?.dataIndex, numberField?.dataIndex]);
     const category = (key: string, label: string, field: string, fixedOptions?: { label: string; value: string }[]) => (
         <Select<string[]> mode="multiple" size="small" allowClear showSearch placeholder="همه"
-            aria-label={label} style={{ width: '100%' }} maxTagCount={1} popupMatchSelectWidth={false}
+            aria-label={label} style={{ width: '100%' }} maxTagCount={1} popupMatchSelectWidth={isCityGrid ? 240 : false}
             value={selections[key] ?? []}
             onChange={(value) => setSelections((current) => ({ ...current, [key]: value }))}
-            options={fixedOptions ?? [...new Set(items.map((row) => categoryValue(row[field])))]
-                .sort((a, b) => a.localeCompare(b, 'fa', { numeric: true }))
-                .map((value) => ({ value, label: value || '—' }))}
+            options={fixedOptions ?? categoryOptions[field] ?? []}
             filterOption={(input, option) => normalizeForFilter(option?.label).includes(normalizeForFilter(input))}
         />
     );
@@ -186,6 +200,16 @@ export default function MasterDataManager({
             return selected.includes(value);
         }),
     );
+    const filteredPopulation = onFilteredPopulationChange
+        ? displayedItems.reduce((total, row) => {
+            const population = Number(row.Population);
+            return total + (Number.isFinite(population) ? population : 0);
+        }, 0)
+        : 0;
+    useEffect(() => {
+        onFilteredPopulationChange?.(filteredPopulation);
+    }, [filteredPopulation, onFilteredPopulationChange]);
+
     const hasFilters = colF.hasAny || Object.values(selections).some((values) => values.length);
     const clearFilters = () => {
         colF.clear();
@@ -355,7 +379,7 @@ export default function MasterDataManager({
                     <Space>
                         {canManage ? <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /> : null}
                         {canManage ? (
-                        <Popconfirm
+                        <Confirmation
                             title={active ? `غیرفعال‌کردنِ ${entityLabel}` : `فعال‌کردنِ ${entityLabel}`}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggle(r)}
@@ -363,7 +387,7 @@ export default function MasterDataManager({
                             cancelText="خیر"
                         >
                             <Button type="text" size="small" danger={active} loading={togglingId === id} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                         ) : null}
                         {showDelete ? (
                             <CrmDeleteButton
@@ -468,7 +492,9 @@ export default function MasterDataManager({
                 rowKey={idField}
                 columns={columns}
                 dataSource={displayedItems}
-                pagination={false}
+                pagination={isCityGrid
+                    ? { defaultPageSize: 50, showSizeChanger: true, pageSizeOptions: [25, 50, 100] }
+                    : false}
                 scroll={{ x: true }}
                 locale={{ emptyText: <Empty description={hasFilters ? 'ردیفی با این فیلترها یافت نشد' : `${entityLabel}ی ثبت نشده است`} /> }}
             />

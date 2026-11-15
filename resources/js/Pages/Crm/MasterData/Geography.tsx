@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Card } from 'antd';
-import { EnvironmentOutlined, GlobalOutlined, BankOutlined, CompassOutlined, HomeOutlined } from '@ant-design/icons';
+import { EnvironmentOutlined, GlobalOutlined, BankOutlined, CompassOutlined, HomeOutlined, TeamOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
@@ -27,6 +27,8 @@ type TabKey = 'provinces' | 'counties' | 'cities' | 'neighborhoods' | 'municipal
 export default function CrmGeographyPage() {
     const { provinces, counties, cities, neighborhoods, municipalZones, canManage, canDelete = false } = usePage().props as unknown as PageProps;
     const [activeTab, setActiveTab] = useState<TabKey>('provinces');
+    const [population, setPopulation] = useState<number>();
+    const showsPopulation = activeTab === 'provinces' || activeTab === 'counties' || activeTab === 'cities';
 
     const tabDefs = [
         { key: 'provinces' as const, label: 'استان', icon: <GlobalOutlined />, count: (provinces || []).length },
@@ -42,11 +44,16 @@ export default function CrmGeographyPage() {
                 icon={<EnvironmentOutlined />}
                 title="جغرافیایِ آدرس"
                 subtitle="استان → شهرستان → شهر → محله + منطقهٔ شهرداری — Master Dataهایِ «مخاطبین و ارتباطات»"
+                stats={showsPopulation ? [{
+                    icon: <TeamOutlined />,
+                    label: 'جمعیت کل',
+                    value: <span aria-live="polite">{population === undefined ? '—' : population.toLocaleString('fa-IR')}</span>,
+                }] : undefined}
                 backHref="/crm/classification"
                 backLabel="بازگشت"
             />
 
-            <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
+            <ChipTabs items={tabDefs} activeKey={activeTab} onChange={tab => { if (tab !== activeTab) { setPopulation(undefined); setActiveTab(tab); } }} />
 
             {activeTab === 'provinces' && (
                 <Card style={STYLES.card}>
@@ -59,6 +66,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="province"
                         entityLabel="استان"
                         namePlaceholder="تهران"
+                        onFilteredPopulationChange={setPopulation}
                         numberField={{ dataIndex: 'Population', title: 'جمعیت (جمعِ شهرستان‌ها)' }}
                     />
                 </Card>
@@ -75,6 +83,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="county"
                         entityLabel="شهرستان"
                         namePlaceholder="شمیرانات"
+                        onFilteredPopulationChange={setPopulation}
                         numberField={{ dataIndex: 'Population', title: 'جمعیت (جمعِ شهرها)' }}
                         parentSelect={{
                             label: 'استان',
@@ -98,6 +107,7 @@ export default function CrmGeographyPage() {
                         deleteEntity="city"
                         entityLabel="شهر"
                         namePlaceholder="تجریش"
+                        onFilteredPopulationChange={setPopulation}
                         numberField={{ dataIndex: 'Population', title: 'جمعیت', editable: true, paramName: 'population' }}
                         parentSelect={{
                             label: 'شهرستان',

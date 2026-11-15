@@ -1,5 +1,6 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Empty, List, Modal, Popconfirm, Select, Space, Spin, Typography, message } from 'antd';
+import { Alert, Button, Empty, List, Modal, Select, Space, Spin, Typography, message } from 'antd';
 import { DeleteOutlined, ShareAltOutlined, UserAddOutlined } from '@ant-design/icons';
 import { NOTIFY_HOOK_CONFIG } from '../../Utils/notify';
 
@@ -158,9 +159,9 @@ export default function ShareCalendarModal({
                                         disabled={busy}
                                         onChange={(v) => save(row.SharedWithUserID, v)}
                                     />,
-                                    <Popconfirm key="del" title="اشتراک لغو شود؟" okText="بله" cancelText="خیر" onConfirm={() => remove(row)}>
+                                    <Confirmation key="del" title="اشتراک لغو شود؟" okText="بله" cancelText="خیر" onConfirm={() => remove(row)}>
                                         <Button type="text" danger size="small" icon={<DeleteOutlined />} disabled={busy} aria-label="لغوِ اشتراک" />
-                                    </Popconfirm>,
+                                    </Confirmation>,
                                 ]}
                             >
                                 <Text>{row.FullName}</Text>

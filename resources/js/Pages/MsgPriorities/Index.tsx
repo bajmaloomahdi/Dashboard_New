@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useMemo } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Typography,
     Row,
     Col,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -225,7 +225,7 @@ export default function MsgPrioritiesIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن اولویت' : 'فعال کردن اولویت'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.msgPriorityID)}
@@ -240,7 +240,7 @@ export default function MsgPrioritiesIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

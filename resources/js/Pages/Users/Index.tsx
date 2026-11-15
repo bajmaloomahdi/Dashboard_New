@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
     Avatar,
 } from 'antd';
 import {
@@ -305,7 +305,7 @@ export default function UsersIndex() {
                             />
                         </Tooltip>
                         <Tooltip title="بازنشانی پسورد">
-                            <Popconfirm
+                            <Confirmation
                                 title="بازنشانی پسورد"
                                 description="رمز عبور کاربر به 123456 تغییر می‌کند. آیا مطمئن هستید؟"
                                 onConfirm={() => handleResetPassword(record.UserID, record.FullName || record.UserName)}
@@ -318,7 +318,7 @@ export default function UsersIndex() {
                                     icon={<LockOutlined />}
                                     style={{ color: THEME.warning }}
                                 />
-                            </Popconfirm>
+                            </Confirmation>
                         </Tooltip>
                         <Tooltip title="ویرایش">
                             <Button
@@ -328,7 +328,7 @@ export default function UsersIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن کاربر' : 'فعال کردن کاربر'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.UserID)}
@@ -343,7 +343,7 @@ export default function UsersIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

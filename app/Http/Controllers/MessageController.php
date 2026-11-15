@@ -102,16 +102,20 @@ class MessageController extends Controller
         $messageStatusId = $request->input('message_status_id');
         $msgPriorityId = $request->input('msg_priority_id');
 
-        $messages = DB::select(
-            'EXEC sp_GetMessages @UserID = ?, @Mode = 1, @IsArchive = 1, @SearchText = ?, @MessageTypeID = ?, @MessageStatusID = ?, @msgPriorityID = ?',
-            [
-                $userId,
-                $searchText ?: null,
-                $messageTypeId !== null && $messageTypeId !== '' ? (int) $messageTypeId : null,
-                $messageStatusId !== null && $messageStatusId !== '' ? (int) $messageStatusId : null,
-                $msgPriorityId !== null && $msgPriorityId !== '' ? (int) $msgPriorityId : null,
-            ]
-        );
+        $sql = 'EXEC dbo.sp_GetMessages @UserID = ?, @Mode = ?, @IsArchive = 1, @SearchText = ?, @MessageTypeID = ?, @MessageStatusID = ?, @msgPriorityID = ?';
+        $filters = [
+            $searchText ?: null,
+            $messageTypeId !== null && $messageTypeId !== '' ? (int) $messageTypeId : null,
+            $messageStatusId !== null && $messageStatusId !== '' ? (int) $messageStatusId : null,
+            $msgPriorityId !== null && $msgPriorityId !== '' ? (int) $msgPriorityId : null,
+        ];
+        $messages = collect(DB::select($sql, [$userId, 1, ...$filters]))
+            ->concat(DB::select($sql, [$userId, 2, ...$filters]))
+            ->unique('MessageID')
+            ->sortByDesc('CreateDate')
+            ->sortByDesc('PrioritySortOrder')
+            ->values()
+            ->all();
 
         $messageTypes = DB::select('EXEC sp_GetMessageTypes @SearchText = NULL, @IsActive = 1');
         $messageStatuses = DB::select('EXEC sp_GetMessageStatuses @SearchText = NULL, @IsActive = 1');
@@ -200,7 +204,7 @@ class MessageController extends Controller
     {
         $id = (int) $id;
 
-        $header = DB::select('EXEC sp_GetMessageHeader @MessageID = ?', [$id]);
+        $header = DB::select('EXEC dbo.sp_GetMessageHeader @MessageID = ?, @ViewerID = ?', [$id, Auth::id()]);
         $message = $header[0] ?? null;
 
         if (!$message) {

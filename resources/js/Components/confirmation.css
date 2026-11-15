@@ -1,0 +1,8 @@
+.raga-confirmation-trigger { display: inline-flex; vertical-align: middle; }
+.raga-confirmation .ant-modal-container {
+    border-radius: 16px;
+    box-shadow: 0 18px 60px rgb(15 23 42 / 22%);
+}
+.raga-confirmation .ant-modal-confirm-title { font-weight: 700; }
+.raga-confirmation .ant-modal-confirm-content { line-height: 1.8; overflow-wrap: anywhere; }
+.raga-confirmation .ant-modal-confirm-btns .ant-btn { min-inline-size: 82px; }

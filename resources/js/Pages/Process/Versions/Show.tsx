@@ -1,3 +1,4 @@
+import { askConfirmation } from '../../../Components/Confirmation';
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Tag, Space, Button, Typography, Alert, Modal, Empty, List } from 'antd';
 import {
@@ -149,11 +150,31 @@ export default function ProcessVersionShow() {
     }, [dirty]);
 
     useEffect(() => {
-        return router.on('before', (event: any) => {
-            if (dirty && !window.confirm('تغییراتِ ذخیره‌نشده دارید. آیا مطمئنید می‌خواهید این صفحه را ترک کنید؟')) {
-                event.preventDefault();
-            }
+        let pending = false;
+        let replaying = false;
+        let disposed = false;
+        const unsubscribe = router.on('before', (event) => {
+            if (!dirty || replaying) return;
+            event.preventDefault();
+            if (pending) return;
+            pending = true;
+            const { url, ...options } = event.detail.visit;
+            void askConfirmation({
+                title: 'تغییرات ذخیره‌نشده',
+                content: 'با خروج از صفحه، تغییرات ذخیره‌نشده از بین می‌روند.',
+                okText: 'خروج از صفحه',
+            }).then((confirmed) => {
+                pending = false;
+                if (!confirmed || disposed) return;
+                replaying = true;
+                try {
+                    router.visit(url, options);
+                } finally {
+                    replaying = false;
+                }
+            });
         });
+        return () => { disposed = true; unsubscribe(); };
     }, [dirty]);
 
     /* ---------- بازخوانیِ کاملِ گراف از GET /workflow/versions/{id}/graph ---------- */
@@ -387,6 +408,7 @@ export default function ProcessVersionShow() {
             </Card>
 
             <Modal
+                centered
                 open={publishConfirmOpen}
                 title="انتشارِ نسخه"
                 onCancel={() => setPublishConfirmOpen(false)}

@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -41,6 +41,7 @@ interface Report {
     ReportID: number;
     ReportCode: string;
     ReportTitle: string;
+    ReportType?: string;
     ProcedureName: string;
     MenuID: number;
     MenuTitle: string;
@@ -172,6 +173,7 @@ export default function ReportsManageIndex() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
                         <Text strong>{record.ReportTitle}</Text>
+                        <Tag>{record.ReportType === 'PIVOT' ? 'پویا' : record.ReportType === 'CHART' ? 'نموداری' : 'عادی'}</Tag>
                         {record.Description && (
                             <Text type="secondary" style={{ fontSize: 11 }}>
                                 {record.Description.length > 50
@@ -278,14 +280,16 @@ export default function ReportsManageIndex() {
                 const isActive = columnHelpers.toBool(record.IsActive);
                 return (
                     <Space>
-                        <Tooltip title="مدیریت پارامترها">
+                        {(record.ReportType ?? 'NORMAL') === 'NORMAL' && <Tooltip title="مدیریت پارامترها">
                             <Button
                                 type="text"
                                 icon={<SettingOutlined />}
                                 style={{ color: THEME.warning }}
                                 onClick={() => router.visit(`/reports-manage/${record.ReportID}/parameters`)}
                             />
-                        </Tooltip>
+                        </Tooltip>}
+                        {isActive && record.ReportType !== 'CHART' && <Button type="link"
+                            onClick={() => router.visit('/reports/' + encodeURIComponent(record.ReportCode))}>اجرا</Button>}
                         <Tooltip title="ویرایش">
                             <Button
                                 type="text"
@@ -294,7 +298,7 @@ export default function ReportsManageIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن گزارش' : 'فعال کردن گزارش'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.ReportID)}
@@ -309,7 +313,7 @@ export default function ReportsManageIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

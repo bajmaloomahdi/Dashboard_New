@@ -1,5 +1,6 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
-import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Popconfirm } from 'antd';
+import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select } from 'antd';
 import {
     PlusOutlined,
     EditOutlined,
@@ -353,7 +354,7 @@ export default function ProcessDefinitionsIndex() {
                                                 <Tooltip title="ویرایش">
                                                     <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => handleEdit(def)} />
                                                 </Tooltip>
-                                                <Popconfirm
+                                                <Confirmation
                                                     title={isActive ? 'غیرفعال‌کردنِ فرایند' : 'فعال‌کردنِ فرایند'}
                                                     description={isActive ? 'پس از غیرفعال‌شدن، Startِ نمونهٔ جدید برایِ این فرایند ممکن نخواهد بود؛ نمونه‌هایِ در‌حالِ‌اجرا تحتِ تأثیر قرار نمی‌گیرند.' : 'آیا مطمئن هستید؟'}
                                                     onConfirm={() => handleToggle(def)}
@@ -369,7 +370,7 @@ export default function ProcessDefinitionsIndex() {
                                                             style={{ color: isActive ? THEME.error : THEME.success }}
                                                         />
                                                     </Tooltip>
-                                                </Popconfirm>
+                                                </Confirmation>
                                             </>
                                         )}
                                     </div>

@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Typography, Popconfirm, Empty } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Typography, Empty } from 'antd';
 import {
     ApartmentOutlined,
     EditOutlined,
@@ -235,7 +236,7 @@ export default function ProcessDefinitionShow() {
                             <Button icon={<EditOutlined />} onClick={() => setModalOpen(true)}>
                                 ویرایش
                             </Button>
-                            <Popconfirm
+                            <Confirmation
                                 title={isActive ? 'غیرفعال‌کردنِ فرایند' : 'فعال‌کردنِ فرایند'}
                                 description={
                                     isActive
@@ -250,7 +251,7 @@ export default function ProcessDefinitionShow() {
                                 <Button danger={isActive} icon={isActive ? <StopOutlined /> : <CheckCircleOutlined />} loading={toggling}>
                                     {isActive ? 'غیرفعال‌سازی' : 'فعال‌سازی'}
                                 </Button>
-                            </Popconfirm>
+                            </Confirmation>
                         </Space>
                     ) : undefined
                 }

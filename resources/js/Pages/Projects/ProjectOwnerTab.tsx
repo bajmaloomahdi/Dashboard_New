@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Button, Descriptions, Select, Space, Typography, Alert } from 'antd';
+import { Button, Select, Space, Typography, Alert, theme } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import NotificationModal, { NotificationType } from '../../Components/NotificationModal';
 
@@ -144,8 +144,18 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
         }
     };
 
+    const { token } = theme.useToken();
+
     return (
-        <div>
+        <section aria-label="مالک پروژه" style={{
+            padding: token.padding, marginBottom: token.margin,
+            background: token.colorPrimaryBg, border: `1px solid ${token.colorPrimaryBorder}`,
+            borderRadius: token.borderRadiusLG,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                <Text strong style={{ color: token.colorPrimaryText }}>مالک پروژه</Text>
+                {canManage && !editing && <Button icon={<EditOutlined />} onClick={startEdit}>ویرایش مالک</Button>}
+            </div>
             {editing ? (
                 <Space direction="vertical" style={{ width: '100%' }} size={12}>
                     {error ? <Alert type="error" showIcon message={error} style={{ borderRadius: 8 }} /> : null}
@@ -190,24 +200,21 @@ export default function ProjectOwnerTab({ projectId, owner: initialOwner, allBra
                     </Space>
                 </Space>
             ) : (
-                <>
-                    <Descriptions bordered column={{ xs: 1, sm: 2 }} size="middle">
-                        <Descriptions.Item label="طرف‌حساب">
-                            {owner?.OwnerPartyID ? <a href={`/crm/parties/${owner.OwnerPartyID}?tab=interactions`}>{owner.OwnerPartyName || `#${owner.OwnerPartyID}`}</a> : <Text type="secondary">انتخاب نشده (پروژهٔ داخلی)</Text>}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="برند">
-                            {owner?.OwnerBrandID ? owner.OwnerBrandName || `#${owner.OwnerBrandID}` : <Text type="secondary">—</Text>}
-                        </Descriptions.Item>
-                    </Descriptions>
-                    {canManage ? (
-                        <div style={{ marginTop: 12 }}>
-                            <Button icon={<EditOutlined />} onClick={startEdit}>ویرایش</Button>
-                        </div>
-                    ) : null}
-                </>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                    <div style={{ flex: '1 1 200px', minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>طرف‌حساب</Text>
+                        {owner?.OwnerPartyID
+                            ? <a href={`/crm/parties/${owner.OwnerPartyID}?tab=interactions`}>{owner.OwnerPartyName || `#${owner.OwnerPartyID}`}</a>
+                            : <Text>انتخاب نشده (پروژهٔ داخلی)</Text>}
+                    </div>
+                    <div style={{ flex: '1 1 150px', minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>برند</Text>
+                        <Text>{owner?.OwnerBrandID ? owner.OwnerBrandName || `#${owner.OwnerBrandID}` : '—'}</Text>
+                    </div>
+                </div>
             )}
 
             <NotificationModal open={notification.open} type={notification.type} message={notification.message} onClose={() => setNotification((p) => ({ ...p, open: false }))} />
-        </div>
+        </section>
     );
 }

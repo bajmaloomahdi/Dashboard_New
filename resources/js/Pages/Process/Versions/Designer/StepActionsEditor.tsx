@@ -1,5 +1,6 @@
+import { Confirmation } from '../../../../Components/Confirmation';
 import { useEffect, useState } from 'react';
-import { Button, Input, Popconfirm, Select, Space, Switch, Typography } from 'antd';
+import { Button, Input, Select, Space, Switch, Typography } from 'antd';
 import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import {
     ACTION_CODE_MAX,
@@ -102,7 +103,7 @@ function ActionRow({
                         <Space size={0}>
                             <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={index === 0} onClick={() => onMove(action.code, -1)} />
                             <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={index === total - 1} onClick={() => onMove(action.code, 1)} />
-                            <Popconfirm
+                            <Confirmation
                                 title="حذفِ این Action؟"
                                 description={
                                     triggeredCount > 0
@@ -114,7 +115,7 @@ function ActionRow({
                                 onConfirm={() => onRemove(action.code)}
                             >
                                 <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                            </Popconfirm>
+                            </Confirmation>
                         </Space>
                     )}
                 </Space>

@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import { compareGridValues } from '../../../Utils/gridSorting';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Popconfirm, Table } from 'antd';
+import { Card, Button, Input, Space, Tag, Tooltip, Typography, Row, Col, Select, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -265,7 +266,7 @@ export default function CrmPartiesIndex() {
                         <Tooltip title="ویرایش">
                             <Button type="text" icon={<EditOutlined />} style={{ color: THEME.info }} onClick={(e) => handleEdit(p, e)} />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال‌کردنِ طرف‌حساب' : 'فعال‌کردنِ طرف‌حساب'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggle(p)}
@@ -278,7 +279,7 @@ export default function CrmPartiesIndex() {
                                 loading={togglingId === p.PartyID}
                                 style={{ color: isActive ? THEME.error : THEME.success }}
                             />
-                        </Popconfirm>
+                        </Confirmation>
                     </>
                 )}
                 {canDelete && (

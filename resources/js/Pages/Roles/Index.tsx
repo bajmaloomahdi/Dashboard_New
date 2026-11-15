@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -282,7 +282,7 @@ export default function RolesIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن نقش' : 'فعال کردن نقش'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.RoleID)}
@@ -297,7 +297,7 @@ export default function RolesIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

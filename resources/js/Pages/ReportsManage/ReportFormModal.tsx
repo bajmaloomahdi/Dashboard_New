@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { ChartChoices, type ChartLayout } from '../SalesReport/Chart';
+import axios from 'axios';
+import { useEffect, useState } from 'react';
 import { Modal, Form, Input, Row, Col, Button, Typography, Select, InputNumber, Switch, Divider } from 'antd';
 import {
     BarChartOutlined,
@@ -8,16 +10,23 @@ import {
     ClockCircleOutlined,
     FileExcelOutlined,
 } from '@ant-design/icons';
-import { useForm } from '@inertiajs/react';
+import { usePage, useForm } from '@inertiajs/react';
 
 const { Text } = Typography;
 
+type PivotParameter = { field: string; title: string; operator: string; required: boolean; default?: string[]; master?: number };
+type DefaultLayout = { rows: string[]; columns: string[]; values: string[]; filters: string[]; criteria: Record<string, string[]>; aggregation: 'SUM' };
+const emptyDefault: DefaultLayout = { rows: [], columns: [], values: [], filters: [], criteria: {}, aggregation: 'SUM' };
 interface Report {
     ReportID: number;
     MenuID: number;
     ReportCode: string;
     ReportTitle: string;
     ProcedureName: string;
+    ReportType?: string;
+    ViewSchema?: string;
+    ViewName?: string;
+    PivotConfig?: string;
     CommandTimeout: number;
     AllowExcel: boolean | number;
     AllowPdf: boolean | number;
@@ -44,13 +53,16 @@ const toBool = (value: any): boolean => Number(value) === 1;
 
 export default function ReportFormModal({ open, onClose, editingReport, availableMenus }: ReportFormModalProps) {
     const [form] = Form.useForm();
+    const masterOptions = (usePage().props.pivotMasters ?? []) as {MasterParameterID:number; ParameterCaption:string}[];
     const isEdit = !!editingReport;
 
-    const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
+    const [chartMeasures, setChartMeasures] = useState<string[]>([]);
+    const { data, setData, post, put, processing, errors, reset, clearErrors, transform } = useForm({
         MenuID: null as number | null,
         ReportCode: '',
         ReportTitle: '',
         ProcedureName: '',
+        ReportType: 'NORMAL', ViewSchema: 'dbo', ViewName: '', PivotConfig: { fields: [] as {name:string; label:string}[], parameters: [] as PivotParameter[], defaultLayout: undefined as DefaultLayout | undefined, chartDefault: undefined as ChartLayout | undefined },
         CommandTimeout: 120,
         AllowExcel: true,
         AllowPdf: false,
@@ -71,6 +83,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                     ReportCode: editingReport.ReportCode || '',
                     ReportTitle: editingReport.ReportTitle || '',
                     ProcedureName: editingReport.ProcedureName || '',
+                    ReportType: editingReport.ReportType ?? 'NORMAL', ViewSchema: editingReport.ViewSchema ?? 'dbo', ViewName: editingReport.ViewName ?? '', PivotConfig: editingReport.PivotConfig ? ((config) => editingReport.ReportType === 'CHART' ? {...config, chartDefault: config.defaultLayout, defaultLayout: undefined} : config)(JSON.parse(editingReport.PivotConfig)) : {fields: [], parameters: []},
                     CommandTimeout: editingReport.CommandTimeout || 120,
                     AllowExcel: toBool(editingReport.AllowExcel),
                     AllowPdf: toBool(editingReport.AllowPdf),
@@ -86,6 +99,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                     ReportCode: '',
                     ReportTitle: '',
                     ProcedureName: '',
+        ReportType: 'NORMAL', ViewSchema: 'dbo', ViewName: '', PivotConfig: { fields: [] as {name:string; label:string}[], parameters: [] as PivotParameter[], defaultLayout: undefined, chartDefault: undefined },
                     CommandTimeout: 120,
                     AllowExcel: true,
                     AllowPdf: false,
@@ -100,6 +114,18 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
         }
     }, [open, editingReport]);
 
+    useEffect(() => {
+        setChartMeasures([]);
+        if (!open || data.ReportType !== 'CHART' || !data.ViewName || !data.PivotConfig.fields.length) return;
+        const request = new AbortController();
+        axios.get('/reports-manage/pivot-fields', {
+            params: { ViewSchema: data.ViewSchema, ViewName: data.ViewName }, signal: request.signal,
+        }).then(({data: columns}) => {
+            if (!request.signal.aborted) setChartMeasures(columns.filter(({kind}: {kind:string}) => /^(bigint|int|smallint|tinyint|decimal|numeric)$/.test(kind)).map(({name}: {name:string}) => name));
+        }).catch(() => {});
+        return () => request.abort();
+    }, [open, data.ReportType, data.ViewSchema, data.ViewName, data.PivotConfig.fields.length]);
+
     const handleSubmit = () => {
         form.validateFields().then(() => {
             const options = {
@@ -108,6 +134,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                 onError: () => {},
             };
 
+            transform(({PivotConfig: {chartDefault, ...config}, ...rest}) => ({...rest, PivotConfig: rest.ReportType === 'CHART' ? {...config, defaultLayout: chartDefault} : config}));
             if (isEdit) {
                 put(`/reports-manage/${editingReport!.ReportID}`, options);
             } else {
@@ -208,7 +235,57 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                         </Form.Item>
                     </Col>
 
-                    <Col xs={24} md={12}>
+                    <Col span={24}>
+                        <Form.Item label="نوع گزارش">
+                            <Select value={data.ReportType} onChange={(value) => setData('ReportType', value)} options={[
+                                {value:'NORMAL',label:'گزارش عادی'}, {value:'PIVOT',label:'گزارش پویا'}, {value:'CHART',label:'گزارش نموداری'},
+                            ]} />
+                        </Form.Item>
+                        {data.ReportType !== 'NORMAL' ? <div>
+                            <Form.Item label="Schema"><Input value={data.ViewSchema} onChange={(e) => setData({...data, ViewSchema:e.target.value, PivotConfig:{fields:[],parameters:[],defaultLayout:undefined}})} /></Form.Item>
+                            <Form.Item label="نام View"><Input value={data.ViewName} onChange={(e) => setData({...data, ViewName:e.target.value, PivotConfig:{fields:[],parameters:[],defaultLayout:undefined}})} /></Form.Item>
+                            <Button onClick={async () => {
+                                try {
+                                    const response = await axios.get('/reports-manage/pivot-fields',{params:{ViewSchema:data.ViewSchema,ViewName:data.ViewName}});
+                                    setChartMeasures(response.data.filter(({kind}: {kind:string}) => /^(bigint|int|smallint|tinyint|decimal|numeric)$/.test(kind)).map(({name}: {name:string})=>name));
+                                    const fields = response.data.map(({name}: {name:string}) => data.PivotConfig.fields.find((field) => field.name === name) ?? {name,label:name});
+                                    setData('PivotConfig',{ ...data.PivotConfig, fields, parameters:data.PivotConfig.parameters.filter((parameter) => fields.some((field: {name:string}) => field.name === parameter.field)) });
+                                    form.setFields([{name:'ViewName',errors:fields.length ? [] : ['View یا ستون قابل استفاده پیدا نشد']}]);
+                                } catch { form.setFields([{name:'ViewName',errors:['خواندن ستون‌ها انجام نشد']}]); }
+                            }}>شناسایی ستون‌ها</Button>
+                            {Object.entries(errors).filter(([key]) => key.startsWith('PivotConfig') || key.startsWith('View')).map(([key,value]) => <div key={key} role="alert">{value}</div>)}
+                            {data.PivotConfig.fields.map((field,index) => <Form.Item key={field.name} label={field.name}>
+                                <Input value={field.label} onChange={(e) => setData('PivotConfig',{...data.PivotConfig,fields:data.PivotConfig.fields.map((item,i)=>i===index ? {...item,label:e.target.value}:item)})} />
+                            </Form.Item>)}
+                            <Divider>چیدمان پیش‌فرض</Divider>
+                            {data.ReportType === 'CHART' ? <ChartChoices
+                                value={data.PivotConfig.chartDefault ?? {type:'column',series:[],limit:20,sort:'dimension'}}
+                                change={chartDefault=>setData('PivotConfig',{...data.PivotConfig,chartDefault})}
+                                fields={data.PivotConfig.fields.map(f=>f.name)}
+                                fieldLabels={Object.fromEntries(data.PivotConfig.fields.map(f=>[f.name,f.label]))}
+                                measureFields={chartMeasures.filter(name=>data.PivotConfig.fields.some(field=>field.name===name))}
+                            /> : (['rows','columns','values','filters'] as const).map((zone,index)=><Form.Item key={zone} label={['ردیف‌ها','ستون‌ها','مقادیر (جمع)','فیلترها'][index]}>
+                                <Select mode="multiple" value={data.PivotConfig.defaultLayout?.[zone] ?? []} maxCount={{rows:5,columns:5,values:2,filters:13}[zone]}
+                                    options={data.PivotConfig.fields.map(f=>({value:f.name,label:f.label}))}
+                                    onChange={value=>setData('PivotConfig',{...data.PivotConfig,defaultLayout:{...(data.PivotConfig.defaultLayout??emptyDefault),[zone]:value}})} />
+                            </Form.Item>)}
+                            <Button disabled={!data.PivotConfig.fields.length} onClick={()=>{
+                                const field=data.PivotConfig.fields.find(f=>!data.PivotConfig.parameters.some(p=>p.field===f.name));
+                                if(field) setData('PivotConfig',{...data.PivotConfig,parameters:[...data.PivotConfig.parameters,{field:field.name,title:field.label,operator:'eq',required:false}]});
+                            }}>افزودن پارامتر</Button>
+                            {data.PivotConfig.parameters.map((parameter,index)=>{
+                                const change=(patch:Partial<PivotParameter>)=>setData('PivotConfig',{...data.PivotConfig,parameters:data.PivotConfig.parameters.map((p,i)=>i===index?{...p,...patch}:p)});
+                                return <fieldset key={index} style={{marginBlock:8,padding:8,border:'1px solid #ccd6e2'}}>
+                                    <Select aria-label="ستون پارامتر" value={parameter.field} onChange={field=>change({field})} options={data.PivotConfig.fields.map(f=>({value:f.name,label:f.label}))}/>
+                                    <Input placeholder="عنوان پارامتر" value={parameter.title} onChange={e=>change({title:e.target.value})}/>
+                                    <Select aria-label="عملگر" value={parameter.operator} options={['eq','gt','lt','between','in'].map(value=>({value,label:value}))} onChange={operator=>change({operator})}/>
+                                    <Switch checked={parameter.required} onChange={required=>change({required})}/> اجباری
+                                    <Select mode="tags" aria-label="مقادیر پیش‌فرض" value={parameter.default??[]} onChange={value=>change({default:value})} style={{minWidth:150}}/>
+                                    <Select aria-label="پارامتر مستر" allowClear showSearch optionFilterProp="label" value={parameter.master} onChange={master=>change({master})} options={masterOptions.map(item=>({value:item.MasterParameterID,label:item.ParameterCaption}))}/>
+                                    <Button danger onClick={()=>setData('PivotConfig',{...data.PivotConfig,parameters:data.PivotConfig.parameters.filter((_,i)=>i!==index)})}>حذف</Button>
+                                </fieldset>;
+                            })}
+                        </div> : (
                         <Form.Item
                             label="نام Stored Procedure"
                             name="ProcedureName"
@@ -229,6 +306,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                                 dir="ltr"
                             />
                         </Form.Item>
+                        )}
                     </Col>
 
                     <Col span={24}>

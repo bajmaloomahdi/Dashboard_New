@@ -344,6 +344,7 @@ export default function PushBroadcasts() {
 
             <Modal
                 open={!!preview}
+                centered
                 title="تأییدِ ارسالِ اعلانِ عمومی"
                 onCancel={() => !sending && setPreview(null)}
                 okText="ارسال"

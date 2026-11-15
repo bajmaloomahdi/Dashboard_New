@@ -1,5 +1,5 @@
 import { Tag, Tooltip, Typography } from 'antd';
-import { BellOutlined, EyeOutlined, EyeInvisibleOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { BellOutlined, EyeOutlined, EyeInvisibleOutlined, CheckCircleOutlined, CommentOutlined, PaperClipOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -13,18 +13,24 @@ export function messageAttention(record: { IsRead?: unknown; HasUnread?: unknown
 }
 
 /** کلاسِ ردیفِ جدول برایِ متمایزکردنِ پیام‌هایِ جدید/تغییرکرده (CSS در MESSAGE_ROW_CSS) */
-export const messageRowClass = (record: { IsRead?: unknown; HasUnread?: unknown }) => (messageAttention(record) ? 'msg-row-attention' : '');
+export const messageRowClass = (record: { IsRead?: unknown; HasUnread?: unknown }) => {
+    const state = messageAttention(record);
+    return state ? `msg-row-${state}` : '';
+};
 
 export const MESSAGE_ROW_CSS = `
-    .msg-row-attention > td { background: #eef3ff !important; }
-    .msg-row-attention > td:first-child { box-shadow: inset -4px 0 0 #667eea; }
-    .msg-row-attention:hover > td { background: #e2eaff !important; }
+    .msg-row-new > td { background: #eef3ff !important; }
+    .msg-row-new > td:first-child { box-shadow: inset -4px 0 0 #667eea; }
+    .msg-row-new:hover > td { background: #e2eaff !important; }
+    .msg-row-updated > td { background: #fff4dc !important; }
+    .msg-row-updated > td:first-child { box-shadow: inset -4px 0 0 #d48806; }
+    .msg-row-updated:hover > td { background: #ffebbd !important; }
 `;
 
 export function MessageChangeTag({ record }: { record: { IsRead?: unknown; HasUnread?: unknown } }) {
     const state = messageAttention(record);
     if (state === 'new') {
-        return <Tag color="blue" style={{ borderRadius: 6, marginInlineEnd: 0 }}>جدید</Tag>;
+        return <Tag color="blue" style={{ borderRadius: 6, marginInlineEnd: 0 }} icon={<EyeInvisibleOutlined />}>دیده نشده</Tag>;
     }
     if (state === 'updated') {
         return (
@@ -33,7 +39,20 @@ export function MessageChangeTag({ record }: { record: { IsRead?: unknown; HasUn
             </Tooltip>
         );
     }
-    return null;
+    return truthy(record.IsRead)
+        ? <Tag icon={<EyeOutlined />} color="success" style={{ borderRadius: 6, marginInlineEnd: 0 }}>دیده شده</Tag>
+        : <span aria-label="وضعیت نامشخص">—</span>;
+}
+
+export function MessageContentIndicators({ record }: { record: { HasDescription?: unknown; HasAttachment?: unknown } }) {
+    const hasDescription = truthy(record.HasDescription);
+    const hasAttachment = truthy(record.HasAttachment);
+    if (!hasDescription && !hasAttachment) return null;
+
+    return <span style={{ display: 'inline-flex', gap: 12, alignItems: 'center' }}>
+        {hasDescription && <Tooltip title="دارای توضیحات"><CommentOutlined style={{ color: '#1677ff' }} aria-label="دارای توضیحات" /></Tooltip>}
+        {hasAttachment && <Tooltip title="دارای ضمیمه"><PaperClipOutlined style={{ color: '#a06600' }} aria-label="دارای ضمیمه" /></Tooltip>}
+    </span>;
 }
 
 /** صادره: چند نفر از گیرندگان/رونوشت‌ها پیام را دیده‌اند */

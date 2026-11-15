@@ -1,14 +1,15 @@
+import RecordHistoryPanel from '../../../Components/Crm/RecordHistoryPanel';
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Space } from 'antd';
 import { router, usePage } from '@inertiajs/react';
-import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined, MessageOutlined, ProjectOutlined } from '@ant-design/icons';
+import { TeamOutlined, EditOutlined, EnvironmentOutlined, PhoneOutlined, ApartmentOutlined, MessageOutlined, ProjectOutlined, IdcardOutlined } from '@ant-design/icons';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import ChipTabs from '../../../Components/ChipTabs';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import { STYLES } from '../../../theme';
 import { toBool } from '../../../Utils/bool';
-import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import PersonFormModal, { Person } from './PersonFormModal';
 import AddressesPanel from '../Parties/AddressesPanel';
 import ContactsPanel from '../Parties/ContactsPanel';
@@ -59,7 +60,7 @@ export default function CrmPersonShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'contacts');
+    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
 
     // طرف‌حساب‌هایی که تعاملِ جدیدِ این مخاطب می‌تواند به آن‌ها مربوط شود (فقط رابطه‌هایِ فعال)
     const personParties = (relations || [])
@@ -69,6 +70,8 @@ export default function CrmPersonShow() {
     const isActive = toBool(currentPerson.IsActive);
 
     const tabDefs = [
+        { key: 'profile' as const, label: 'پروفایل', icon: <IdcardOutlined /> },
+        { key: 'history' as const, label: 'تاریخچه' },
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
         { key: 'addresses' as const, label: 'آدرس‌ها', icon: <EnvironmentOutlined />, count: (addresses || []).length },
         { key: 'relations' as const, label: 'مخاطبین / طرف‌حساب‌هایِ مرتبط', icon: <ApartmentOutlined />, count: (relations || []).length },
@@ -79,7 +82,7 @@ export default function CrmPersonShow() {
     const handleEditSuccess = (message: string) => {
         setEditOpen(false);
         setNotification({ open: true, type: 'success', message });
-        router.reload({ only: ['person'] });
+        router.reload();
     };
 
     return (
@@ -117,52 +120,60 @@ export default function CrmPersonShow() {
                 }
             />
 
-            <Card style={{ marginBottom: 16, ...STYLES.card }}>
-                <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
-                    <Descriptions.Item label="عنوان">{currentPerson.TitleName || '—'}</Descriptions.Item>
-                    <Descriptions.Item label="کدِ ملی">
-                        {currentPerson.IdentifierNumber ? <Text dir="ltr">{currentPerson.IdentifierNumber}</Text> : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="تاریخِ تولد">
-                        {currentPerson.IdentifierDate ? gregorianToJalaliDisplay(currentPerson.IdentifierDate) : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="کاربر">
-                        <CrmLinkedUserAction
-                            entity="persons"
-                            id={currentPerson.PersonID}
-                            userId={currentPerson.LinkedUserID}
-                            userName={currentPerson.LinkedUserName}
-                            userType={currentPerson.LinkedUserType}
-                            canManage={canManage}
-                            onSaved={(message, ok) => {
-                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
-                                if (ok) router.reload({ only: ['person'] });
-                            }}
-                        />
-                    </Descriptions.Item>
-                    <Descriptions.Item label="قطعِ همکاری">
-                        <CooperationEndedAction
-                            entity="persons"
-                            id={currentPerson.PersonID}
-                            at={currentPerson.CooperationEndedAt}
-                            canManage={canManage}
-                            onSaved={(message, ok) => {
-                                setNotification({ open: true, type: ok ? 'success' : 'error', message });
-                                if (ok) router.reload({ only: ['person'] });
-                            }}
-                        />
-                    </Descriptions.Item>
-                    <Descriptions.Item label="توضیحات" span={3}>{currentPerson.Description || '—'}</Descriptions.Item>
-                    <Descriptions.Item label="ایجادکننده">
-                        {currentPerson.CreatedByName || '—'} — {currentPerson.Date_InsertFirst ? gregorianToJalaliDisplay(currentPerson.Date_InsertFirst) : '—'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="آخرین ویرایش">
-                        {currentPerson.Date_LastUpdate ? `${currentPerson.ModifiedByName || '—'} — ${gregorianToJalaliDisplay(currentPerson.Date_LastUpdate)}` : '—'}
-                    </Descriptions.Item>
-                </Descriptions>
-            </Card>
-
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
+
+            {activeTab === 'history' && (
+                <Card style={STYLES.card}>
+                    <RecordHistoryPanel key={currentPerson.PersonID} entityType="person" entityId={currentPerson.PersonID} />
+                </Card>
+            )}
+
+            {activeTab === 'profile' && (
+                <Card style={STYLES.card}>
+                    <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
+                        <Descriptions.Item label="عنوان">{currentPerson.TitleName || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="کدِ ملی">
+                            {currentPerson.IdentifierNumber ? <Text dir="ltr">{currentPerson.IdentifierNumber}</Text> : '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="تاریخِ تولد">
+                            {currentPerson.IdentifierDate ? gregorianToJalaliDisplay(currentPerson.IdentifierDate) : '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="کاربر">
+                            <CrmLinkedUserAction
+                                entity="persons"
+                                id={currentPerson.PersonID}
+                                userId={currentPerson.LinkedUserID}
+                                userName={currentPerson.LinkedUserName}
+                                userType={currentPerson.LinkedUserType}
+                                canManage={canManage}
+                                onSaved={(message, ok) => {
+                                    setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                    if (ok) router.reload({ only: ['person'] });
+                                }}
+                            />
+                        </Descriptions.Item>
+                        <Descriptions.Item label="قطعِ همکاری">
+                            <CooperationEndedAction
+                                entity="persons"
+                                id={currentPerson.PersonID}
+                                at={currentPerson.CooperationEndedAt}
+                                canManage={canManage}
+                                onSaved={(message, ok) => {
+                                    setNotification({ open: true, type: ok ? 'success' : 'error', message });
+                                    if (ok) router.reload({ only: ['person'] });
+                                }}
+                            />
+                        </Descriptions.Item>
+                        <Descriptions.Item label="توضیحات" span={3}>{currentPerson.Description || '—'}</Descriptions.Item>
+                        <Descriptions.Item label="ایجادکننده">
+                            {currentPerson.CreatedByName || '—'} — <bdi dir="ltr">{gregorianToJalaliDateTimeDisplay(currentPerson.Date_InsertFirst) || '—'}</bdi>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="آخرین ویرایش">
+                            {currentPerson.Date_LastUpdate ? `${currentPerson.ModifiedByName || '—'} — ${gregorianToJalaliDisplay(currentPerson.Date_LastUpdate)}` : '—'}
+                        </Descriptions.Item>
+                    </Descriptions>
+                </Card>
+            )}
 
             {activeTab === 'contacts' && (
                 <Card style={STYLES.card}>

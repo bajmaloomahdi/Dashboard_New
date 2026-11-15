@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Button, Input, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Card, Button, Input, InputNumber, Space, Tag, Typography, Alert, Empty } from 'antd';
 import {
     PlusOutlined,
     SaveOutlined,
@@ -181,7 +182,7 @@ export default function ProcessEntityTypesIndex() {
                 return (
                     <Space>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                        <Popconfirm
+                        <Confirmation
                             title={active ? 'غیرفعال‌کردنِ موجودیت' : 'فعال‌کردنِ موجودیت'}
                             description={active ? 'اگر فرایندِ فعالی از این نوع موجودیت استفاده کند، غیرفعال‌سازی مسدود می‌شود.' : 'آیا مطمئن هستید؟'}
                             onConfirm={() => handleToggle(r)}
@@ -189,7 +190,7 @@ export default function ProcessEntityTypesIndex() {
                             cancelText="خیر"
                         >
                             <Button type="text" size="small" danger={active} loading={togglingId === r.EntityTypeID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

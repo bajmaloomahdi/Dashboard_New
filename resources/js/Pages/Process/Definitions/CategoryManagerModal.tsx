@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useState } from 'react';
-import { Modal, Button, Input, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Modal, Button, Input, InputNumber, Space, Tag, Typography, Alert, Empty } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, TagsOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { wfApi } from '../../../Components/Workflow/workflowApi';
@@ -146,7 +147,7 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
                 return (
                     <Space>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                        <Popconfirm
+                        <Confirmation
                             title={active ? 'غیرفعال‌کردنِ دسته' : 'فعال‌کردنِ دسته'}
                             description={active ? 'اگر فرایندِ فعالی به این دسته وابسته باشد، غیرفعال‌سازی مسدود می‌شود.' : 'آیا مطمئن هستید؟'}
                             onConfirm={() => handleToggle(r)}
@@ -160,7 +161,7 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
                                 loading={togglingId === r.CategoryID}
                                 icon={active ? <StopOutlined /> : <CheckCircleOutlined />}
                             />
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

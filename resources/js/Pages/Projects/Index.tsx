@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Typography,
     Row,
     Col,
-    Popconfirm,
     Progress,
 } from 'antd';
 import {
@@ -240,7 +240,7 @@ export default function ProjectsIndex() {
                     onClick={() => setMembersModal({ open: true, project: rec })}
                 />
             </Tooltip>
-            <Popconfirm
+            <Confirmation
                 title={isActive ? 'غیرفعال کردن پروژه' : 'فعال کردن پروژه'}
                 description="آیا مطمئن هستید؟"
                 onConfirm={() => handleToggleActive(rec.ProjectID)}
@@ -255,7 +255,7 @@ export default function ProjectsIndex() {
                         style={{ color: isActive ? THEME.error : THEME.success }}
                     />
                 </Tooltip>
-            </Popconfirm>
+            </Confirmation>
             </>
         );
     };

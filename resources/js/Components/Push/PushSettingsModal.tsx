@@ -1,5 +1,6 @@
+import { Confirmation } from '../Confirmation';
 import { useCallback, useEffect, useState } from 'react';
-import { Modal, Button, Alert, Space, Typography, List, Tag, Popconfirm, Spin, Descriptions } from 'antd';
+import { Modal, Button, Alert, Space, Typography, List, Tag, Spin, Descriptions } from 'antd';
 import { BellOutlined, MobileOutlined, DesktopOutlined, DeleteOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 import {
     pushSupport, permission, getConfig, PushFailure, enablePush, disablePush, listDevices, removeDevice, sendTest,
@@ -184,9 +185,9 @@ export default function PushSettingsModal({ open, onClose }: { open: boolean; on
                                 return (
                                     <List.Item
                                         actions={[
-                                            <Popconfirm key="del" title="اعلان‌هایِ این دستگاه غیرفعال شود؟" okText="بله" cancelText="خیر" onConfirm={() => run(() => removeDevice(Number(d.PushSubscriptionID)))}>
+                                            <Confirmation key="del" title="اعلان‌هایِ این دستگاه غیرفعال شود؟" okText="بله" cancelText="خیر" onConfirm={() => run(() => removeDevice(Number(d.PushSubscriptionID)))}>
                                                 <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                                            </Popconfirm>,
+                                            </Confirmation>,
                                         ]}
                                     >
                                         <Space direction="vertical" size={0}>

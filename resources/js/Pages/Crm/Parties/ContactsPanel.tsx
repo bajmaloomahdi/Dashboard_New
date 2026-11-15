@@ -1,6 +1,8 @@
+import { askConfirmation } from '../../../Components/Confirmation';
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useRef, useState } from 'react';
-import { Button, Input, Select, Checkbox, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Button, Input, Select, Checkbox, Space, Tag, Typography, Alert, Empty } from 'antd';
 import type { InputRef } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, StarFilled } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -150,7 +152,7 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
         }
         setSaving(true);
         setError(null);
-        const res = await crmApi('/crm/contacts', 'POST', {
+        const payload = {
             contactId: draft.id ?? undefined,
             partyId,
             personId,
@@ -160,15 +162,25 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
             description: draft.description.trim() || undefined,
             isPrimary: draft.isPrimary,
             relatedPersonId: partyId ? (draft.relatedPersonId ?? undefined) : undefined,
-        });
-        setSaving(false);
-        if (!res.ok || !res.success) {
-            setError(res.message);
-            return;
+        };
+        try {
+            let res = await crmApi('/crm/contacts', 'POST', payload);
+            if (res.status === 422 && Array.isArray(res.errors) && res.errors.includes('DUPLICATE_LANDLINE')) {
+                if (!await askConfirmation({ title: 'تلفن تکراری', content: res.message, okText: 'ثبت شود' })) return;
+                res = await crmApi('/crm/contacts', 'POST', { ...payload, allowDuplicateLandline: true });
+            }
+            if (!res.ok || !res.success) {
+                setError(res.message);
+                return;
+            }
+            setFormOpen(false);
+            setNotification({ open: true, type: 'success', message: res.message });
+            reload();
+        } catch {
+            setError('ارتباط با سرور برقرار نشد.');
+        } finally {
+            setSaving(false);
         }
-        setFormOpen(false);
-        setNotification({ open: true, type: 'success', message: res.message });
-        reload();
     };
 
     const handleToggle = async (row: Contact) => {
@@ -238,9 +250,9 @@ export default function ContactsPanel({ partyId, personId, items: initialItems, 
                                 setFormOpen(true);
                             }}
                         />
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ تماس' : 'فعال‌کردنِ تماس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ تماس' : 'فعال‌کردنِ تماس'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر">
                             <Button type="text" size="small" danger={active} loading={togglingId === r.ContactID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="contact" id={r.ContactID} label="اطلاعاتِ تماس" onDone={(ok, msg) => { setNotification({ open: true, type: ok ? 'success' : 'error', message: msg }); if (ok) reload(); }} /> : null}
                     </Space>
                 );

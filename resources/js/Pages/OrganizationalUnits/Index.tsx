@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Col,
     Select,
     Space,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -208,7 +208,7 @@ export default function OrganizationalUnitsIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن واحد' : 'فعال کردن واحد'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.UnitID)}
@@ -223,7 +223,7 @@ export default function OrganizationalUnitsIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

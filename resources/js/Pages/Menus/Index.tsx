@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useMemo } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -331,7 +331,7 @@ export default function MenusIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن منو' : 'فعال کردن منو'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.MenuID)}
@@ -346,7 +346,7 @@ export default function MenusIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

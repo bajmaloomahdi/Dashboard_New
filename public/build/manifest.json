@@ -115,7 +115,7 @@
     "src": "resources/images/raga360-logo.webp"
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-BNLR64DX.js",
+    "file": "assets/app-BDBouqFN.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -123,7 +123,7 @@
       "node_modules/@neshan-maps-platform/maplibre-sdk/dist/neshan-maplibre-sdk.js"
     ],
     "css": [
-      "assets/app-0vtxen5F.css"
+      "assets/app-CcWjM0mw.css"
     ],
     "assets": [
       "assets/raga360-logo-DwJRW0aG.webp",

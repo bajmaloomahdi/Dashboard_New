@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -197,7 +197,7 @@ export default function MessageTypesIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن نوع پیام' : 'فعال کردن نوع پیام'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.MessageTypeID)}
@@ -212,7 +212,7 @@ export default function MessageTypesIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

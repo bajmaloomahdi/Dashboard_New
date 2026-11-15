@@ -732,7 +732,8 @@ class CrmStore
     {
         return $this->write(
             'EXEC dbo.sp_Crm_SaveContact @ContactID = ?, @PartyID = ?, @PersonID = ?, @ContactTypeID = ?, @ContactValue = ?, '
-            . '@Extension = ?, @Description = ?, @IsPrimary = ?, @RelatedPersonID = ?, @UserID = ?',
+            . '@Extension = ?, @Description = ?, @IsPrimary = ?, @RelatedPersonID = ?, @UserID = ?'
+            . (! empty($p['allowDuplicateLandline']) ? ', @AllowDuplicateLandline = 1' : ''),
             [
                 $p['contactId'] ?? null, $p['partyId'] ?? null, $p['personId'] ?? null, $p['contactTypeId'], $p['contactValue'],
                 $p['extension'] ?? null, $p['description'] ?? null, $p['isPrimary'] ?? 0, $p['relatedPersonId'] ?? null, $p['userId'],
@@ -871,6 +872,9 @@ class CrmStore
                     json_decode((string) ($row->Duplicates ?? '[]'), true) ?: [],
                     (int) ($row->DuplicateCount ?? 0)
                 );
+            }
+            if (($row->ErrorCode ?? null) === 'DUPLICATE_LANDLINE') {
+                throw new \App\Services\Crm\Exceptions\CrmValidationException($row->Message, ['DUPLICATE_LANDLINE']);
             }
             throw new CrmException($row->Message ?? 'عملیاتِ پایگاه‌داده ناموفق بود.');
         }

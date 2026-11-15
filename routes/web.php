@@ -156,6 +156,7 @@ Route::middleware('auth')->group(function () {
 
     // مدیریت گزارش‌ها
     Route::prefix('reports-manage')->name('reports-manage.')->group(function () {
+        Route::get('/pivot-fields', [\App\Http\Controllers\PivotReportSource::class, 'metadata'])->name('pivot-fields');
         Route::get('/', [ReportManagementController::class, 'index'])->name('index');
         Route::post('/', [ReportManagementController::class, 'store'])->name('store');
         Route::put('/{id}', [ReportManagementController::class, 'update'])->name('update');
@@ -165,11 +166,18 @@ Route::middleware('auth')->group(function () {
         Route::put('/{id}/parameters/{paramId}', [ReportManagementController::class, 'updateParameterSettings'])->name('parameters.settings');
     });
 
+    Route::get('/sales-report', [\App\Http\Controllers\SalesReportController::class, 'show'])->name('sales-report.show');
+    Route::get('/sales-report/filter-options', [\App\Http\Controllers\SalesReportController::class, 'filterOptions'])->middleware('throttle:60,1')->name('sales-report.filter-options');
+    Route::post('/sales-report/execute', [\App\Http\Controllers\SalesReportController::class, 'execute'])->middleware('throttle:60,1')->name('sales-report.execute');
+
     // گزارش‌ها
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('/lookup', [ReportController::class, 'lookup'])->name('lookup');
         Route::get('/{code}', [ReportController::class, 'show'])->name('show');
         Route::post('/{code}/execute', [ReportController::class, 'execute'])->name('execute');
+        Route::post('/{code}/pivot-options', [ReportController::class, 'pivotOptions'])->middleware('throttle:60,1')->name('pivot-options');
+        Route::get('/{code}/layout', [\App\Http\Controllers\ReportLayoutController::class, 'show']);
+        Route::put('/{code}/layout', [\App\Http\Controllers\ReportLayoutController::class, 'store']);
     });
 
     // واحدهای سازمانی
@@ -520,6 +528,8 @@ Route::middleware('auth')->group(function () {
         // ───────────────── فازِ ۲: طرف‌حساب و موجودیت‌هایِ وابسته ─────────────────
         Route::get('parties', [CrmPartyController::class, 'page'])->name('parties.page');
         Route::get('parties-list', [CrmPartyController::class, 'index'])->name('parties.index');
+        Route::get('history/{entityType}/{entityId}', [\App\Http\Controllers\Crm\CrmRecordHistoryController::class, 'index'])
+            ->whereIn('entityType', ['party', 'person'])->whereNumber('entityId');
         Route::get('parties/{partyId}', [CrmPartyController::class, 'show'])->whereNumber('partyId')->name('parties.show');
         Route::post('parties', [CrmPartyController::class, 'store'])->name('parties.store');
         Route::post('parties/{partyId}/toggle', [CrmPartyController::class, 'toggleActive'])

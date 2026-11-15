@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Select, TreeSelect, InputNumber, Space, Tag, Popconfirm, Typography, Alert, Empty, Tooltip, Switch } from 'antd';
+import { Button, Select, TreeSelect, InputNumber, Space, Tag, Typography, Alert, Empty, Tooltip, Switch } from 'antd';
 import { PlusOutlined, SaveOutlined, CloseOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, TagsOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { router } from '@inertiajs/react';
@@ -332,7 +333,7 @@ export default function BrandCategoriesPanel({ partyId, items, canManage, canDel
                         <Tooltip title="ویرایش">
                             <Button type="text" size="small" disabled={editingId !== null} icon={<EditOutlined />} style={{ color: THEME.info }} onClick={() => startEdit(r)} />
                         </Tooltip>
-                        <Popconfirm title={active ? 'غیرفعال‌کردنِ ردیف' : 'فعال‌کردنِ ردیف'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر" disabled={editingId !== null}>
+                        <Confirmation title={active ? 'غیرفعال‌کردنِ ردیف' : 'فعال‌کردنِ ردیف'} onConfirm={() => handleToggle(r)} okText="بله" cancelText="خیر" disabled={editingId !== null}>
                             <Button
                                 type="text"
                                 size="small"
@@ -341,7 +342,7 @@ export default function BrandCategoriesPanel({ partyId, items, canManage, canDel
                                 loading={togglingId === Number(r.PartyBrandCategoryID)}
                                 icon={active ? <StopOutlined /> : <CheckCircleOutlined />}
                             />
-                        </Popconfirm>
+                        </Confirmation>
                         {canDelete ? <CrmDeleteButton entity="party-brand-category" id={r.PartyBrandCategoryID} label="ردیفِ برند" onDone={(ok, msg) => { notify(ok ? 'success' : 'error', msg); if (ok) onChanged(); }} /> : null}
                     </Space>
                 );

@@ -1,5 +1,6 @@
+import { Confirmation } from '../Confirmation';
 import { useState } from 'react';
-import { Alert, Button, Modal, Popconfirm, Select, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Modal, Select, Space, Tag, Typography } from 'antd';
 import { DisconnectOutlined, EditOutlined, UserAddOutlined, UserOutlined } from '@ant-design/icons';
 import { crmApi } from './crmApi';
 import { USER_TYPE_META, normalizeUserType } from '../UserTypeTag';
@@ -78,9 +79,9 @@ export default function CrmLinkedUserAction({ entity, id, userId, userName, user
                 currentId ? (
                     <>
                         <Button size="small" icon={<EditOutlined />} onClick={openModal}>تغییر</Button>
-                        <Popconfirm title="اتصالِ این کاربر برداشته شود؟ (کاربر «داخلی» می‌شود)" okText="بله" cancelText="خیر" onConfirm={() => send(null)}>
+                        <Confirmation title="اتصالِ این کاربر برداشته شود؟ (کاربر «داخلی» می‌شود)" okText="بله" cancelText="خیر" onConfirm={() => send(null)}>
                             <Button size="small" icon={<DisconnectOutlined />} loading={saving && !open}>برداشتن</Button>
-                        </Popconfirm>
+                        </Confirmation>
                     </>
                 ) : (
                     <Button size="small" icon={<UserAddOutlined />} onClick={openModal}>تعیینِ کاربر</Button>

@@ -764,16 +764,37 @@ class CrmPartyService
     {
         $this->assertExactlyOneOwner($input);
 
+        $value = trim($input['contactValue'] ?? '');
+        $type = collect($this->store->getContactTypes())->first(
+            fn ($row) => (int) $row->ContactTypeID === (int) $input['contactTypeId'],
+        );
+        $code = strtoupper(trim((string) ($type->Code ?? '')));
+        $name = preg_replace('/[\s\x{200C}]+/u', '', (string) ($type->DisplayName ?? ''));
+
+        if (($code === 'EMAIL' || $name === 'ایمیل') && ! filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            throw new CrmValidationException('آدرس ایمیل معتبر نیست. نمونه: name@example.com');
+        }
+
+        if ($code === 'WEBSITE' || $name === 'وبسایت') {
+            $url = preg_match('~^https?://~i', $value) ? $value : 'https://'.$value;
+            $parts = parse_url($url);
+            if (! filter_var($url, FILTER_VALIDATE_URL) || ! isset($parts['host'])
+                || ! str_contains($parts['host'], '.') || isset($parts['user']) || isset($parts['pass'])) {
+                throw new CrmValidationException('آدرس وب‌سایت معتبر نیست. نمونه: example.com یا https://example.com');
+            }
+        }
+
         return $this->store->saveContact([
             'contactId' => $input['contactId'] ?? null,
             'partyId' => $input['partyId'] ?? null,
             'personId' => $input['personId'] ?? null,
             'contactTypeId' => $input['contactTypeId'],
-            'contactValue' => trim($input['contactValue'] ?? ''),
+            'contactValue' => $value,
             'extension' => $input['extension'] ?? null,
             'description' => $input['description'] ?? null,
             'isPrimary' => (int) ($input['isPrimary'] ?? 0),
             'relatedPersonId' => $input['relatedPersonId'] ?? null,
+            'allowDuplicateLandline' => $input['allowDuplicateLandline'] ?? false,
             'userId' => $userId,
         ]);
     }

@@ -1,3 +1,4 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useState, useEffect, useRef } from 'react';
 import {
     Card,
@@ -10,7 +11,6 @@ import {
     Row,
     Col,
     Select,
-    Popconfirm,
 } from 'antd';
 import {
     PlusOutlined,
@@ -303,7 +303,7 @@ export default function MasterParametersIndex() {
                                 onClick={() => handleEdit(record)}
                             />
                         </Tooltip>
-                        <Popconfirm
+                        <Confirmation
                             title={isActive ? 'غیرفعال کردن پارامتر' : 'فعال کردن پارامتر'}
                             description="آیا مطمئن هستید؟"
                             onConfirm={() => handleToggleActive(record.MasterParameterID)}
@@ -318,7 +318,7 @@ export default function MasterParametersIndex() {
                                     style={{ color: isActive ? THEME.error : THEME.success }}
                                 />
                             </Tooltip>
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

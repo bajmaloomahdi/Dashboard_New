@@ -1,3 +1,4 @@
+import { showConfirmation } from '../../Components/Confirmation';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox, ColorPicker, Space, Tooltip, Tag } from 'antd';
 import { BgColorsOutlined, PaperClipOutlined, TagOutlined, UploadOutlined } from '@ant-design/icons';
@@ -352,7 +353,7 @@ export default function EventFormModal({
             const startsInPast = values.IsAllDay ? endDate < new Date() : startDate < new Date();
             if (startsInPast && (values.RecurrenceType ?? 'NONE') === 'NONE' && (!isEdit || canEditSchedule)) {
                 const proceed = await new Promise<boolean>((resolve) =>
-                    Modal.confirm({
+                    showConfirmation({
                         title: 'زمانِ رویداد گذشته است',
                         centered: true,
                         content: <div dir="rtl">زمانِ شروع ({gregorianToJalaliDateTimeDisplay(startDate)}) قبل از الان است و برایش یادآوری ارسال نمی‌شود. با همین زمان ذخیره شود؟</div>,

@@ -66,11 +66,10 @@ class HandleInertiaRequests extends Middleware
 
         try {
             // تعدادِ پیام‌هایِ دارایِ تغییرِ خوانده‌نشده (پیامِ تازه، توضیح/ضمیمهٔ تازه، ارجاع، …) — نه تعدادِ ردیف‌هایِ اعلان
-            return (int) DB::table('UserNotifications')
-                ->where('UserID', $userId)
-                ->where('IsRead', 0)
-                ->distinct()
-                ->count('MessageID');
+            return count(array_filter(
+                DB::select('EXEC dbo.sp_GetUserNotifications @UserID = ?', [$userId]),
+                fn ($row) => ! (int) $row->IsRead,
+            ));
         } catch (\Throwable $e) {
             return 0;
         }

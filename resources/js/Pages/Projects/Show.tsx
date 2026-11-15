@@ -22,8 +22,7 @@ import {
     InfoCircleOutlined,
     CommentOutlined,
     SolutionOutlined,
-    BankOutlined,
-} from '@ant-design/icons';
+    } from '@ant-design/icons';
 import { router, useForm, usePage } from '@inertiajs/react';
 import MainLayout from '../../Layouts/MainLayout';
 import DataGrid from '../../Components/DataGrid';
@@ -160,7 +159,7 @@ export default function ProjectShow() {
     const [taskTargetMember, setTaskTargetMember] = useState<Member | null>(null);
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'owner' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
     const [eventCount, setEventCount] = useState<number | null>(null);
     const [commentsAndAttachmentsCount, setCommentsAndAttachmentsCount] = useState<number | null>(null);
     const [now, setNow] = useState(Date.now);
@@ -353,7 +352,6 @@ export default function ProjectShow() {
 
     const tabDefs = [
         { key: 'info' as const, label: 'اطلاعات پروژه', icon: <InfoCircleOutlined />, count: null },
-        { key: 'owner' as const, label: 'مالک پروژه', icon: <BankOutlined />, count: null },
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
         { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
@@ -495,6 +493,7 @@ export default function ProjectShow() {
             <ChipTabs items={tabDefs} activeKey={activeTab} onChange={setActiveTab} />
             {activeTab === 'info' && (
                 <Card style={STYLES.card}>
+                    <ProjectOwnerTab projectId={project.ProjectID} owner={owner ?? null} allBrands={allBrands || []} canManage={isResponsible} />
                     <Descriptions bordered column={{ xs: 1, sm: 2, md: 3 }} size="middle">
                         <Descriptions.Item label="وضعیت">
                             <Tag color="blue" style={{ borderRadius: 6 }}>{project.ProjectStatusTitle}</Tag>
@@ -534,12 +533,6 @@ export default function ProjectShow() {
                             </Descriptions.Item>
                         ) : null}
                     </Descriptions>
-                </Card>
-            )}
-
-            {activeTab === 'owner' && (
-                <Card style={STYLES.card}>
-                    <ProjectOwnerTab projectId={project.ProjectID} owner={owner ?? null} allBrands={allBrands || []} canManage={isResponsible} />
                 </Card>
             )}
 

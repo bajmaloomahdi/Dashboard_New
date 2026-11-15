@@ -1,5 +1,6 @@
+import { Confirmation } from '../../Components/Confirmation';
 import { useEffect, useState } from 'react';
-import { Drawer, List, Button, Empty, Spin, Tag, Space, Typography, Form, Input, Select, TimePicker, Popconfirm, Divider } from 'antd';
+import { Drawer, List, Button, Empty, Spin, Tag, Space, Typography, Form, Input, Select, TimePicker, Divider } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { BellOutlined, PlusOutlined, DeleteOutlined, EditOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import PersianDateInput from '../../Components/PersianDateInput';
@@ -213,7 +214,7 @@ export default function RemindersDrawer({ open, onClose, users, permissions, cur
                                             isStandalone
                                                 ? [
                                                       <Button key="e" type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />,
-                                                      <Popconfirm
+                                                      <Confirmation
                                                           key="d"
                                                           title="حذف یادآوری؟"
                                                           okText="بله"
@@ -221,10 +222,10 @@ export default function RemindersDrawer({ open, onClose, users, permissions, cur
                                                           onConfirm={() => remove(r.ReminderID)}
                                                       >
                                                           <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                                                      </Popconfirm>,
+                                                      </Confirmation>,
                                                   ]
                                                 : [
-                                                      <Popconfirm
+                                                      <Confirmation
                                                           key="d"
                                                           title="حذف یادآوری این رویداد؟"
                                                           okText="بله"
@@ -232,7 +233,7 @@ export default function RemindersDrawer({ open, onClose, users, permissions, cur
                                                           onConfirm={() => remove(r.ReminderID)}
                                                       >
                                                           <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                                                      </Popconfirm>,
+                                                      </Confirmation>,
                                                   ]
                                         }
                                     >

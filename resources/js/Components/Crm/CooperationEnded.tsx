@@ -1,5 +1,6 @@
+import { Confirmation } from '../Confirmation';
 import { useState } from 'react';
-import { Alert, Button, Checkbox, Modal, Popconfirm, Space, Tag, Tooltip } from 'antd';
+import { Alert, Button, Checkbox, Modal, Space, Tag, Tooltip } from 'antd';
 import { EditOutlined, StopOutlined, UndoOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { crmApi } from './crmApi';
@@ -129,9 +130,9 @@ export function CooperationEndedAction({ entity, id, at, canManage, onSaved }: {
                 at ? (
                     <>
                         <Button size="small" icon={<EditOutlined />} onClick={openModal}>ویرایش</Button>
-                        <Popconfirm title="قطعِ همکاری برداشته شود؟" okText="بله" cancelText="خیر" onConfirm={() => send({ cooperationEnded: false })}>
+                        <Confirmation title="قطعِ همکاری برداشته شود؟" okText="بله" cancelText="خیر" onConfirm={() => send({ cooperationEnded: false })}>
                             <Button size="small" icon={<UndoOutlined />} loading={saving && !open}>برداشتن</Button>
-                        </Popconfirm>
+                        </Confirmation>
                     </>
                 ) : (
                     <Button size="small" danger icon={<StopOutlined />} onClick={openModal}>ثبتِ قطعِ همکاری</Button>

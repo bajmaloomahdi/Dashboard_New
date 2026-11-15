@@ -1,5 +1,6 @@
+import { Confirmation } from '../Confirmation';
 import { useState } from 'react';
-import { Button, Popconfirm } from 'antd';
+import { Button } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { crmApi } from './crmApi';
 
@@ -37,7 +38,7 @@ export default function CrmDeleteButton({ entity, id, label, onDone, text, size 
     };
 
     return (
-        <Popconfirm
+        <Confirmation
             title={`حذفِ ${label}`}
             description="این عملیات قابلِ بازگشت نیست. ادامه می‌دهید؟"
             onConfirm={handleDelete}
@@ -56,6 +57,6 @@ export default function CrmDeleteButton({ entity, id, label, onDone, text, size 
             >
                 {text}
             </Button>
-        </Popconfirm>
+        </Confirmation>
     );
 }

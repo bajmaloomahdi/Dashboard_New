@@ -1,6 +1,7 @@
+import { Confirmation } from '../../../Components/Confirmation';
 import PreferenceTable from '../../../Components/PreferenceTable';
 import { useState } from 'react';
-import { Card, Button, Input, InputNumber, Select, Space, Tag, Popconfirm, Typography, Alert, Empty } from 'antd';
+import { Card, Button, Input, InputNumber, Select, Space, Tag, Typography, Alert, Empty } from 'antd';
 import {
     PlusOutlined,
     SaveOutlined,
@@ -240,7 +241,7 @@ export default function ProcessConditionFieldsIndex() {
                 return (
                     <Space>
                         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                        <Popconfirm
+                        <Confirmation
                             title={active ? 'غیرفعال‌کردنِ فیلد' : 'فعال‌کردنِ فیلد'}
                             description={active ? 'این فیلد دیگر برایِ ساختِ Ruleِ جدید در دسترس نخواهد بود.' : 'آیا مطمئن هستید؟'}
                             onConfirm={() => handleToggle(r)}
@@ -248,7 +249,7 @@ export default function ProcessConditionFieldsIndex() {
                             cancelText="خیر"
                         >
                             <Button type="text" size="small" danger={active} loading={togglingId === r.FieldID} icon={active ? <StopOutlined /> : <CheckCircleOutlined />} />
-                        </Popconfirm>
+                        </Confirmation>
                     </Space>
                 );
             },

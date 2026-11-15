@@ -1,4 +1,4 @@
-import { Modal } from 'antd';
+import { showConfirmation } from '../Confirmation';
 import { crmApi, CrmApiResult } from './crmApi';
 
 interface DuplicateItem {
@@ -13,7 +13,7 @@ function confirmDuplicateName(res: CrmApiResult): Promise<boolean> {
     const more = Math.max(0, Number(res.duplicateCount || 0) - items.length);
 
     return new Promise((resolve) => {
-        Modal.confirm({
+        showConfirmation({
             title: 'نامِ تکراری',
             centered: true,
             okText: 'بله، ثبت شود',

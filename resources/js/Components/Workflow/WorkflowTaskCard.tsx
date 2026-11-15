@@ -1,5 +1,6 @@
+import { Confirmation } from '../Confirmation';
 import { useCallback, useEffect, useState } from 'react';
-import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Popconfirm, Empty, Modal, Input, Spin } from 'antd';
+import { Card, Descriptions, Tag, Space, Button, Timeline, Typography, Alert, Empty, Modal, Input, Spin } from 'antd';
 import {
     ApartmentOutlined,
     CheckCircleOutlined,
@@ -450,7 +451,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                         )}
 
                         {showRevoke && myDelegation && (
-                            <Popconfirm
+                            <Confirmation
                                 title="بازپس‌گیریِ تفویض"
                                 description={`مسئولیتِ تسک از «${myDelegation.FullName}» به شما بازمی‌گردد. ادامه می‌دهید؟`}
                                 onConfirm={handleRevoke}
@@ -460,7 +461,7 @@ export default function WorkflowTaskCard({ messageId, isWfTask, currentUserId, u
                                 <Button icon={<UndoOutlined />} loading={busyCode === 'revoke'} disabled={busyCode !== null && busyCode !== 'revoke'}>
                                     بازپس‌گیریِ تفویض
                                 </Button>
-                            </Popconfirm>
+                            </Confirmation>
                         )}
                     </Space>
                 )}

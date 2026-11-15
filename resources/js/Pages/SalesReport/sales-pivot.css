@@ -1,0 +1,34 @@
+.sales-pivot { padding: 12px; color: #102347; background: #edf3fb; border-radius: 16px; }
+.sales-pivot-header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; padding:14px 20px; border-radius:12px; background:linear-gradient(105deg,#31598c,#102951); color:white; margin-bottom:14px; }
+.sales-pivot-title { margin:0; font-size:22px; font-weight:800; }
+.sales-pivot-layout { display:grid; grid-template-areas:"main fields"; grid-template-columns:minmax(0,1fr) clamp(168px,17%,220px); align-items:start; gap:14px; }
+.sales-pivot-main { grid-area:main; min-width:0; display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+.sales-pivot-results { min-width:0; max-width:100%; }
+.sales-pivot-results .ant-table-cell { white-space:nowrap; }
+.sales-pivot-fields { grid-area:fields; min-width:0; }
+.sales-pivot .ant-card { border-color:#cfdef1; box-shadow:0 2px 8px #18365c12; }
+.sales-pivot .ant-card-head { color:#102347; font-weight:800; }
+.sales-pivot-hint { margin:0 0 12px; padding:9px 12px; border-radius:8px; background:#e1edff; color:#173b69; }
+.sales-pivot-zones { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.sales-pivot-zone { min-height:104px; padding:10px; border:1px solid var(--edge); background:var(--fill); border-radius:12px; }
+.zone-columns { --edge:#80b6ff; --fill:#dcecff; }
+.zone-filters { --edge:#bca3f4; --fill:#eee5ff; }
+.zone-rows { --edge:#eec189; --fill:#fff0db; }
+.zone-values { --edge:#94d6a4; --fill:#e2f6e8; }
+.sales-pivot-zone.is-over { outline:2px solid #176ce3; outline-offset:2px; }
+.sales-pivot-zone-title { margin:0 0 6px; font-size:16px; font-weight:800; }
+.sales-pivot-empty { color:#475c76; font-size:13px; }
+.sales-pivot-slot { border-top:2px solid transparent; padding-top:3px; }
+.sales-pivot-slot.is-over { border-color:#176ce3; }
+.sales-pivot-field-list { display:grid; gap:6px; margin-top:12px; }
+.sales-pivot-field,.sales-pivot-chip { display:flex; align-items:center; gap:8px; min-height:35px; padding:2px 8px; border:1px solid #c8d9ef; border-radius:8px; background:#fbfdff; box-shadow:0 1px 2px #18365c16; }
+.sales-pivot-field { justify-content:space-between; }
+.sales-pivot-chip-label { flex:1; min-width:0; }
+.sales-pivot-handle { touch-action:none; cursor:grab; border:0; background:transparent; color:#204575; border-radius:5px; padding:4px 7px; font-size:20px; line-height:1; }
+.sales-pivot-handle:hover,.sales-pivot-handle:focus-visible { background:#dcecff; }
+.sales-pivot-filter { width:100%; margin-top:4px; }
+.sales-pivot-number { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.sales-pivot .sales-pivot-subtotal > td { background:#e4efff; font-weight:600; }
+.sales-pivot .sales-pivot-total > td { background:#16427a; color:#fff; font-weight:800; }
+@media(max-width:780px) { .sales-pivot-layout { grid-template-areas:"fields" "main"; grid-template-columns:minmax(0,1fr); } .sales-pivot-field-list { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:440px) { .sales-pivot-zones { grid-template-columns:minmax(0,1fr); } }

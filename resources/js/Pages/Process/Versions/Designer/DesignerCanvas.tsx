@@ -1,3 +1,4 @@
+import { Confirmation } from '../../../../Components/Confirmation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ReactFlow,
@@ -18,7 +19,7 @@ import {
     type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Popconfirm, Divider, Checkbox, Tag, Switch } from 'antd';
+import { Button, Space, Input, InputNumber, Select, Typography, Empty, Tooltip, Divider, Checkbox, Tag, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { THEME, STYLES, columnHelpers } from '../../../../theme';
 import { designerNodeTypes, NODE_TYPE_META, type DesignerNodeData } from './nodeTypes';
@@ -647,9 +648,9 @@ function DesignerCanvasInner({ graph, readOnly, onChange, users, roles, position
                             </div>
                         )}
                         {!readOnly && selectedNode.type !== 'start' && (
-                            <Popconfirm title="حذفِ این آیتم؟" description="اتصال‌هایِ متصل به آن هم حذف می‌شوند." onConfirm={() => deleteNode(selectedNode.id)} okText="بله" cancelText="خیر">
+                            <Confirmation title="حذفِ این آیتم؟" description="اتصال‌هایِ متصل به آن هم حذف می‌شوند." onConfirm={() => deleteNode(selectedNode.id)} okText="بله" cancelText="خیر">
                                 <Button danger icon={<DeleteOutlined />} block>حذفِ آیتم</Button>
-                            </Popconfirm>
+                            </Confirmation>
                         )}
                     </Space>
                 ) : selectedEdge ? (

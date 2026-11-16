@@ -35,6 +35,7 @@ export interface CalendarEvent {
     AttendeeNames?: string[];
     EventID: number;
     OccurrenceKey: string;
+    OriginalOccurrenceStart?: string;
     IsRecurringInstance: boolean;
     Title: string;
     Description: string | null;

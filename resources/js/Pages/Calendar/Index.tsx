@@ -262,6 +262,7 @@ export default function CalendarIndex() {
     };
 
     const [formOpen, setFormOpen] = useState(false);
+    const [editOccurrence, setEditOccurrence] = useState<{ start: string; end: string } | null>(null);
     const [editingEventId, setEditingEventId] = useState<number | null>(null);
     const [defaultSlotDate, setDefaultSlotDate] = useState<Date | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -274,7 +275,8 @@ export default function CalendarIndex() {
     // Inertia هنگامِ رفتن به همین صفحه (اعلانِ داخلِ برنامه → /calendar?invites=1) کامپوننت را دوباره نمی‌سازد؛ با تغییرِ URL باز شود
     const pageUrl = usePage().url;
     const canEditEvents = can('CALENDAR_EDIT') || can('CALENDAR_EDIT_CONTENT');
-    const handleEditFromDetails = useCallback((eventId: number) => {
+    const handleEditFromDetails = useCallback((eventId: number, occurrence: { start: string; end: string } | null = null) => {
+        setEditOccurrence(occurrence);
         setDetailsOpen(false);
         setEditingEventId(eventId);
         setDefaultSlotDate(null);
@@ -532,7 +534,7 @@ export default function CalendarIndex() {
             return;
         }
         setDetailsEventId(event.EventID);
-        setDetailsOccurrence({ start: event.StartDateTime, end: event.EndDateTime });
+        setDetailsOccurrence({ start: event.OriginalOccurrenceStart ?? event.StartDateTime, end: event.EndDateTime });
         setDetailsOpen(true);
     };
     const handleOpenDay = (date: Date) => {
@@ -817,6 +819,7 @@ export default function CalendarIndex() {
                 permissions={permissions}
                 currentUserId={currentUserId}
                 eventId={editingEventId}
+                occurrence={editOccurrence}
                 defaultDate={defaultSlotDate}
                 units={sources?.units ?? []}
                 canLinkCrm={canLinkCrm}
@@ -830,7 +833,7 @@ export default function CalendarIndex() {
                 permissions={permissions}
                 reminderOptions={reminderOptions || []}
                 onClose={() => setDetailsOpen(false)}
-                onEdit={handleEditFromDetails}
+                onEdit={(id) => handleEditFromDetails(id, detailsOccurrence)}
                 onChanged={refreshAll}
                 onDeleted={() => {
                     setDetailsOpen(false);

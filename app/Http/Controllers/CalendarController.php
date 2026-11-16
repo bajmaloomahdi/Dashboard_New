@@ -222,7 +222,7 @@ class CalendarController extends Controller
     public function show(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_VIEW');
-        $occurrenceStart = $request->query('occurrence');
+        $occurrenceStart = $request->validate(['occurrence' => 'nullable|date'])['occurrence'] ?? null;
 
         $rows = DB::select('EXEC sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()]);
         $event = $rows[0] ?? null;
@@ -251,6 +251,19 @@ class CalendarController extends Controller
             }
         }
 
+        $seriesStart = $event->StartDateTime;
+        if ($occurrenceStart && ($event->RecurrenceType ?? 'NONE') !== 'NONE') {
+            $original = Carbon::parse($occurrenceStart);
+            $edit = $this->occurrenceEdits([$id])[$id][$original->toDateTimeString()] ?? null;
+            if ($edit) {
+                $this->applyOccurrenceEdit($event, $edit);
+            } else {
+                $duration = Carbon::parse($event->EndDateTime)->diffInSeconds(Carbon::parse($event->StartDateTime), true);
+                $event->StartDateTime = $original->toDateTimeString();
+                $event->EndDateTime = $original->copy()->addSeconds($duration)->toDateTimeString();
+            }
+        }
+
         // پچِ ۱۲۷: وضعیتِ همان وقوعی که باز شده (اگر جدا ثبت شده باشد؛ وگرنه وضعیتِ سری)
         $occurrenceStatus = null;
         if (($event->RecurrenceType ?? 'NONE') !== 'NONE') {
@@ -265,6 +278,7 @@ class CalendarController extends Controller
             'attachments'           => $this->eventAttachments($id),
             'links'                 => $this->eventLinks($id),
             'occurrenceStatus'      => $occurrenceStatus,
+            'seriesStart'           => $seriesStart,
         ]);
     }
 
@@ -753,6 +767,58 @@ class CalendarController extends Controller
         $this->saveEventLinks($eventId, $request);
 
         return response()->json(['success' => true, 'message' => $response['Message'], 'eventId' => $eventId]);
+    }
+
+    public function updateOccurrence(Request $request, int $id)
+    {
+        $canSchedule = $this->userCan('CALENDAR_EDIT');
+        $canContent = $this->userCan('CALENDAR_EDIT_CONTENT');
+        abort_unless($canSchedule || $canContent, 403);
+        $input = $this->validateEvent($request, true);
+        $key = Carbon::parse($request->validate(['OriginalStart' => 'required|date'])['OriginalStart']);
+        $event = DB::selectOne('EXEC dbo.sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()]);
+        abort_unless($event && (int) $event->CanManage === 1, 403);
+        abort_if(($event->RecurrenceType ?? 'NONE') === 'NONE', 422);
+        $original = collect($this->expandRecurrence($event, $key, $key))
+            ->first(fn ($row) => $row->StartDateTime === $key->toDateTimeString());
+        abort_unless($original, 422, 'نوبت انتخاب‌شده در این سری وجود ندارد.');
+        $previous = $this->occurrenceEdits([$id])[$id][$key->toDateTimeString()] ?? null;
+        if ($previous) $this->applyOccurrenceEdit($original, $previous);
+        $title = $canContent && array_key_exists('Title', $input) ? trim((string) $input['Title']) : null;
+        abort_if($title === '', 422, 'موضوع رویداد الزامی است.');
+        $result = DB::selectOne(
+            'EXEC dbo.sp_Calendar_SaveOccurrenceEdit @EventID=?, @OriginalStart=?, @StartDateTime=?, @EndDateTime=?, @IsAllDay=?, @Color=?, @Title=?, @Description=?, @UserID=?',
+            [$id, $key->toDateTimeString(), $canSchedule ? $input['StartDateTime'] : $original->StartDateTime,
+                $canSchedule ? $input['EndDateTime'] : $original->EndDateTime,
+                $canSchedule ? (int) ($input['IsAllDay'] ?? $original->IsAllDay) : (int) $original->IsAllDay,
+                $canSchedule ? ($input['Color'] ?? $original->Color) : $original->Color,
+                $title, $input['Description'] ?? null, Auth::id()]
+        );
+        abort_unless((int) ($result->Success ?? 0) === 1, 403);
+
+        return response()->json(['success' => true, 'message' => 'فقط همین نوبت ویرایش شد.']);
+    }
+
+    private function occurrenceEdits(array $eventIds): array
+    {
+        if (!$eventIds) return [];
+        $edits = [];
+        foreach (DB::select('EXEC dbo.sp_Calendar_GetOccurrenceEdits @EventIDs=?', [json_encode(array_values(array_unique($eventIds)), JSON_THROW_ON_ERROR)]) as $edit) {
+            $edits[(int) $edit->EventID][Carbon::parse($edit->OriginalStart)->toDateTimeString()] = $edit;
+        }
+
+        return $edits;
+    }
+
+    private function applyOccurrenceEdit(object $event, object $edit): void
+    {
+        foreach (['StartDateTime', 'EndDateTime', 'IsAllDay', 'Color'] as $field) {
+            $event->$field = $edit->$field;
+        }
+        if ($edit->Title !== null) {
+            $event->Title = $edit->Title;
+            $event->Description = $edit->Description;
+        }
     }
 
     public function update(Request $request, int $id)
@@ -1426,11 +1492,26 @@ class CalendarController extends Controller
         // پچِ ۱۲۷: وضعیتِ جداگانهٔ هر وقوعِ رویدادِ تکرارشونده (مثلاً فقط وقوعِ اول «انجام شده»)
         $recurringIds = collect($rows)->filter(fn ($r) => ($r->RecurrenceType ?? 'NONE') !== 'NONE')->pluck('EventID')->all();
         $overrides = CalendarOccurrenceStatuses::forEvents($recurringIds);
-        if ($overrides) {
-            foreach ($occurrences as $occ) {
-                $status = $overrides[(int) $occ->EventID][$occ->StartDateTime] ?? null;
-                if ($status !== null) {
-                    $occ->Status = $status;
+        $edits = $this->occurrenceEdits($recurringIds);
+        $occurrences = array_values(array_filter($occurrences, function ($occ) use ($overrides, $edits) {
+            $id = (int) $occ->EventID;
+            $key = $occ->StartDateTime;
+            if (isset($edits[$id][$key])) return false;
+            if (isset($overrides[$id][$key])) $occ->Status = $overrides[$id][$key];
+
+            return true;
+        }));
+        foreach ($rows as $row) {
+            $id = (int) $row->EventID;
+            foreach ($edits[$id] ?? [] as $key => $edit) {
+                if (Carbon::parse($edit->StartDateTime)->gt($to) || Carbon::parse($edit->EndDateTime)->lt($from)) continue;
+                $original = Carbon::parse($key);
+                foreach ($this->expandRecurrence($row, $original, $original) as $occ) {
+                    if ($occ->StartDateTime !== $key) continue;
+                    $occ->OriginalOccurrenceStart = $key;
+                    $this->applyOccurrenceEdit($occ, $edit);
+                    $occ->Status = $overrides[$id][$key] ?? $occ->Status;
+                    $occurrences[] = $occ;
                 }
             }
         }

@@ -322,6 +322,7 @@ Route::middleware('auth')->group(function () {
     // رویدادها
     Route::get('/calendar/events/{id}', [CalendarController::class, 'show'])->name('calendar.events.show');
     Route::post('/calendar/events', [CalendarController::class, 'store'])->name('calendar.events.store');
+    Route::put('/calendar/events/{id}/occurrence', [CalendarController::class, 'updateOccurrence'])->whereNumber('id');
     Route::put('/calendar/events/{id}', [CalendarController::class, 'update'])->name('calendar.events.update');
     // جابه‌جایی/تغییرِ مدت با Drag & Drop — فقط شروع و پایان
     Route::post('/calendar/events/{id}/move', [CalendarController::class, 'move'])->name('calendar.events.move');

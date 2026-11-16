@@ -1,4 +1,4 @@
-import { showConfirmation } from '../../Components/Confirmation';
+import { askConfirmation, showConfirmation } from '../../Components/Confirmation';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Form, Input, Select, Switch, Row, Col, Divider, Spin, Upload, Button, Checkbox, ColorPicker, Space, Tooltip, Tag } from 'antd';
 import { BgColorsOutlined, PaperClipOutlined, TagOutlined, UploadOutlined } from '@ant-design/icons';
@@ -28,6 +28,7 @@ interface EventFormModalProps {
     reminderOptions: ReminderOption[];
     permissions: CalendarPermission[];
     currentUserId: number;
+    occurrence?: { start: string; end: string } | null;
     eventId: number | null; // null = ایجاد رویداد جدید
     defaultDate: Date | null;
     /** واحدهایی که کاربر عضوِ مستقیمِ آن‌هاست (CanManageEvents = اجازهٔ رویدادِ واحد) */
@@ -122,6 +123,7 @@ export default function EventFormModal({
     permissions,
     currentUserId,
     eventId,
+    occurrence,
     defaultDate,
     units = [],
     canLinkCrm = false,
@@ -158,6 +160,8 @@ export default function EventFormModal({
     const [saving, setSaving] = useState(false);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [loadedEventId, setLoadedEventId] = useState<typeof eventId>(null);
+    const seriesAnchor = useRef<string | null>(null);
+    const loadedRecurrenceType = useRef('NONE');
     // ضمیمه‌ها (پچِ ۱۱۷): فایل‌هایِ قبلیِ رویداد + فایل‌هایِ تازه که پس از ذخیره بارگذاری می‌شوند
     const [existingFiles, setExistingFiles] = useState<EventAttachment[]>([]);
     const [newFiles, setNewFiles] = useState<File[]>([]);
@@ -254,8 +258,9 @@ export default function EventFormModal({
 
         const abort = new AbortController();
         setLoadedEventId(null);
+        loadedRecurrenceType.current = 'NONE';
         setLoadingDetail(true);
-        fetch(`/calendar/events/${eventId}`, {
+        fetch(`/calendar/events/${eventId}${occurrence ? "?occurrence=" + encodeURIComponent(occurrence.start) : ""}`, {
             signal: abort.signal,
             headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
             credentials: 'same-origin',
@@ -267,6 +272,8 @@ export default function EventFormModal({
             .then((data) => {
                 if (abort.signal.aborted) return;
                 const ev = data.event as CalendarEvent;
+                seriesAnchor.current = data.seriesStart ?? ev.StartDateTime;
+                loadedRecurrenceType.current = String(ev.RecurrenceType ?? 'NONE').trim().toUpperCase() || 'NONE';
                 if (Number(ev?.CanManage) !== 1) throw new Error('Event cannot be edited');
                 const evLinks: EventLink[] = data.links || [];
                 setLinks(evLinks);
@@ -318,7 +325,7 @@ export default function EventFormModal({
             .finally(() => { if (!abort.signal.aborted) setLoadingDetail(false); });
         return () => abort.abort();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, eventId, defaultDate]);
+    }, [open, eventId, defaultDate, occurrence?.start]);
 
     function toDateOnly(d: Date): string {
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -338,7 +345,21 @@ export default function EventFormModal({
             const values = await form.validateFields();
             setSaving(true);
 
-            const startDate = combine(values.StartDate, values.IsAllDay ? null : values.StartTime);
+            let singleOccurrence = false;
+            if (isEdit && loadedRecurrenceType.current !== 'NONE') {
+                const applyToAll = await askConfirmation({
+                    title: 'محدودهٔ ویرایش رویداد',
+                    content: 'تغییرات روی کدام نوبت‌ها اعمال شوند؟',
+                    okText: 'ویرایش همهٔ نوبت‌ها',
+                    cancelText: 'فقط همین نوبت',
+                    keyboard: false,
+                    closable: false,
+                    maskClosable: false,
+                });
+                singleOccurrence = !applyToAll;
+            }
+
+            let startDate = combine(values.StartDate, values.IsAllDay ? null : values.StartTime);
             let endDate = combine(showEndDate ? values.EndDate || values.StartDate : values.StartDate, values.IsAllDay ? null : values.EndTime);
             if (values.IsAllDay) endDate.setHours(23, 59, 0, 0);
             // بدونِ تاریخِ پایان: ساعتِ پایانِ کمتر از شروع یعنی فردا (مثلاً ۲۳:۳۰ تا ۰۰:۳۰)
@@ -348,6 +369,11 @@ export default function EventFormModal({
                 showNotification('error', 'تاریخ/ساعت پایان نمی‌تواند قبل از شروع باشد.');
                 setSaving(false);
                 return;
+            }
+            if (isEdit && occurrence && !singleOccurrence && seriesAnchor.current) {
+                const delta = new Date(seriesAnchor.current).getTime() - new Date(occurrence.start).getTime();
+                startDate = new Date(startDate.getTime() + delta);
+                endDate = new Date(endDate.getTime() + delta);
             }
             // شروعِ گذشته (مثلاً اشتباه در ساعت): یادآوری برایش ارسال نمی‌شود — اول تأیید
             const startsInPast = values.IsAllDay ? endDate < new Date() : startDate < new Date();
@@ -437,9 +463,15 @@ export default function EventFormModal({
                         : values.ReminderOffsetMinutes,
                 };
 
+            if (singleOccurrence && (newFiles.length || Object.values(linkPayload).some(value => value !== undefined))) {
+                showNotification('error', 'تغییر پیوندها یا افزودن ضمیمه فقط برای کل سری امکان‌پذیر است.');
+                return;
+            }
             // فقط مجوزِ موضوع/متن (بدونِ ویرایشِ زمان): مسیرِ جداگانهٔ همان دو فیلد
             const result = eventId
-                ? canEditSchedule
+                ? singleOccurrence
+                    ? await api(`/calendar/events/${eventId}/occurrence`, 'PUT', { ...payload, OriginalStart: occurrence?.start ?? seriesAnchor.current })
+                    : canEditSchedule
                     ? await api(`/calendar/events/${eventId}`, 'PUT', payload)
                     : await api(`/calendar/events/${eventId}/content`, 'POST', content)
                 : await api('/calendar/events', 'POST', payload);

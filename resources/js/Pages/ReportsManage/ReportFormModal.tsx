@@ -1,7 +1,7 @@
 import { ChartChoices, type ChartLayout } from '../SalesReport/Chart';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
-import { Modal, Form, Input, Row, Col, Button, Typography, Select, InputNumber, Switch, Divider } from 'antd';
+import { Alert, Modal, Form, Input, Row, Col, Button, Typography, Select, InputNumber, Switch, Divider, message } from 'antd';
 import {
     BarChartOutlined,
     SaveOutlined,
@@ -53,6 +53,8 @@ const toBool = (value: any): boolean => Number(value) === 1;
 
 export default function ReportFormModal({ open, onClose, editingReport, availableMenus }: ReportFormModalProps) {
     const [form] = Form.useForm();
+    const [feedback, feedbackHolder] = message.useMessage();
+    const [saveError, setSaveError] = useState('');
     const masterOptions = (usePage().props.pivotMasters ?? []) as {MasterParameterID:number; ParameterCaption:string}[];
     const isEdit = !!editingReport;
 
@@ -127,11 +129,19 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
     }, [open, data.ReportType, data.ViewSchema, data.ViewName, data.PivotConfig.fields.length]);
 
     const handleSubmit = () => {
+        setSaveError('');
         form.validateFields().then(() => {
             const options = {
                 preserveScroll: true,
-                onSuccess: () => handleClose(),
-                onError: () => {},
+                onSuccess: () => {
+                    handleClose();
+                    void feedback.success('گزارش با موفقیت ذخیره شد.');
+                },
+                onError: (validationErrors: Record<string, string>) => {
+                    const reason = Object.values(validationErrors)[0] || 'ذخیرهٔ گزارش انجام نشد.';
+                    setSaveError(reason);
+                    void feedback.error(reason);
+                },
             };
 
             transform(({PivotConfig: {chartDefault, ...config}, ...rest}) => ({...rest, PivotConfig: rest.ReportType === 'CHART' ? {...config, defaultLayout: chartDefault} : config}));
@@ -140,17 +150,25 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
             } else {
                 post('/reports-manage', options);
             }
+        }).catch((failure) => {
+            const errorFields = failure?.errorFields;
+            const reason = errorFields?.[0]?.errors?.[0] || 'ارسال گزارش برای ذخیره انجام نشد.';
+            setSaveError(reason);
+            void feedback.error(reason);
+            if (errorFields?.length) form.scrollToField(errorFields[0].name, { focus: true });
         });
     };
 
     const handleClose = () => {
+        setSaveError('');
         form.resetFields();
         reset();
         clearErrors();
         onClose();
     };
 
-    return (
+    return (<>
+        {feedbackHolder}
         <Modal
             title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -187,6 +205,7 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
             ]}
             styles={{ body: { paddingTop: 24 } }}
         >
+            {saveError && <Alert type="error" showIcon message={saveError} style={{ marginBottom: 16 }} />}
             <Form form={form} layout="vertical" requiredMark>
                 <Row gutter={16}>
                     <Col span={24}>
@@ -275,14 +294,44 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                             }}>افزودن پارامتر</Button>
                             {data.PivotConfig.parameters.map((parameter,index)=>{
                                 const change=(patch:Partial<PivotParameter>)=>setData('PivotConfig',{...data.PivotConfig,parameters:data.PivotConfig.parameters.map((p,i)=>i===index?{...p,...patch}:p)});
-                                return <fieldset key={index} style={{marginBlock:8,padding:8,border:'1px solid #ccd6e2'}}>
-                                    <Select aria-label="ستون پارامتر" value={parameter.field} onChange={field=>change({field})} options={data.PivotConfig.fields.map(f=>({value:f.name,label:f.label}))}/>
-                                    <Input placeholder="عنوان پارامتر" value={parameter.title} onChange={e=>change({title:e.target.value})}/>
-                                    <Select aria-label="عملگر" value={parameter.operator} options={['eq','gt','lt','between','in'].map(value=>({value,label:value}))} onChange={operator=>change({operator})}/>
-                                    <Switch checked={parameter.required} onChange={required=>change({required})}/> اجباری
-                                    <Select mode="tags" aria-label="مقادیر پیش‌فرض" value={parameter.default??[]} onChange={value=>change({default:value})} style={{minWidth:150}}/>
-                                    <Select aria-label="پارامتر مستر" allowClear showSearch optionFilterProp="label" value={parameter.master} onChange={master=>change({master})} options={masterOptions.map(item=>({value:item.MasterParameterID,label:item.ParameterCaption}))}/>
-                                    <Button danger onClick={()=>setData('PivotConfig',{...data.PivotConfig,parameters:data.PivotConfig.parameters.filter((_,i)=>i!==index)})}>حذف</Button>
+                                return <fieldset key={index} style={{marginBlock:12,padding:16,minWidth:0,border:'1px solid #ccd6e2',borderRadius:8}}>
+                                    <Row gutter={16}>
+                                        <Col xs={24} md={12}>
+                                            <Form.Item label="ستون پارامتر">
+                                                <Select aria-label="ستون پارامتر" value={parameter.field} onChange={field=>change({field})} options={data.PivotConfig.fields.map(f=>({value:f.name,label:f.label}))}/>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={12}>
+                                            <Form.Item label="عنوان پارامتر">
+                                                <Input aria-label="عنوان پارامتر" value={parameter.title} onChange={e=>change({title:e.target.value})}/>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={8}>
+                                            <Form.Item label="عملگر">
+                                                <Select aria-label="عملگر" value={parameter.operator} options={[
+                                                    { value: 'eq', label: 'برابر' },
+                                                    { value: 'gt', label: 'بزرگ‌تر از' },
+                                                    { value: 'lt', label: 'کوچک‌تر از' },
+                                                    { value: 'between', label: 'بین دو مقدار' },
+                                                    { value: 'in', label: 'عضو فهرست' },
+                                                ]} onChange={operator=>change({operator})}/>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} md={16}>
+                                            <Form.Item label="پارامتر مستر">
+                                                <Select aria-label="پارامتر مستر" allowClear showSearch optionFilterProp="label" value={parameter.master} onChange={master=>change({master})} options={masterOptions.map(item=>({value:item.MasterParameterID,label:item.ParameterCaption}))}/>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col span={24}>
+                                            <Form.Item label="مقادیر پیش‌فرض">
+                                                <Select mode="tags" aria-label="مقادیر پیش‌فرض" value={parameter.default??[]} onChange={value=>change({default:value})}/>
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                    <Row justify="space-between" align="middle" gutter={[12, 8]}>
+                                        <Col><Switch aria-label="پارامتر اجباری" checked={parameter.required} onChange={required=>change({required})}/> اجباری</Col>
+                                        <Col><Button danger onClick={()=>setData('PivotConfig',{...data.PivotConfig,parameters:data.PivotConfig.parameters.filter((_,i)=>i!==index)})}>حذف</Button></Col>
+                                    </Row>
                                 </fieldset>;
                             })}
                         </div> : (
@@ -424,5 +473,6 @@ export default function ReportFormModal({ open, onClose, editingReport, availabl
                 </Row>
             </Form>
         </Modal>
+    </>
     );
 }

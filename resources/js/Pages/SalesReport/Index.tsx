@@ -353,12 +353,15 @@ export function SalesPivot({ fields, userId, fieldLabels, measureFields, reportC
                                 const update = (next: string[]) => setParameterValues((current) => ({ ...current, [parameter.field]: next }));
                                 return <div key={parameter.field}>
                                     <div>{parameter.title}{parameter.required ? ' *' : ''}</div>
-                                    {parameter.operator === 'in' || parameter.options ? <Select
-                                        aria-label={parameter.title} style={{ minWidth: 170 }}
-                                        mode={parameter.operator === 'in' ? (parameter.options ? 'multiple' : 'tags') : undefined}
-                                        value={parameter.operator === 'in' ? values : values[0]}
+                                    {parameter.options ? <Select
+                                        aria-label={parameter.title} style={{ minWidth: 180 }} placeholder="جست‌وجو و انتخاب" showSearch={{ optionFilterProp: 'label' }}
+                                        mode="multiple" maxCount={20}
+                                        value={values}
                                         options={parameter.options ?? []} allowClear
-                                        onChange={(next) => update(Array.isArray(next) ? next : next ? [next] : [])} />
+                                        onChange={update} />
+                                        : parameter.operator === 'eq' || parameter.operator === 'in' ? <PivotFilter
+                                            reportUrl={reportUrl} field={parameter.field} caption={parameter.title} value={values}
+                                            onChange={update} parameterLookup />
                                         : Array.from({ length: parameter.operator === 'between' ? 2 : 1 }, (_, index) =>
                                             <Input key={index} aria-label={parameter.title + (index ? ' تا' : '')}
                                                 type={parameter.kind.startsWith('date') || parameter.kind === 'smalldatetime' ? 'date' : 'text'}

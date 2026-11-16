@@ -61,18 +61,35 @@ class PivotReportSource
             'PivotConfig.parameters.*.default.*' => 'required|string|max:200',
             'PivotConfig.parameters.*.master' => 'nullable|integer|min:1',
         ])['PivotConfig'];
-        foreach ($config['parameters'] as &$parameter) {
+        foreach ($config['parameters'] as $index => &$parameter) {
             $column = $columns[$parameter['field']];
             $parameter['kind'] = $column->kind;
-            abort_unless(in_array($parameter['field'], array_column($config['fields'], 'name'), true), 422);
-            abort_if(in_array($parameter['operator'], ['gt', 'lt', 'between'], true)
+            if (!in_array($parameter['field'], array_column($config['fields'], 'name'), true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "PivotConfig.parameters.$index.field" => 'ستون پارامتر را از فیلدهای گزارش انتخاب کنید.',
+                ]);
+            }
+            if (in_array($parameter['operator'], ['gt', 'lt', 'between'], true)
                 && !self::numeric($column->kind)
-                && !in_array($column->kind, ['date', 'datetime', 'datetime2', 'smalldatetime'], true), 422);
+                && !in_array($column->kind, ['date', 'datetime', 'datetime2', 'smalldatetime'], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "PivotConfig.parameters.$index.operator" => 'عملگر انتخاب‌شده فقط برای ستون عددی یا تاریخ قابل استفاده است.',
+                ]);
+            }
             if (!empty($parameter['master'])) {
                 $master = self::master($parameter['master']);
                 $masterKind = strtolower((string) ($master->DataType ?? ''));
-                abort_unless($master && filled($master->LookupProcedure) && in_array($parameter['operator'], ['eq', 'in'], true)
-                    && (self::numeric($masterKind) === self::numeric($column->kind)), 422);
+                $message = match (true) {
+                    !$master || blank($master->LookupProcedure) => 'پارامتر مستر فعال نیست یا رویهٔ دریافت گزینه ندارد.',
+                    !in_array($parameter['operator'], ['eq', 'in'], true) => 'برای پارامتر مستر، عملگر «برابر» یا «عضو فهرست» را انتخاب کنید.',
+                    ($masterKind === 'number' || self::numeric($masterKind)) !== self::numeric($column->kind) => 'نوع دادهٔ پارامتر مستر با ستون انتخاب‌شده سازگار نیست.',
+                    default => null,
+                };
+                if ($message !== null) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        "PivotConfig.parameters.$index.master" => $message,
+                    ]);
+                }
             }
         }
         unset($parameter);
@@ -133,7 +150,7 @@ class PivotReportSource
             $operator = $parameter['operator'];
             $valid = match ($operator) {
                 'between' => count($values) === 2,
-                'in' => count($values) >= 1,
+                'eq', 'in' => count($values) >= 1,
                 default => count($values) === 1,
             };
             foreach ($values as $value) {
@@ -153,8 +170,8 @@ class PivotReportSource
             if (!$valid) throw ValidationException::withMessages(["parameterValues.$field" => $parameter['title']]);
             match ($operator) {
                 'between' => $query->whereBetween($field, $values),
-                'in' => $query->whereIn($field, $values),
-                default => $query->where($field, ['eq'=>'=','gt'=>'>','lt'=>'<'][$operator], $values[0]),
+                'eq', 'in' => $query->whereIn($field, $values),
+                default => $query->where($field, ['gt'=>'>','lt'=>'<'][$operator], $values[0]),
             };
         }
         return $query;

@@ -166,6 +166,15 @@ class ReportController extends Controller
         $report = DB::selectOne('EXEC dbo.sp_GetReportInfo @ReportCode = ?, @UserID = ?', [$code, Auth::id()]);
         abort_unless($report, 403);
         [$labels, , $parameters] = PivotReportSource::context($report);
+        if ($request->boolean('parameterLookup')) {
+            $field = $request->validate(['field' => 'required|string'])['field'];
+            abort_unless(collect($parameters)->contains(fn ($parameter) =>
+                $parameter['field'] === $field && empty($parameter['master'])
+                && in_array($parameter['operator'], ['eq', 'in'], true)), 422);
+            return app(SalesReportController::class)->options(
+                $request, PivotReportSource::query($report, [], $request), [$field]
+            );
+        }
         $query = PivotReportSource::query($report, $parameters, $request);
         return app(SalesReportController::class)->options($request, $query, array_keys($labels));
     }

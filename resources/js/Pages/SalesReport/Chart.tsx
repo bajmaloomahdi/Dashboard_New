@@ -245,9 +245,9 @@ export default function Chart({fields,fieldLabels,measureFields,reportCode,title
                     const values=parameterValues[p.field]??p.default??[];
                     const update=(values:string[])=>setLayout({...layout,parameterValues:{...parameterValues,[p.field]:values}});
                     return <Space key={p.field} direction="vertical"><label>{p.title}{p.required?' *':''}</label>
-                        {p.options || p.operator==='in' ? <Select style={{minWidth:180}} allowClear value={p.operator==='in'?values:values[0]}
-                            mode={p.operator==='in'?(p.options?'multiple':'tags'):undefined} options={p.options}
-                            onChange={v=>update(Array.isArray(v)?v.map(String):v==null?[]:[String(v)])}/>
+                        {p.options ? <Select aria-label={p.title} placeholder="جست‌وجو و انتخاب" showSearch={{optionFilterProp:'label'}} style={{minWidth:180}} allowClear value={values}
+                            mode="multiple" maxCount={20} options={p.options} onChange={update}/>
+                            : p.operator==='eq' || p.operator==='in' ? <ReportValueFilter reportUrl={url} field={p.field} caption={p.title} value={values} onChange={update} parameterLookup/>
                             : Array.from({length:p.operator==='between'?2:1},(_,i)=><Input key={i} value={values[i]??''} onChange={e=>{const next=[...values];next[i]=e.target.value;update(Array.from(next,v=>v??''));}}/>)}
                     </Space>;
                 })}</Space>

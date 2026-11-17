@@ -275,7 +275,7 @@ class CalendarController extends Controller
             'event'                 => $event,
             'attendees'             => $attendees,
             'reminderOffsetMinutes' => $reminder,
-            'attachments'           => $this->eventAttachments($id),
+            'attachments'           => $this->eventAttachments($id, $this->activityOccurrence($request, $id)),
             'links'                 => $this->eventLinks($id),
             'occurrenceStatus'      => $occurrenceStatus,
             'seriesStart'           => $seriesStart,
@@ -285,11 +285,27 @@ class CalendarController extends Controller
     // ================= ضمیمه‌هایِ رویداد (پچِ ۱۱۷) =================
 
     /** ضمیمه‌هایِ فعالِ رویداد با آدرسِ دانلود (مسیرِ فیزیکی هرگز به مرورگر نمی‌رود) */
-    private function eventAttachments(int $eventId): array
+    private function activityOccurrence(Request $request, int $id, ?object $event = null): ?string
+    {
+        $start = $request->validate(['occurrence' => 'nullable|date'])['occurrence'] ?? null;
+        $event ??= DB::selectOne('EXEC dbo.sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()]);
+        if (!$event || ($event->RecurrenceType ?? 'NONE') === 'NONE') {
+            return null;
+        }
+
+        $key = Carbon::parse($start ?? $event->StartDateTime);
+        $originalStart = $key->toDateTimeString();
+        abort_unless(collect($this->expandRecurrence($event, $key, $key))
+            ->contains(fn ($row) => $row->StartDateTime === $originalStart), 422, 'نوبت انتخاب‌شده در این سری وجود ندارد.');
+
+        return $originalStart;
+    }
+
+    private function eventAttachments(int $eventId, ?string $originalStart = null): array
     {
         $files = app(CalendarAttachmentFiles::class);
 
-        return array_map(fn ($row) => $files->present($row), DB::select('EXEC sp_Calendar_GetEventAttachments @EventID = ?', [$eventId]));
+        return array_map(fn ($row) => $files->present($row), DB::select('EXEC sp_Calendar_GetEventAttachments @EventID = ?, @OriginalStart = ?', [$eventId, $originalStart]));
     }
 
     /** همان قاعدهٔ «جزئیاتِ رویداد» (show): مرتبط، CALENDAR_VIEW_OTHERS یا اشتراکِ READ؛ خصوصی فقط شرکت‌کنندگان؛ FREEBUSY نه */
@@ -442,14 +458,14 @@ class CalendarController extends Controller
     // ================= توضیحاتِ رویداد (پچِ ۱۲۹) =================
 
     /** GET /calendar/events/{id}/comments — CALENDAR_COMMENT_VIEW + دسترسی به جزئیاتِ همان رویداد */
-    public function comments(int $id)
+    public function comments(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_COMMENT_VIEW');
         if (!$this->canViewEventDetails($id)) {
             return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
         }
 
-        return response()->json(['success' => true, 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id])]);
+        return response()->json(['success' => true, 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?, @OriginalStart = ?', [$id, $this->activityOccurrence($request, $id)])]);
     }
 
     /**
@@ -518,7 +534,7 @@ class CalendarController extends Controller
             return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
         }
 
-        $res = (array) (DB::select('EXEC dbo.sp_Calendar_AddEventComment @EventID = ?, @CommentText = ?, @UserID = ?', [$id, $validated['Text'], Auth::id()])[0] ?? []);
+        $res = (array) (DB::select('EXEC dbo.sp_Calendar_AddEventComment @EventID = ?, @CommentText = ?, @UserID = ?, @OriginalStart = ?', [$id, $validated['Text'], Auth::id(), $this->activityOccurrence($request, $id)])[0] ?? []);
         if (empty($res['Success'])) {
             return response()->json(['success' => false, 'message' => $res['Message'] ?? 'خطا در ثبتِ توضیح'], 422);
         }
@@ -527,7 +543,7 @@ class CalendarController extends Controller
         return response()->json([
             'success'  => true,
             'message'  => $res['Message'],
-            'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id]),
+            'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?, @OriginalStart = ?', [$id, $this->activityOccurrence($request, $id)]),
         ]);
     }
 
@@ -543,14 +559,14 @@ class CalendarController extends Controller
         }
         $validated = $request->validate(['Description' => 'nullable|string|max:500'], ['Description.max' => 'توضیحِ ضمیمه حداکثر ۵۰۰ کاراکتر است.']);
         $res = (array) (DB::select(
-            'EXEC dbo.sp_Calendar_UpdateEventAttachmentDescription @CalendarEventAttachmentID = ?, @EventID = ?, @Description = ?, @UserID = ?',
-            [$attachmentId, $id, $validated['Description'] ?? null, Auth::id()],
+            'EXEC dbo.sp_Calendar_UpdateEventAttachmentDescription @CalendarEventAttachmentID = ?, @EventID = ?, @Description = ?, @UserID = ?, @OriginalStart = ?',
+            [$attachmentId, $id, $validated['Description'] ?? null, Auth::id(), $this->activityOccurrence($request, $id)],
         )[0] ?? []);
         if (empty($res['Success'])) {
             return response()->json(['success' => false, 'message' => $res['Message'] ?? 'ثبتِ توضیحِ ضمیمه ناموفق بود.'], 422);
         }
 
-        return response()->json(['success' => true, 'message' => $res['Message'], 'attachments' => $this->eventAttachments($id)]);
+        return response()->json(['success' => true, 'message' => $res['Message'], 'attachments' => $this->eventAttachments($id, $this->activityOccurrence($request, $id))]);
     }
 
     /**
@@ -592,14 +608,14 @@ class CalendarController extends Controller
             return response()->json(['success' => false, 'message' => 'دسترسی مجاز نیست.'], 403);
         }
         $res = (array) (DB::select(
-            'EXEC dbo.sp_Calendar_UpdateEventComment @CommentID = ?, @EventID = ?, @CommentText = ?, @UserID = ?',
-            [$commentId, $id, $validated['Text'], Auth::id()],
+            'EXEC dbo.sp_Calendar_UpdateEventComment @CommentID = ?, @EventID = ?, @CommentText = ?, @UserID = ?, @OriginalStart = ?',
+            [$commentId, $id, $validated['Text'], Auth::id(), $this->activityOccurrence($request, $id)],
         )[0] ?? []);
         if (empty($res['Success'])) {
             return response()->json(['success' => false, 'message' => $res['Message'] ?? 'ویرایشِ توضیح ناموفق بود.'], 422);
         }
 
-        return response()->json(['success' => true, 'message' => $res['Message'], 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?', [$id])]);
+        return response()->json(['success' => true, 'message' => $res['Message'], 'comments' => DB::select('EXEC dbo.sp_Calendar_GetEventComments @EventID = ?, @OriginalStart = ?', [$id, $this->activityOccurrence($request, $id)])]);
     }
 
     public function storeAttachments(Request $request, int $id)
@@ -630,15 +646,16 @@ class CalendarController extends Controller
         foreach ($files as $file) {
             $store->validate($file);
         }
+        $originalStart = $this->activityOccurrence($request, $id, $event);
         $saved = [];
         try {
-            DB::transaction(function () use ($files, $id, $store, $description, &$saved) {
+            DB::transaction(function () use ($files, $id, $store, $description, $originalStart, &$saved) {
                 foreach ($files as $file) {
                     $s = $store->store($file, $id);
                     $saved[] = $s['path'];
                     $res = (array) (DB::select(
-                        'EXEC sp_Calendar_AddEventAttachment @EventID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @UserID = ?, @Description = ?',
-                        [$id, $s['name'], $s['extension'], $s['size'], $s['path'], Auth::id(), $description]
+                        'EXEC sp_Calendar_AddEventAttachment @EventID = ?, @FileName = ?, @FileExtension = ?, @FileSize = ?, @FilePath = ?, @UserID = ?, @Description = ?, @OriginalStart = ?',
+                        [$id, $s['name'], $s['extension'], $s['size'], $s['path'], Auth::id(), $description, $originalStart]
                     )[0] ?? []);
                     if (empty($res['Success'])) {
                         throw new \RuntimeException($res['Message'] ?? 'ثبتِ فایل ناموفق بود.');
@@ -660,7 +677,7 @@ class CalendarController extends Controller
         return response()->json([
             'success' => true,
             'message' => count($files) > 1 ? count($files) . ' فایل ضمیمه شد.' : 'فایل ضمیمه شد.',
-            'attachments' => $this->eventAttachments($id),
+            'attachments' => $this->eventAttachments($id, $this->activityOccurrence($request, $id)),
         ]);
     }
 

@@ -25,7 +25,7 @@ function getXsrfToken(): string {
 }
 
 /** فهرستِ توضیحاتِ رویداد + ثبتِ توضیحِ تازه (اگر canAdd) + ویرایشِ متن (اگر canEdit — پچِ ۱۳۷) */
-export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { eventId: number; canAdd: boolean; canEdit?: boolean; onCount?: (n: number) => void }) {
+export function EventComments({ eventId, occurrenceStart, canAdd, canEdit = false, onCount }: { eventId: number; occurrenceStart?: string; canAdd: boolean; canEdit?: boolean; onCount?: (n: number) => void }) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editText, setEditText] = useState('');
     const [editSaving, setEditSaving] = useState(false);
@@ -44,7 +44,7 @@ export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { e
         let cancelled = false;
         setLoading(true);
         setError(null);
-        fetch(`/calendar/events/${eventId}/comments`, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        fetch(`/calendar/events/${eventId}/comments?occurrence=${encodeURIComponent(occurrenceStart ?? '')}`, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
             .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
             .then(({ ok, data }) => {
                 if (cancelled) return;
@@ -56,14 +56,14 @@ export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { e
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [eventId]);
+    }, [eventId, occurrenceStart]);
 
     const saveEdit = async (commentId: string) => {
         if (!editText.trim()) return;
         setEditSaving(true);
         setError(null);
         try {
-            const res = await fetch(`/calendar/events/${eventId}/comments/${commentId}`, {
+            const res = await fetch(`/calendar/events/${eventId}/comments/${commentId}?occurrence=${encodeURIComponent(occurrenceStart ?? '')}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': getXsrfToken() },
                 credentials: 'same-origin',
@@ -86,7 +86,7 @@ export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { e
         setSaving(true);
         setError(null);
         try {
-            const res = await fetch(`/calendar/events/${eventId}/comments`, {
+            const res = await fetch(`/calendar/events/${eventId}/comments?occurrence=${encodeURIComponent(occurrenceStart ?? '')}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': getXsrfToken() },
                 credentials: 'same-origin',
@@ -187,6 +187,7 @@ export function EventComments({ eventId, canAdd, canEdit = false, onCount }: { e
 /** جزئیات و توضیحات در دو تبِ جدا (تا پنجره شلوغ نشود)؛ بدونِ دسترسیِ دیدنِ توضیحات فقط همان جزئیات */
 export function EventDetailTabs({
     eventId,
+    occurrenceStart,
     canView,
     canAdd,
     canEditComments = false,
@@ -196,6 +197,7 @@ export function EventDetailTabs({
     children,
 }: {
     eventId: number;
+    occurrenceStart?: string;
     canView: boolean;
     canAdd: boolean;
     /** ویرایشِ متنِ توضیحات (CALENDAR_COMMENT_EDIT — پچِ ۱۳۷) */
@@ -208,7 +210,7 @@ export function EventDetailTabs({
     children: React.ReactNode;
 }) {
     const [count, setCount] = useState<number | null>(null);
-    useEffect(() => setCount(null), [eventId]);
+    useEffect(() => setCount(null), [eventId, occurrenceStart]);
     if (!canView) return <>{children}</>;
     const total = (count || 0) + attachmentCount;
 
@@ -226,7 +228,7 @@ export function EventDetailTabs({
                     children: (
                         <>
                             {attachments}
-                            <EventComments eventId={eventId} canAdd={canAdd} canEdit={canEditComments} onCount={setCount} />
+                            <EventComments key={occurrenceStart ?? eventId} eventId={eventId} occurrenceStart={occurrenceStart} canAdd={canAdd} canEdit={canEditComments} onCount={setCount} />
                         </>
                     ),
                 },

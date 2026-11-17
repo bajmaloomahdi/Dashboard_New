@@ -254,7 +254,7 @@ export default function EventDetailsModal({
     const uploadPending = async () => {
         if (!eventId || !pendingFiles.length) return;
         setUploading(true);
-        const res = await uploadEventAttachments(eventId, pendingFiles, pendingNote);
+        const res = await uploadEventAttachments(eventId, pendingFiles, pendingNote, occurrence?.start.slice(0, 19));
         setUploading(false);
         if (res.success) {
             notify('success', res.message || 'فایل ضمیمه شد.');
@@ -268,7 +268,7 @@ export default function EventDetailsModal({
     };
     const saveAttachmentNote = async (attachmentId: number, description: string) => {
         if (!eventId) return false;
-        const res = await saveEventAttachmentDescription(eventId, attachmentId, description);
+        const res = await saveEventAttachmentDescription(eventId, attachmentId, description, occurrence?.start.slice(0, 19));
         if (res.success) {
             if (res.attachments) setAttachments(res.attachments);
             notify('success', res.message || 'توضیحِ ضمیمه ثبت شد.');
@@ -359,6 +359,7 @@ export default function EventDetailsModal({
                         <EventDetailTabs
                             onTabChange={setActiveTab}
                             eventId={Number(event.EventID)}
+                            occurrenceStart={occurrence?.start.slice(0, 19)}
                             canView={canViewComments}
                             canAdd={permissions.includes('CALENDAR_COMMENT_ADD')}
                             canEditComments={permissions.includes('CALENDAR_COMMENT_EDIT')}

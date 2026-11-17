@@ -100,9 +100,9 @@ function getXsrfToken(): string {
 }
 
 /** ثبت/تغییرِ توضیحِ یک ضمیمه (پچِ ۱۳۷) */
-export async function saveEventAttachmentDescription(eventId: number, attachmentId: number, description: string): Promise<{ success: boolean; message: string; attachments?: EventAttachment[] }> {
+export async function saveEventAttachmentDescription(eventId: number, attachmentId: number, description: string, occurrenceStart?: string): Promise<{ success: boolean; message: string; attachments?: EventAttachment[] }> {
     try {
-        const res = await fetch(`/calendar/events/${eventId}/attachments/${attachmentId}/description`, {
+        const res = await fetch(`/calendar/events/${eventId}/attachments/${attachmentId}/description?occurrence=${encodeURIComponent(occurrenceStart ?? '')}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken(), 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
             credentials: 'same-origin',
@@ -118,12 +118,12 @@ export async function saveEventAttachmentDescription(eventId: number, attachment
 }
 
 /** بارگذاریِ فایل‌ها برایِ یک رویداد (همه یا هیچ در سرور) */
-export async function uploadEventAttachments(eventId: number, files: File[], description?: string): Promise<{ success: boolean; message: string; attachments?: EventAttachment[] }> {
+export async function uploadEventAttachments(eventId: number, files: File[], description?: string, occurrenceStart?: string): Promise<{ success: boolean; message: string; attachments?: EventAttachment[] }> {
     const form = new FormData();
     files.forEach((f) => form.append('files[]', f));
     if (description && description.trim()) form.append('Description', description.trim()); // پچِ ۱۳۷
     try {
-        const res = await fetch(`/calendar/events/${eventId}/attachments`, {
+        const res = await fetch(`/calendar/events/${eventId}/attachments?occurrence=${encodeURIComponent(occurrenceStart ?? '')}`, {
             method: 'POST',
             headers: { 'X-XSRF-TOKEN': getXsrfToken(), 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
             credentials: 'same-origin',

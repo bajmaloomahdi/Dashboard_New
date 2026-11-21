@@ -1,5 +1,6 @@
 import { newestFirst } from '../../Utils/newestFirst';
 import PreferenceTable from '../../Components/PreferenceTable';
+import RelatedAttachments from '../../Components/RelatedAttachments';
 import { useState, useEffect } from 'react';
 import {
     Card,
@@ -790,43 +791,9 @@ export default function MessageShow() {
                 headStyle={gradientHeadStyle}
                 style={{ ...STYLES.card, marginBottom: 16 }}
             >
-                {commentList.length === 0 ? (
-                    <Empty description="هنوز توضیحی ثبت نشده است" />
-                ) : (
-                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        {commentList.map((c) => (
-                            <div
-                                key={c.MessageCommentID}
-                                style={{
-                                    background: '#fafafa',
-                                    borderRadius: 10,
-                                    padding: '12px 16px',
-                                    width: '100%',
-                                }}
-                            >
-                                <Space wrap>
-                                    <Avatar size={28} style={{ background: '#667eea', fontSize: 13 }}>
-                                        {c.UserName ? c.UserName.charAt(0) : <UserOutlined />}
-                                    </Avatar>
-                                    <Text strong>{c.UserName}</Text>
-                                    <Text type="secondary" style={{ fontSize: 11 }}>
-                                        <ClockCircleOutlined /> {new Date(c.CreateDate).toLocaleString('fa-IR')}
-                                    </Text>
-                                </Space>
-                                <div style={{ marginTop: 8 }}>
-                                    <Text className="msg-longtext" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, display: 'block' }}>
-                                        {c.Comment || ''}
-                                    </Text>
-                                </div>
-                            </div>
-                        ))}
-                    </Space>
-                )}
-
                 {/* فرم افزودن نظر — فقط اگه مجاز باشه */}
                 {canComment ? (
                     <>
-                        <Divider style={{ margin: '20px 0 16px' }} />
                         {commentErrors?.comment ? (
                             <Alert type="error" message={commentErrors.comment} showIcon style={{ marginBottom: 12, borderRadius: 8 }} />
                         ) : null}
@@ -863,8 +830,42 @@ export default function MessageShow() {
                                 {getSubmitButtonText()}
                             </Button>
                         </Row>
+                        <Divider style={{ margin: '16px 0' }} />
                     </>
                 ) : null}
+                {commentList.length === 0 ? (
+                    <Empty description="هنوز توضیحی ثبت نشده است" />
+                ) : (
+                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                        {commentList.map((c) => (
+                            <div
+                                key={c.MessageCommentID}
+                                style={{
+                                    background: '#fafafa',
+                                    borderRadius: 10,
+                                    padding: '12px 16px',
+                                    width: '100%',
+                                }}
+                            >
+                                <Space wrap>
+                                    <Avatar size={28} style={{ background: '#667eea', fontSize: 13 }}>
+                                        {c.UserName ? c.UserName.charAt(0) : <UserOutlined />}
+                                    </Avatar>
+                                    <Text strong>{c.UserName}</Text>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        <ClockCircleOutlined /> {new Date(c.CreateDate).toLocaleString('fa-IR')}
+                                    </Text>
+                                </Space>
+                                <div style={{ marginTop: 8 }}>
+                                    <Text className="msg-longtext" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, display: 'block' }}>
+                                        {c.Comment || ''}
+                                    </Text>
+                                </div>
+                            </div>
+                        ))}
+                    </Space>
+                )}
+
             </Card>
 
             {/* ضمیمه‌ها */}
@@ -878,6 +879,7 @@ export default function MessageShow() {
                 headStyle={gradientHeadStyle}
                 style={{ ...STYLES.card, marginBottom: 16 }}
             >
+                <RelatedAttachments kind="message" id={Number(msg.MessageID)} />
                 {attachmentList.length === 0 ? (
                     <Empty description="ضمیمه‌ای ثبت نشده است" />
                 ) : (

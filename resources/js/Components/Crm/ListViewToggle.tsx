@@ -1,8 +1,21 @@
 import { useState } from 'react';
-import { Segmented, Tooltip } from 'antd';
+import { Pagination, Segmented, Tooltip } from 'antd';
 import { AppstoreOutlined, TableOutlined } from '@ant-design/icons';
 
 export type ListViewMode = 'cards' | 'grid';
+
+export function useCardPage<T>(items: readonly T[]) {
+    const [requestedPage, setPage] = useState(1);
+    const pageSize = 24;
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(items.length / pageSize)));
+
+    return {
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+        pagination: <Pagination current={page} pageSize={pageSize} total={items.length}
+            hideOnSinglePage showSizeChanger={false} onChange={setPage}
+            style={{ marginBlockStart: 16 }} />,
+    };
+}
 
 /**
  * نحوهٔ نمایشِ فهرست (کارت/جدول) — انتخابِ هر کاربر در مرورگرِ خودش (localStorage) به ازایِ هر صفحه

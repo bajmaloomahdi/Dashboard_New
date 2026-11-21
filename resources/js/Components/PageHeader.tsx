@@ -24,6 +24,7 @@ interface PageHeaderProps {
     subtitle?: ReactNode;
     tags?: HeroTag[];
     stats?: HeroStat[];
+    roomyStats?: boolean;
     /** محتوای سمت راست هدر (مثلاً حلقه‌ی پیشرفت) */
     aside?: ReactNode;
     /** دکمه‌ی بازگشت؛ اگر ندهید نمایش داده نمی‌شود */
@@ -43,6 +44,7 @@ export default function PageHeader({
     subtitle,
     tags,
     stats,
+    roomyStats = false,
     aside,
     backHref,
     backLabel = 'بازگشت',
@@ -95,7 +97,7 @@ export default function PageHeader({
                     ) : null}
 
                     {stats && stats.length > 0 ? (
-                        <div className="page-hero-stats">
+                        <div className={roomyStats ? 'page-hero-stats page-hero-stats--roomy' : 'page-hero-stats'}>
                             {stats.map((s, i) => (
                                 <div className="page-hero-stat" key={i}>
                                     {s.icon}
@@ -195,6 +197,10 @@ export default function PageHeader({
                     font-size: 13px;
                     font-weight: 600;
                 }
+                .page-hero-stats--roomy { margin-top: 18px; }
+                .page-hero-stats--roomy .page-hero-stat { font-size: 20px; }
+                .page-hero-stats--roomy .page-hero-stat-label { font-size: 13px; }
+                .page-hero-stats--roomy .page-hero-stat-value { font-size: 16px; }
                 .page-hero-aside {
                     display: flex;
                     flex-direction: column;

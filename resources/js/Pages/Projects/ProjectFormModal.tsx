@@ -273,14 +273,14 @@ export default function ProjectFormModal({
                     </Col>
 
                     <Col span={24}>
-                        <Form.Item label="پروژهٔ والد" validateStatus={errors.ParentProjectID ? 'error' : undefined}
-                            help={errors.ParentProjectID ?? (toBool(editingProject?.HasParentProject) && editingProject?.ParentProjectID == null ? 'والد فعلی در فهرست پروژه‌های قابل دسترس شما نیست.' : undefined)}>
+                        {!isEdit && <Form.Item label="پروژهٔ والد" validateStatus={errors.ParentProjectID ? 'error' : undefined}
+                            help={errors.ParentProjectID}>
                             <Select aria-label="پروژهٔ والد" allowClear showSearch optionFilterProp="label"
                                 placeholder="بدون والد" value={data.ParentProjectID ?? undefined}
                                 onChange={(value) => setData('ParentProjectID', value ?? null)}
                                 options={parentOptions.filter(({ id }) => String(id) !== String(editingProject?.ProjectID))
                                     .map(({ id, title }) => ({ value: String(id), label: title }))} />
-                        </Form.Item>
+                        </Form.Item>}
                         <Form.Item label="دپارتمان" validateStatus={errors.DepartmentID ? 'error' : undefined} help={errors.DepartmentID}>
                             <Select aria-label="دپارتمان" allowClear showSearch optionFilterProp="label"
                                 placeholder="بدون دپارتمان" value={data.DepartmentID ?? undefined}

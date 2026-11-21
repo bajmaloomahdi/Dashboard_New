@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
-import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../../Utils/jalali';
 
 const { Text } = Typography;
 
@@ -21,6 +21,8 @@ export interface PartyAttachment {
     Description: string | null;
     Date_InsertFirst: string;
     CreatedByName: string | null;
+    EditedAt?: string | null;
+    EditedByName?: string | null;
     /** Routeِ امنِ دانلود (crm.party-attachments.download) — مسیرِ فیزیکیِ فایل هرگز به Frontend نمی‌آید */
     DownloadUrl: string;
 }
@@ -157,6 +159,7 @@ export default function PartyAttachmentsPanel({ partyId, items: initialItems, ca
         if (res.success) {
             setFiles((list) => list.map((f) => (f.PartyAttachmentID === attachmentId ? { ...f, Description: editValue.trim() || null } : f)));
             cancelEdit();
+            await reload();
         }
     };
 
@@ -229,6 +232,9 @@ export default function PartyAttachmentsPanel({ partyId, items: initialItems, ca
                                     <Text type="secondary" className="crm-party-attachment-meta">
                                         {formatSize(f.FileSize)} — {f.CreatedByName || '—'} — {f.Date_InsertFirst ? gregorianToJalaliDisplay(f.Date_InsertFirst) : '—'}
                                     </Text>
+                                    {f.EditedAt && <Text type="secondary" className="crm-party-attachment-meta">
+                                        ویرایش‌شده{f.EditedByName ? ` توسط ${f.EditedByName}` : ''} — {gregorianToJalaliDateTimeDisplay(f.EditedAt)}
+                                    </Text>}
                                 </div>
                                 <Space size={4} className="crm-party-attachment-actions">
                                     <Tooltip title="دانلود">

@@ -224,6 +224,17 @@ export default function ProjectContractorInteractionModal({
 
                     <div>
                         <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>پیوست‌ها</Text>
+                        <Upload
+                            multiple
+                            showUploadList={false}
+                            disabled={saving}
+                            beforeUpload={(file) => {
+                                addPending(file);
+                                return false; // ارسال فقط همراهِ «ذخیره»
+                            }}
+                        >
+                            <Button size="small" icon={<PaperClipOutlined />} disabled={saving}>افزودنِ فایل</Button>
+                        </Upload>
                         {pending.map((p) => (
                             <div key={p.uid} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '4px 8px', background: '#f6ffed', border: '1px solid #d9f7be', borderRadius: 6 }}>
                                 <PaperClipOutlined />
@@ -243,17 +254,6 @@ export default function ProjectContractorInteractionModal({
                                 </Tooltip>
                             </div>
                         ))}
-                        <Upload
-                            multiple
-                            showUploadList={false}
-                            disabled={saving}
-                            beforeUpload={(file) => {
-                                addPending(file);
-                                return false; // ارسال فقط همراهِ «ذخیره»
-                            }}
-                        >
-                            <Button size="small" icon={<PaperClipOutlined />} disabled={saving}>افزودنِ فایل</Button>
-                        </Upload>
                         <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
                             هر فایل حداکثر ۱۰ مگابایت، در هر بار حداکثر ۱۰ فایل؛ فایل‌هایِ اجرایی/اسکریپتی مجاز نیستند.
                         </Text>

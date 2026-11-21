@@ -14,7 +14,7 @@ import { crmApi } from '../../../Components/Crm/crmApi';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
 import PersianDateInput from '../../../Components/PersianDateInput';
 import { toBool } from '../../../Utils/bool';
-import { gregorianToJalaliDisplay } from '../../../Utils/jalali';
+import { gregorianToJalaliDateTimeDisplay, gregorianToJalaliDisplay } from '../../../Utils/jalali';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 
 const { Text } = Typography;
@@ -36,6 +36,8 @@ interface InteractionAttachment {
     Description: string | null;
     CreatedByName: string | null;
     Date_InsertFirst: string;
+    EditedAt?: string | null;
+    EditedByName?: string | null;
     /** Routeِ دانلودِ دارایِ Permission — مسیرِ فیزیکیِ فایل هرگز به Frontend نمی‌آید */
     DownloadUrl: string;
 }
@@ -67,6 +69,8 @@ interface Interaction {
     Subject: string;
     Description: string | null;
     Outcome: string | null;
+    Date_LastUpdate?: string | null;
+    UserID_LastUpdate?: number | null;
     InteractionDate: string;
     Status: InteractionStatus;
     FollowUpOfID: number | null;
@@ -91,7 +95,7 @@ interface InteractionsPanelProps {
     canDelete?: boolean;
 }
 
-/** پروژه‌ای که همین Party پیمانکارِ فعالِ آن است (GET crm/parties/{partyId}/projects — Stage B) */
+/** پروژه‌ای که طرف‌حساب مالک یا پیمانکار فعال آن است (GET crm/parties/{partyId}/projects — Stage B) */
 interface PartyProject {
     ProjectID: number;
     ProjectTitle: string;
@@ -195,6 +199,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [existing, setExisting] = useState<InteractionAttachment[]>([]);
     const [removedIds, setRemovedIds] = useState<number[]>([]);
+    const [attachmentDescriptions, setAttachmentDescriptions] = useState<Record<number, string>>({});
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
 
     const isEdit = draft.id !== null;
@@ -209,7 +214,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
     };
 
     /**
-     * پروژه‌هایی که همین Party پیمانکارِ فعالِ آن‌هاست (Stage B: GET crm/parties/{partyId}/projects).
+     * پروژه‌هایی که طرف‌حساب مالک یا پیمانکار فعال آن‌هاست (Stage B: GET crm/parties/{partyId}/projects).
      * فقط یک‌بار و فقط هنگامِ نیازِ واقعی (تیک‌خوردنِ Checkbox یا ویرایشِ تعاملِ دارایِ Project) بارگذاری می‌شود.
      */
     const loadPartyProjects = async (forPartyId: number | null) => {
@@ -229,6 +234,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         setPending([]);
         setExisting(current);
         setRemovedIds([]);
+        setAttachmentDescriptions({});
     };
 
     // چند فایل پشتِ‌سرِهم از beforeUpload می‌رسند؛ خطایِ یک فایل بقیه را متوقف نمی‌کند (سقفِ تعداد هنگامِ ذخیره بررسی می‌شود)
@@ -298,6 +304,11 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
      */
     const syncAttachments = async (interactionId: number): Promise<string | null> => {
         const problems: string[] = [];
+        for (const [id, description] of Object.entries(attachmentDescriptions)) {
+            if (removedIds.includes(Number(id))) continue;
+            const response = await crmApi(`/crm/interactions/${interactionId}/attachments/${id}`, 'PUT', { description: description.trim() || null });
+            if (!response.ok || !response.success) problems.push(response.message);
+        }
         for (const id of removedIds) {
             const del = await crmApi(`/crm/interaction-attachments/${id}/delete`, 'POST');
             if (!del.ok || !del.success) problems.push(del.message);
@@ -411,7 +422,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
         return true;
     });
 
-    /** گزینه‌هایِ Selectِ پروژه در فرم: لیستِ زندهٔ پیمانکاریِ فعال + (هنگامِ ویرایش) پروژهٔ فعلیِ رکورد
+    /** گزینه‌هایِ Selectِ پروژه در فرم: فهرست پروژه‌های مالکیت و پیمانکاری فعال + (هنگامِ ویرایش) پروژهٔ فعلیِ رکورد
      * حتی اگر رابطهٔ پیمانکاری از آن زمان غیرفعال شده باشد — تا ویرایش هیچ‌وقت گزینهٔ خالی نشان ندهد. */
     const formProjectOptions = (() => {
         const list = [...partyProjects];
@@ -434,6 +445,20 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
             },
         },
         { title: 'کاربر ثبت‌کننده', dataIndex: 'CreatedByName', key: 'CreatedByName', width: 140, render: (v) => v || <Text type="secondary">—</Text> },
+        {
+            title: 'آخرین ویرایش',
+            key: 'lastEdit',
+            width: 180,
+            sorter: (a, b) => compareGridValues(a.Date_LastUpdate, b.Date_LastUpdate),
+            render: (_, row) => {
+                if (!row.Date_LastUpdate) return <Text type="secondary">—</Text>;
+                const editor = users.find((user) => Number(user.UserID) === Number(row.UserID_LastUpdate));
+                return <Space direction="vertical" size={0}>
+                    <Text>{editor?.FullName || (row.UserID_LastUpdate ? `کاربر شمارهٔ ${row.UserID_LastUpdate}` : 'کاربر نامشخص')}</Text>
+                    <Text type="secondary">{gregorianToJalaliDateTimeDisplay(row.Date_LastUpdate)}</Text>
+                </Space>;
+            },
+        },
         {
             title: 'نوع تعامل',
             key: 'type',
@@ -463,6 +488,9 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                                     <PaperClipOutlined />
                                     <a href={a.DownloadUrl} title={`دانلودِ ${a.FileName} (${formatSize(a.FileSize)})`}>{a.FileName}</a>
                                     {a.Description ? <Text type="secondary"> — {a.Description}</Text> : null}
+                                    {a.EditedAt && <Text type="secondary">
+                                        ویرایش‌شده{a.EditedByName ? ` توسط ${a.EditedByName}` : ''} — {gregorianToJalaliDateTimeDisplay(a.EditedAt)}
+                                    </Text>}
                                 </div>
                             ))}
                         </div>
@@ -702,7 +730,7 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                                     onChange={(v) => setDraft((d) => ({ ...d, projectId: v ?? null }))}
                                     options={formProjectOptions.map((p) => ({ value: p.ProjectID, label: p.ProjectTitle }))}
                                     filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                                    notFoundContent={partyProjectsLoading ? 'در حالِ بارگذاری...' : 'این طرف‌حساب پیمانکارِ فعالِ هیچ پروژه‌ای نیست'}
+                                    notFoundContent={partyProjectsLoading ? 'در حالِ بارگذاری...' : 'این طرف‌حساب مالک یا پیمانکار فعال هیچ پروژه‌ای نیست'}
                                 />
                             </div>
                         ) : null}
@@ -725,26 +753,17 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
 
                     <div className="crm-int-attach">
                         <Text style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>پیوست‌ها</Text>
-                        {newestFirst(existing, (a) => a.Date_InsertFirst, (a) => a.InteractionAttachmentID).map((a) => {
-                            const removed = removedIds.includes(a.InteractionAttachmentID);
-                            return (
-                                <div key={a.InteractionAttachmentID} className={`crm-int-attach-row${removed ? ' is-removed' : ''}`}>
-                                    <PaperClipOutlined />
-                                    <a href={a.DownloadUrl} className="crm-int-attach-name" title={a.FileName}>{a.FileName}</a>
-                                    <Text type="secondary" className="crm-int-attach-size">{formatSize(a.FileSize)}</Text>
-                                    <Text type="secondary" className="crm-int-attach-desc" ellipsis={{ tooltip: a.Description || undefined }}>{a.Description || ''}</Text>
-                                    {removed ? (
-                                        <Tooltip title="بازگرداندن">
-                                            <Button type="text" size="small" icon={<UndoOutlined />} disabled={saving} onClick={() => setRemovedIds((ids) => ids.filter((x) => x !== a.InteractionAttachmentID))} />
-                                        </Tooltip>
-                                    ) : (
-                                        <Tooltip title="حذفِ پیوست (با ذخیره اعمال می‌شود)">
-                                            <Button type="text" size="small" danger icon={<DeleteOutlined />} disabled={saving} onClick={() => setRemovedIds((ids) => [...ids, a.InteractionAttachmentID])} />
-                                        </Tooltip>
-                                    )}
-                                </div>
-                            );
-                        })}
+                        <Upload
+                            multiple
+                            showUploadList={false}
+                            disabled={saving}
+                            beforeUpload={(file) => {
+                                addPending(file);
+                                return false; // ارسال فقط همراهِ «ذخیره»
+                            }}
+                        >
+                            <Button size="small" icon={<PaperClipOutlined />} disabled={saving}>افزودنِ فایل</Button>
+                        </Upload>
                         {pending.map((p) => (
                             <div key={p.uid} className="crm-int-attach-row is-new">
                                 <PaperClipOutlined />
@@ -764,17 +783,32 @@ export default function InteractionsPanel({ partyId, personId, items: initialIte
                                 </Tooltip>
                             </div>
                         ))}
-                        <Upload
-                            multiple
-                            showUploadList={false}
-                            disabled={saving}
-                            beforeUpload={(file) => {
-                                addPending(file);
-                                return false; // ارسال فقط همراهِ «ذخیره»
-                            }}
-                        >
-                            <Button size="small" icon={<PaperClipOutlined />} disabled={saving}>افزودنِ فایل</Button>
-                        </Upload>
+                        {newestFirst(existing, (a) => a.Date_InsertFirst, (a) => a.InteractionAttachmentID).map((a) => {
+                            const removed = removedIds.includes(a.InteractionAttachmentID);
+                            return (
+                                <div key={a.InteractionAttachmentID} className={`crm-int-attach-row${removed ? ' is-removed' : ''}`}>
+                                    <PaperClipOutlined />
+                                    <a href={a.DownloadUrl} className="crm-int-attach-name" title={a.FileName}>{a.FileName}</a>
+                                    <Text type="secondary" className="crm-int-attach-size">{formatSize(a.FileSize)}</Text>
+                                    <Input size="small" className="crm-int-attach-input" aria-label="توضیح پیوست"
+                                        maxLength={ATTACH_MAX_DESCRIPTION} disabled={saving || removed}
+                                        value={attachmentDescriptions[a.InteractionAttachmentID] ?? a.Description ?? ''}
+                                        onChange={(e) => setAttachmentDescriptions((values) => ({ ...values, [a.InteractionAttachmentID]: e.target.value }))} />
+                                    {a.EditedAt && <Text type="secondary">
+                                        ویرایش‌شده{a.EditedByName ? ` توسط ${a.EditedByName}` : ''} — {gregorianToJalaliDateTimeDisplay(a.EditedAt)}
+                                    </Text>}
+                                    {removed ? (
+                                        <Tooltip title="بازگرداندن">
+                                            <Button type="text" size="small" icon={<UndoOutlined />} disabled={saving} onClick={() => setRemovedIds((ids) => ids.filter((x) => x !== a.InteractionAttachmentID))} />
+                                        </Tooltip>
+                                    ) : (
+                                        <Tooltip title="حذفِ پیوست (با ذخیره اعمال می‌شود)">
+                                            <Button type="text" size="small" danger icon={<DeleteOutlined />} disabled={saving} onClick={() => setRemovedIds((ids) => [...ids, a.InteractionAttachmentID])} />
+                                        </Tooltip>
+                                    )}
+                                </div>
+                            );
+                        })}
                         <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
                             هر فایل حداکثر ۱۰ مگابایت، در هر بار حداکثر ۱۰ فایل؛ فایل‌هایِ اجرایی/اسکریپتی مجاز نیستند. تغییراتِ پیوست با «ذخیره» اعمال می‌شود.
                         </Text>

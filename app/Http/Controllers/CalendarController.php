@@ -279,6 +279,7 @@ class CalendarController extends Controller
             'links'                 => $this->eventLinks($id),
             'occurrenceStatus'      => $occurrenceStatus,
             'seriesStart'           => $seriesStart,
+            'projectDeadlineID'     => $this->deadlineProjectId($id),
         ]);
     }
 
@@ -398,6 +399,82 @@ class CalendarController extends Controller
      * GET /projects/{id}/events — تبِ «رویدادها»ی پروژه (دستورکار): فقط برایِ سازنده/عضوِ پروژه (همان قاعدهٔ صفحهٔ پروژه)؛
      * تکرارها مثلِ تقویم بسط داده می‌شوند.
      */
+    public function relatedAttachments(string $kind, int $id)
+    {
+        if ($kind === 'event') {
+            $this->authorizeCalendar('CALENDAR_VIEW');
+            abort_unless($this->canViewEventDetails($id), 403);
+        } elseif (!$this->userCan('CALENDAR_VIEW')) {
+            return response()->json([]);
+        }
+
+        $rows = DB::select('EXEC dbo.sp_GetRelatedAttachmentSources ?, ?, ?', [strtoupper($kind), $id, Auth::id()]);
+        $files = [];
+        foreach ($rows as $row) {
+            $sourceId = (int) $row->EntityID;
+            if ($row->SourceType === 'EVENT') {
+                if (!$this->canViewEventDetails($sourceId)) continue;
+                foreach (DB::select('EXEC dbo.sp_Calendar_GetSharedAttachmentMetadata ?', [$sourceId]) as $file) {
+                    $files[] = [
+                        'name' => $file->FileName, 'description' => $file->Description,
+                        'source' => 'رویداد', 'occurrence' => $file->OriginalStart,
+                        'url' => route('calendar.event-attachments.download', $file->CalendarEventAttachmentID, false),
+                    ];
+                }
+            } elseif ($row->SourceType === 'PROJECT') {
+                foreach (DB::select('EXEC dbo.sp_GetProjectAttachmentsList ?', [$sourceId]) as $file) {
+                    $files[] = [
+                        'name' => $file->FileName, 'description' => $file->Description ?? null, 'source' => 'پروژه',
+                        'url' => route('projects.attachments.show', [$sourceId, $file->ProjectAttachmentID], false),
+                    ];
+                }
+            } elseif ($row->SourceType === 'MESSAGE') {
+                foreach (DB::select('EXEC dbo.sp_GetMessageAttachmentsList ?', [$sourceId]) as $file) {
+                    $files[] = [
+                        'name' => $file->FileName, 'source' => 'وظیفه',
+                        'url' => route('messages.attachments.show', [$sourceId, $file->MessageAttachmentID], false),
+                    ];
+                }
+                $comments = DB::select('EXEC dbo.sp_GetMessageComments ?', [$sourceId]);
+                foreach ($comments as $comment) {
+                    foreach (DB::select('EXEC dbo.sp_GetMessageCommentAttachments ?', [$comment->MessageCommentID]) as $file) {
+                        $files[] = [
+                            'name' => $file->FileName, 'source' => 'توضیح وظیفه',
+                            'url' => route('messages.comment-attachments.show', [$sourceId, $comment->MessageCommentID, $file->MessageCommentAttachmentID], false),
+                        ];
+                    }
+                }
+            }
+        }
+
+        return response()->json($files)->header('Cache-Control', 'private, no-store');
+    }
+
+    public function crmEvents(Request $request, string $kind, int $id)
+    {
+        $permissions = collect(DB::select('EXEC sp_GetUserPermissions @UserID = ?', [Auth::id()]))
+            ->pluck('PermissionCode');
+        abort_unless($permissions->contains('CRM_VIEW') && $permissions->contains('CALENDAR_VIEW'), 403);
+        $range = $request->validate(['from' => 'required|date', 'to' => 'required|date|after_or_equal:from']);
+        $from = Carbon::parse($range['from'])->startOfDay();
+        $to = Carbon::parse($range['to'])->endOfDay();
+        abort_if($from->diffInDays($to) > 550, 422);
+
+        $actor = (int) Auth::id();
+        $rows = DB::select('EXEC dbo.sp_Calendar_GetCrmEvents @EntityID = ?, @LinkType = ?, @FromDate = ?, @ToDate = ?, @ViewerID = ?',
+            [$id, strtoupper($kind), $from->toDateTimeString(), $to->toDateTimeString(), $actor]);
+        $canViewOthers = $permissions->contains('CALENDAR_VIEW_OTHERS');
+        $visible = array_filter($rows, fn ($row) => (int) $row->IsBusyOnly !== 1
+            && ($row->MyRelation !== 'NONE' || $canViewOthers
+                || $this->hasReadShareFor($row, DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$row->EventID]))));
+
+        return response()->json([
+            'events' => array_values($this->withAttendeeNames($this->expandRows($visible, $from, $to))),
+            'permissions' => $permissions->filter(fn ($code) => str_starts_with((string) $code, 'CALENDAR_'))->values()->all(),
+            'currentUserId' => $actor,
+        ]);
+    }
+
     public function projectEvents(Request $request, int $id)
     {
         $validated = $request->validate(['from' => 'required|date', 'to' => 'required|date']);
@@ -412,7 +489,6 @@ class CalendarController extends Controller
             [$id, $from->toDateTimeString(), $to->toDateTimeString(), Auth::id()]);
 
         $events = $this->expandRows($rows, $from, $to);
-        $eventIds = collect($events)->pluck('EventID')->map(fn ($eventId) => (int) $eventId)->unique();
         $commentCounts = null;
         if ($this->userCan('CALENDAR_COMMENT_VIEW')) {
             $commentCounts = [];
@@ -427,7 +503,7 @@ class CalendarController extends Controller
 
         return response()->json([
             'events' => $this->withAttendeeNames($events),
-            'eventCount' => $eventIds->count(),
+            'eventCount' => count($events),
             'commentCounts' => $commentCounts,
         ]);
     }
@@ -573,9 +649,22 @@ class CalendarController extends Controller
      * POST /calendar/events/{id}/content — ویرایشِ موضوع و متنِ رویداد (پچِ ۱۳۷): مجوزِ CALENDAR_EDIT_CONTENT و فقط سازنده،
      * مالک یا مدیرِ رویدادِ واحد (SP). طرف‌هایِ رویداد اطلاع می‌گیرند.
      */
+    private function deadlineProjectId(int $eventId): ?int
+    {
+        $project = DB::selectOne('EXEC dbo.sp_GetProjectByDeadlineEvent @EventID = ?', [$eventId]);
+
+        return $project ? (int) $project->ProjectID : null;
+    }
+
+    private function requireCalendarControlledSchedule(int $eventId): void
+    {
+        abort_if($this->deadlineProjectId($eventId), 422, 'موضوع و زمان موعد پایان فقط از طریق ویرایش پروژه تغییر می‌کند.');
+    }
+
     public function updateContent(Request $request, int $id)
     {
         $this->authorizeCalendar('CALENDAR_EDIT_CONTENT');
+        $this->requireCalendarControlledSchedule($id);
         $validated = $request->validate([
             'Title' => 'required|string|max:250',
             'Description' => 'nullable|string|max:4000',
@@ -719,6 +808,9 @@ class CalendarController extends Controller
                 'message' => 'شما اجازه‌ی ایجاد رویداد برای سایر کاربران را ندارید.',
             ], 403);
         }
+        if ($this->recurrenceEndIsMissing($validated)) {
+            return response()->json(['success' => false, 'message' => 'تاریخ پایان تکرار الزامی است.'], 422);
+        }
         if ($this->recurrenceEndsBeforeStart($validated)) {
             return response()->json(['success' => false, 'message' => self::RECURRENCE_END_MESSAGE], 422);
         }
@@ -791,6 +883,7 @@ class CalendarController extends Controller
         $canSchedule = $this->userCan('CALENDAR_EDIT');
         $canContent = $this->userCan('CALENDAR_EDIT_CONTENT');
         abort_unless($canSchedule || $canContent, 403);
+        $this->requireCalendarControlledSchedule($id);
         $input = $this->validateEvent($request, true);
         $key = Carbon::parse($request->validate(['OriginalStart' => 'required|date'])['OriginalStart']);
         $event = DB::selectOne('EXEC dbo.sp_GetCalendarEvent @EventID = ?, @UserID = ?', [$id, Auth::id()]);
@@ -875,6 +968,15 @@ class CalendarController extends Controller
         if (!$request->exists('RecurrenceWeekDays')) {
             $validated['RecurrenceWeekDays'] = JalaliRecurrence::parseWeekDays($current->RecurrenceWeekDays ?? null);
         }
+        if ($this->deadlineProjectId($id) && (
+            $validated['Title'] !== $current->Title
+            || Carbon::parse($validated['StartDateTime'])->ne(Carbon::parse($current->StartDateTime))
+            || Carbon::parse($validated['EndDateTime'])->ne(Carbon::parse($current->EndDateTime))
+            || (bool) $validated['IsAllDay'] !== (bool) $current->IsAllDay
+            || $validated['RecurrenceType'] !== $current->RecurrenceType
+        )) {
+            return response()->json(['success' => false, 'message' => 'موضوع و زمان موعد پایان فقط از طریق ویرایش پروژه تغییر می‌کند.'], 422);
+        }
         $currentAttendeeIds = collect(DB::select('EXEC sp_GetCalendarEventAttendees @EventID = ?', [$id]))
             ->filter(fn ($a) => $a->RelationType !== 'ORGANIZER')->map(fn ($a) => (int) $a->UserID)->values()->all();
 
@@ -918,6 +1020,9 @@ class CalendarController extends Controller
                 'success' => false,
                 'message' => 'شما اجازه‌ی تخصیص رویداد به سایر کاربران را ندارید.',
             ], 403);
+        }
+        if ($this->recurrenceEndIsMissing($validated)) {
+            return response()->json(['success' => false, 'message' => 'تاریخ پایان تکرار الزامی است.'], 422);
         }
         if ($this->recurrenceEndsBeforeStart($validated)) {
             return response()->json(['success' => false, 'message' => self::RECURRENCE_END_MESSAGE], 422);
@@ -998,6 +1103,7 @@ class CalendarController extends Controller
      */
     public function move(Request $request, int $id)
     {
+        $this->requireCalendarControlledSchedule($id);
         $this->authorizeCalendar('CALENDAR_EDIT');
         $validated = $request->validate([
             'StartDateTime' => 'required|date',
@@ -1473,6 +1579,9 @@ class CalendarController extends Controller
     private function withAttendeeNames(array $events): array
     {
         $namesByEvent = [];
+        $linksByEvent = [];
+        $canViewCrm = $this->userCan('CRM_VIEW');
+        $visibleProjects = null;
         foreach ($events as $event) {
             $id = (int) ($event->EventID ?? 0);
             if ($id <= 0 || (int) ($event->IsBusyOnly ?? 0) === 1) {
@@ -1482,6 +1591,17 @@ class CalendarController extends Controller
                 ->reject(fn ($attendee) => $attendee->RelationType === 'ORGANIZER')
                 ->pluck('FullName')->filter()->unique()->values()->all();
             $event->AttendeeNames = $namesByEvent[$id];
+            $links = $linksByEvent[$id] ??= collect(DB::select('EXEC dbo.sp_Calendar_GetEventLinks @EventID = ?', [$id]));
+            if ($visibleProjects === null && $links->contains('LinkType', 'PROJECT')) {
+                $visibleProjects = collect(DB::select('EXEC sp_GetProjects @UserID = ?', [Auth::id()]))
+                    ->keyBy('ProjectID');
+            }
+            $event->LinkedProjectNames = $links->where('LinkType', 'PROJECT')
+                ->filter(fn ($link) => $visibleProjects?->has($link->EntityID))
+                ->pluck('DisplayName')->filter()->unique()->values()->all();
+            $event->LinkedPartyNames = $canViewCrm
+                ? $links->where('LinkType', 'PARTY')->pluck('DisplayName')->filter()->unique()->values()->all()
+                : [];
         }
 
         return $events;
@@ -1861,6 +1981,11 @@ class CalendarController extends Controller
     }
 
     /** پایانِ تکرار (شاملِ همان روز) پیش از روزِ شروعِ رویداد → سریِ خالی/نامعتبر */
+    private function recurrenceEndIsMissing(array $validated): bool
+    {
+        return ($validated['RecurrenceType'] ?? 'NONE') !== 'NONE' && empty($validated['RecurrenceEndDate']);
+    }
+
     private function recurrenceEndsBeforeStart(array $validated): bool
     {
         if (($validated['RecurrenceType'] ?? 'NONE') === 'NONE' || empty($validated['RecurrenceEndDate'])) {

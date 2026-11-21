@@ -255,6 +255,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{id}', [ProjectsController::class, 'show'])->name('projects.show');
     Route::put('/projects/{id}', [ProjectsController::class, 'update'])->name('projects.update');
     Route::patch('/projects/{id}/status', [ProjectsController::class, 'update'])->whereNumber('id')->name('projects.status.update');
+    Route::patch('/projects/{id}/parent', [ProjectsController::class, 'update'])->whereNumber('id')->name('projects.parent.update');
     Route::post('/projects/{id}/toggle', [ProjectsController::class, 'toggleActive'])->name('projects.toggle-active');
     Route::get('/projects/{id}/members', [ProjectsController::class, 'members'])->name('projects.members');
     Route::post('/projects/{id}/members', [ProjectsController::class, 'addMember'])->name('projects.members.add');
@@ -263,6 +264,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{id}/contractors', [ProjectsController::class, 'contractors'])->name('projects.contractors');
     // پچِ ۱۳۸ — تبِ «رویدادها»ی پروژه (دستورکار)
     Route::get('/projects/{id}/events', [CalendarController::class, 'projectEvents'])->whereNumber('id')->name('projects.events');
+    Route::get('/calendar/crm-events/{kind}/{id}', [CalendarController::class, 'crmEvents'])
+        ->whereIn('kind', ['party', 'person'])->whereNumber('id')->name('calendar.crm-events');
+    Route::get('/calendar/related-attachments/{kind}/{id}', [CalendarController::class, 'relatedAttachments'])
+        ->whereIn('kind', ['event', 'project', 'message'])->whereNumber('id');
     Route::get('/projects/{id}/contractors/search', [ProjectsController::class, 'searchContractorCandidates'])->name('projects.contractors.search');
     Route::post('/projects/{id}/contractors', [ProjectsController::class, 'addContractor'])->name('projects.contractors.add');
     Route::delete('/projects/{id}/contractors', [ProjectsController::class, 'removeContractor'])->name('projects.contractors.remove');
@@ -276,6 +281,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/projects/{id}/tasks', [ProjectsController::class, 'tasks'])->name('projects.tasks.index');
     Route::get('/projects/{id}/comments', [ProjectsController::class, 'comments'])->name('projects.comments.index');
     Route::post('/projects/{id}/comments', [ProjectsController::class, 'addComment'])->name('projects.comments.store');
+    Route::put('/projects/{id}/activity/{kind}/{itemId}', [ProjectsController::class, 'updateCommentOrAttachment'])
+        ->whereIn('kind', ['comment', 'file'])->whereNumber(['id', 'itemId'])->name('projects.activity.update');
     Route::get('/projects/{id}/attachments/{attachmentId}', [ProjectsController::class, 'downloadAttachment'])->name('projects.attachments.show');
 
 
@@ -556,6 +563,8 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('interactionId')->name('interactions.status');
         Route::post('interactions/{interactionId}/attachments', [CrmInteractionController::class, 'storeAttachments'])
             ->whereNumber('interactionId')->name('interactions.attachments.store');
+        Route::put('interactions/{interactionId}/attachments/{attachmentId}', [CrmInteractionController::class, 'updateAttachmentDescription'])
+            ->whereNumber(['interactionId', 'attachmentId'])->name('interactions.attachments.update');
         Route::get('interaction-attachments/{attachmentId}/download', [CrmInteractionController::class, 'downloadAttachment'])
             ->whereNumber('attachmentId')->name('interaction-attachments.download');
         Route::post('interaction-attachments/{attachmentId}/delete', [CrmInteractionController::class, 'destroyAttachment'])

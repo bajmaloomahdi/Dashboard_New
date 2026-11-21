@@ -199,6 +199,20 @@ class ProjectsController extends Controller
     /**
      * لیست کامنت‌ها و ضمیمه‌های یک پروژه (JSON) — فقط برای اعضای فعال
      */
+    public function updateCommentOrAttachment(Request $request, int $id, string $kind, int $itemId)
+    {
+        abort_unless($this->isActiveMember($id), 403, 'به این پروژه دسترسی ندارید.');
+        $isComment = $kind === 'comment';
+        $input = $request->validate(['text' => $isComment ? 'required|string|max:3000' : 'nullable|string|max:500']);
+        $sql = $isComment
+            ? 'EXEC dbo.sp_UpdateProjectComment ?, ?, ?, ?'
+            : 'EXEC dbo.sp_UpdateProjectAttachmentDescription ?, ?, ?, ?';
+        $result = DB::selectOne($sql, [$id, $itemId, Auth::id(), $input['text'] ?? null]);
+        abort_unless((int) ($result->Updated ?? 0) === 1, 403, 'مجوز ویرایش این مورد را ندارید.');
+
+        return response()->json(['message' => 'تغییرات ذخیره شد.']);
+    }
+
     public function comments(int $id)
     {
         if (!$this->isActiveMember($id)) {
@@ -554,7 +568,11 @@ class ProjectsController extends Controller
     public function update(Request $request, int $id)
     {
         $statusOnly = $request->routeIs('projects.status.update');
-        $validated = $request->validate($statusOnly ? ['ProjectStatusID' => 'required|integer|min:1'] : [
+        $parentOnly = $request->routeIs('projects.parent.update');
+        $validated = $request->validate($parentOnly ? [
+            'ParentProjectID' => 'present|nullable|integer|min:1',
+            'RelatedPageID' => 'required|integer|min:1',
+        ] : ($statusOnly ? ['ProjectStatusID' => 'required|integer|min:1'] : [
             'ParentProjectID'   => 'sometimes|nullable|integer|min:1',
             'DepartmentID'      => 'sometimes|nullable|integer|min:1|max:2147483647',
             'ProjectTitle'     => 'required|string|max:250',
@@ -569,7 +587,7 @@ class ProjectsController extends Controller
             'ResponsibleUserID' => 'required_with:MemberUserIDs|integer|min:1',
             'MemberUserIDs'     => 'array',
             'MemberUserIDs.*'   => 'integer|min:1|distinct',
-        ]);
+        ]));
 
         $actor = (int) Auth::id();
         $current = collect(DB::select(
@@ -577,12 +595,31 @@ class ProjectsController extends Controller
             [$actor]
         ))->firstWhere('ProjectID', $id);
         abort_if($current === null, 404);
+        $hasParent = (bool) ($current->HasParentProject ?? ($current->ParentProjectID !== null));
+        if (isset($validated['ParentProjectID']) && $hasParent
+            && (int) $validated['ParentProjectID'] !== (int) $current->ParentProjectID) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'ParentProjectID' => 'ابتدا ارتباط با پروژهٔ مادر فعلی را قطع کنید.',
+            ]);
+        }
+        if ($parentOnly) {
+            $parentId = (int) $validated['RelatedPageID'];
+            $adding = $validated['ParentProjectID'] !== null;
+            abort_unless($parentId === $id || ($adding
+                ? (int) $validated['ParentProjectID'] === $parentId
+                : (int) $current->ParentProjectID === $parentId), 409, 'ارتباط فعلی پروژه تغییر کرده است.');
+            abort_unless($this->canManageProjectTeam(DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$parentId]), $actor), 403);
+        }
 
         $response = DB::transaction(function () use ($id, $actor, $current, $validated, $statusOnly) {
             $updateTeam = array_key_exists('ResponsibleUserID', $validated) || array_key_exists('MemberUserIDs', $validated);
+            $scheduleChanged = (array_key_exists('ProjectTitle', $validated) && $validated['ProjectTitle'] !== $current->ProjectTitle)
+                || (array_key_exists('PlannedEndDate', $validated)
+                    && substr((string) $validated['PlannedEndDate'], 0, 10) !== substr((string) $current->PlannedEndDate, 0, 10));
             $members = [];
-            $statusChanged = (int) $validated['ProjectStatusID'] !== (int) $current->ProjectStatusID;
-            if ($updateTeam || $statusChanged || $statusOnly) {
+            $statusChanged = array_key_exists('ProjectStatusID', $validated)
+                && (int) $validated['ProjectStatusID'] !== (int) $current->ProjectStatusID;
+            if ($updateTeam || $statusChanged || $statusOnly || $scheduleChanged) {
                 $members = DB::select('EXEC sp_GetProjectMembers @ProjectID = ?', [$id]);
                 abort_unless($this->canManageProjectTeam($members, $actor), 403);
             }
@@ -615,7 +652,7 @@ class ProjectsController extends Controller
                     $value('StartDate'),
                     $value('PlannedEndDate'),
                     $value('ActualEndDate'),
-                    $validated['ProjectStatusID'],
+                    $value('ProjectStatusID'),
                     $value('ProjectPriorityID'),
                     $value('ProgressPercent') ?? $current->ProgressPercent,
                     $value('IsActive'),
@@ -633,13 +670,21 @@ class ProjectsController extends Controller
                     (!empty($response['DepartmentError']) ? 'DepartmentID' : (!empty($response['ParentError']) ? 'ParentProjectID' : ($statusOnly ? 'ProjectStatusID' : 'ProjectTitle'))) => $response['Message'] ?? 'خطا در ویرایش پروژه',
                 ]);
             }
+            if ($scheduleChanged) {
+                $sync = DB::selectOne('EXEC dbo.sp_SyncProjectDeadlineEvent @ProjectID = ?, @ActorUserID = ?, @SyncSchedule = 1', [$id, $actor]);
+                if ($sync && (int) $sync->ScheduleSaved !== 1) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'PlannedEndDate' => 'برای پروژه‌ای که رویداد موعد پایان دارد، تاریخ پایان پیش‌بینی‌شده الزامی است.',
+                    ]);
+                }
+            }
             if ($updateTeam) {
                 $this->updateProjectTeam($id, $actor, $members, (int) $validated['ResponsibleUserID'], $validated['MemberUserIDs']);
             }
             return $response;
         });
 
-        return (($statusOnly || $request->boolean('returnToDetails')) ? redirect()->route('projects.show', $id) : redirect()->route('projects.index'))
+        return (($parentOnly || $statusOnly || $request->boolean('returnToDetails')) ? redirect()->route('projects.show', $validated['RelatedPageID'] ?? $id) : redirect()->route('projects.index'))
             ->with('success', $response['Message'] ?? 'پروژه با موفقیت ویرایش شد.');
     }
 

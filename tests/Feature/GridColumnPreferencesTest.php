@@ -26,11 +26,25 @@ class GridColumnPreferencesTest extends TestCase
         $this->getJson(self::URL.'?UserID=99')->assertOk()->assertJsonPath('version', null);
 
         DB::shouldReceive('selectOne')->once()
-            ->with('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, 1, @v;',
-                [null, 41, 'admin.users.list', '{"contact":false}'])
+            ->with('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, ?, @v;',
+                [null, 41, 'admin.users.list', '{"contact":false}', 1])
             ->andReturn((object) ['VisibilityJson' => '{"contact":false}', 'VersionToken' => '0000000000000001']);
         $this->putJson(self::URL, ['UserID' => 99, 'visibility' => ['contact' => false], 'version' => null])
             ->assertOk()->assertJsonPath('visibility.contact', false)->assertJsonPath('version', '0000000000000001');
+    }
+
+    public function test_save_returns_column_order_and_preserves_visibility(): void
+    {
+        $this->signIn();
+        DB::shouldReceive('selectOne')->once()
+            ->with('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, ?, @v;',
+                [null, 41, 'admin.users.list', '{"contact":false,"user":true}', 2])
+            ->andReturn((object) ['VisibilityJson' => '{"contact":false,"user":true}', 'SchemaVersion' => 2]);
+
+        $this->putJson(self::URL, ['visibility' => ['contact' => false], 'order' => ['contact', 'user'], 'version' => null])
+            ->assertOk()
+            ->assertJsonPath('order', ['contact', 'user'])
+            ->assertJsonPath('visibility.contact', false);
     }
 
     public function test_rejects_required_or_unknown_columns_before_calling_sql(): void
@@ -40,6 +54,24 @@ class GridColumnPreferencesTest extends TestCase
         foreach (['user', 'unknown'] as $key) {
             $this->putJson(self::URL, ['visibility' => [$key => false], 'version' => null])->assertUnprocessable();
         }
+    }
+
+    public function test_save_round_trips_width_with_order_and_visibility(): void
+    {
+        $this->signIn();
+        $json = '{"contact":{"visible":false,"width":240},"user":true}';
+        DB::shouldReceive('selectOne')->once()
+            ->with('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, ?, @v;',
+                [null, 41, 'admin.users.list', $json, 3])
+            ->andReturn((object) ['VisibilityJson' => $json, 'SchemaVersion' => 3]);
+
+        $this->putJson(self::URL, [
+            'visibility' => ['contact' => false], 'order' => ['contact', 'user'],
+            'widths' => ['contact' => 240], 'version' => null,
+        ])->assertOk()
+            ->assertJsonPath('widths.contact', 240)
+            ->assertJsonPath('visibility.contact', false)
+            ->assertJsonPath('order', ['contact', 'user']);
     }
 
     public function test_reset_uses_the_session_owner_and_expected_version(): void

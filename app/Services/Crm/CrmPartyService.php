@@ -78,10 +78,11 @@ class CrmPartyService
 
         $identifierNumber = null;
         if ($nature === 'LEGAL') {
-            $identifierNumber = preg_replace('/\D/', '', (string) ($input['identifierNumber'] ?? ''));
-            if (strlen($identifierNumber) !== 11) {
+            $identifierNumber = trim((string) ($input['identifierNumber'] ?? ''));
+            if ($identifierNumber !== '' && !preg_match('/\A[0-9]{11}\z/', $identifierNumber)) {
                 throw new CrmValidationException('شناسه ملی باید دقیقاً ۱۱ رقم باشد.');
             }
+            $identifierNumber = $identifierNumber === '' ? null : $identifierNumber;
         } else {
             // حقیقی (پچِ ۱۲۳): کدِ ملیِ اختیاری، ۱۰ رقم
             $identifierNumber = preg_replace('/\D/', '', (string) ($input['identifierNumber'] ?? '')) ?: null;

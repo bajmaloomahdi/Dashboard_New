@@ -1,5 +1,5 @@
 import { newestFirst } from '../../Utils/newestFirst';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Avatar, Button, Empty, Input, Spin, Tabs, Typography } from 'antd';
 import { EditOutlined, SendOutlined } from '@ant-design/icons';
 import type React from 'react';
@@ -25,7 +25,7 @@ function getXsrfToken(): string {
 }
 
 /** فهرستِ توضیحاتِ رویداد + ثبتِ توضیحِ تازه (اگر canAdd) + ویرایشِ متن (اگر canEdit — پچِ ۱۳۷) */
-export function EventComments({ eventId, occurrenceStart, canAdd, canEdit = false, onCount }: { eventId: number; occurrenceStart?: string; canAdd: boolean; canEdit?: boolean; onCount?: (n: number) => void }) {
+export function EventComments({ eventId, occurrenceStart, canAdd, canEdit = false, onCount, attachments }: { eventId: number; occurrenceStart?: string; canAdd: boolean; canEdit?: boolean; onCount?: (n: number) => void; attachments?: ReactNode }) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editText, setEditText] = useState('');
     const [editSaving, setEditSaving] = useState(false);
@@ -106,6 +106,29 @@ export function EventComments({ eventId, occurrenceStart, canAdd, canEdit = fals
 
     return (
         <Spin spinning={loading}>
+            {error ? <Text type="danger" style={{ display: 'block', marginTop: 8 }}>{error}</Text> : null}
+            {canAdd ? (
+                <div style={{ marginBottom: 12 }}>
+                    <Input.TextArea
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        rows={3}
+                        maxLength={2000}
+                        showCount
+                        placeholder="توضیحِ تازه… (نام و زمانِ ثبت خودکار ذخیره می‌شود)"
+                        disabled={saving}
+                        onPressEnter={(e) => {
+                            if (e.ctrlKey || e.metaKey) submit();
+                        }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 28, paddingTop: 12, borderTop: '1px solid #F0F0F0' }}>
+                        <Button type="primary" icon={<SendOutlined />} loading={saving} disabled={!text.trim()} onClick={submit}>
+                            ثبتِ توضیح
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+            {attachments}
             <div style={{ maxHeight: 340, overflowY: 'auto', paddingInlineEnd: 4 }}>
                 {items.length === 0 && !loading ? (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="هنوز توضیحی ثبت نشده است" />
@@ -157,29 +180,6 @@ export function EventComments({ eventId, occurrenceStart, canAdd, canEdit = fals
                     ))
                 )}
             </div>
-            {error ? <Text type="danger" style={{ display: 'block', marginTop: 8 }}>{error}</Text> : null}
-            {canAdd ? (
-                <div style={{ marginTop: 12 }}>
-                    <Input.TextArea
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        rows={3}
-                        maxLength={2000}
-                        showCount
-                        placeholder="توضیحِ تازه… (نام و زمانِ ثبت خودکار ذخیره می‌شود)"
-                        disabled={saving}
-                        onPressEnter={(e) => {
-                            if (e.ctrlKey || e.metaKey) submit();
-                        }}
-                    />
-                    {/* دکمهٔ ثبت پایینِ پنجره، جایِ دکمه‌هایِ پایینِ مودال (جدا از کادرِ متن) */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 28, paddingTop: 12, borderTop: '1px solid #F0F0F0' }}>
-                        <Button type="primary" icon={<SendOutlined />} loading={saving} disabled={!text.trim()} onClick={submit}>
-                            ثبتِ توضیح
-                        </Button>
-                    </div>
-                </div>
-            ) : null}
         </Spin>
     );
 }
@@ -226,10 +226,8 @@ export function EventDetailTabs({
                     label: total ? `توضیحات و ضمائم (${total})` : 'توضیحات و ضمائم',
                     forceRender: true, // تعدادِ توضیحات از همان ابتدا رویِ عنوانِ تب
                     children: (
-                        <>
-                            {attachments}
-                            <EventComments key={occurrenceStart ?? eventId} eventId={eventId} occurrenceStart={occurrenceStart} canAdd={canAdd} canEdit={canEditComments} onCount={setCount} />
-                        </>
+                        <EventComments key={occurrenceStart ?? eventId} eventId={eventId} occurrenceStart={occurrenceStart}
+                            canAdd={canAdd} canEdit={canEditComments} onCount={setCount} attachments={attachments} />
                     ),
                 },
             ]}

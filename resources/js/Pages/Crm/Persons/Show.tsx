@@ -1,3 +1,4 @@
+import ProjectEventsTab from '../../Projects/ProjectEventsTab';
 import RecordHistoryPanel from '../../../Components/Crm/RecordHistoryPanel';
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Space } from 'antd';
@@ -60,7 +61,7 @@ export default function CrmPersonShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'contacts' | 'addresses' | 'relations' | 'interactions' | 'projects' | 'events'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
 
     // طرف‌حساب‌هایی که تعاملِ جدیدِ این مخاطب می‌تواند به آن‌ها مربوط شود (فقط رابطه‌هایِ فعال)
     const personParties = (relations || [])
@@ -69,7 +70,9 @@ export default function CrmPersonShow() {
 
     const isActive = toBool(currentPerson.IsActive);
 
+    const [eventCount, setEventCount] = useState<number | null>(null);
     const tabDefs = [
+        { key: 'events' as const, label: 'رویدادها', count: eventCount },
         { key: 'profile' as const, label: 'پروفایل', icon: <IdcardOutlined /> },
         { key: 'history' as const, label: 'تاریخچه' },
         { key: 'contacts' as const, label: 'اطلاعاتِ تماس', icon: <PhoneOutlined />, count: (contacts || []).length },
@@ -207,6 +210,9 @@ export default function CrmPersonShow() {
                 </Card>
             )}
 
+            {activeTab === 'events' && (
+                <ProjectEventsTab key={currentPerson.PersonID} endpoint={`/calendar/crm-events/person/${currentPerson.PersonID}`} onCount={setEventCount} />
+            )}
             {activeTab === 'projects' && (
                 <Card style={STYLES.card}>
                     <PartyProjectsPanel mode="person" items={personProjects?.items || []} hiddenCount={Number(personProjects?.hiddenCount) || 0} />

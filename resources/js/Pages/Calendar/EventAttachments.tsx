@@ -15,6 +15,8 @@ export interface EventAttachment {
     /** پچِ ۱۳۷ — توضیحِ ضمیمه و زمانِ افزودن («YYYY-MM-DD HH:mm:ss») */
     Description?: string | null;
     UploadedAt?: string | null;
+    EditedAt?: string | null;
+    EditedByName?: string | null;
 }
 
 function sizeLabel(bytes: number): string {
@@ -72,6 +74,11 @@ export default function EventAttachmentList({
                             ) : null}
                         </div>
                         {meta ? <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>{meta}</div> : null}
+                        {a.EditedAt ? (
+                            <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>
+                                ویرایش‌شده{a.EditedByName ? ` توسطِ ${a.EditedByName}` : ''} — {gregorianToJalaliDateTimeDisplay(a.EditedAt)}
+                            </div>
+                        ) : null}
                         {editingId === id ? (
                             <div style={{ marginTop: 6 }}>
                                 <Input.TextArea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={500} showCount placeholder="توضیحِ این ضمیمه…" disabled={saving} />

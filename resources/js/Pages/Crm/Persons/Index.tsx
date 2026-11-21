@@ -28,8 +28,8 @@ import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
 import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
 import { CooperationEndedTag } from '../../../Components/Crm/CooperationEnded';
-import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
-import { useColumnFilters, FilterHeader, TextFilterInput, SelectFilterInput, filterHeaderCss } from '../../../Components/Crm/tableFilters';
+import ListViewToggle, { useCardPage, useListViewMode } from '../../../Components/Crm/ListViewToggle';
+import { useColumnFilters, FilterHeader, TextFilterInput, MultiSelectFilterInput, distinctOptions, filterHeaderCss } from '../../../Components/Crm/tableFilters';
 
 const { Title, Text } = Typography;
 
@@ -37,11 +37,13 @@ interface PersonRow extends Person {
     DisplayName: string;
     TitleName: string | null;
     /** تماسِ اصلی (sp_Crm_GetPersons) */
+    PrimaryMobile?: string | null;
     PrimaryContactValue?: string | null;
     PrimaryContactType?: string | null;
     PrimaryContactExtension?: string | null;
     /** آدرسِ اصلی (اولین آدرسِ فعال) و طرف‌حساب‌هایِ مرتبط — نمایِ جدولی */
     PrimaryAddressProvince?: string | null;
+    PrimaryAddressCounty?: string | null;
     PrimaryAddressCity?: string | null;
     PrimaryAddressText?: string | null;
     PrimaryAddressTitle?: string | null;
@@ -68,6 +70,7 @@ export default function CrmPersonsIndex() {
     const [editingPerson, setEditingPerson] = useState<PersonRow | null>(null);
     const [togglingId, setTogglingId] = useState<number | null>(null);
     const [viewMode, setViewMode] = useListViewMode('crm.persons.viewMode');
+    const cardPage = useCardPage(items || []);
     const [page, setPage] = useState({ current: 1, pageSize: 20 });
     // فیلترهایِ ستونیِ شبیهِ اکسل (با تایپ، همان لحظه؛ سمتِ مرورگر رویِ همین فهرستِ بارگذاری‌شده)
     const fullName = (p: PersonRow) => [p.TitleName, p.FirstName, p.LastName].filter(Boolean).join(' ') || '—';
@@ -77,22 +80,22 @@ export default function CrmPersonsIndex() {
         birth: { get: (p) => (p.IdentifierDate ? gregorianToJalaliDisplay(p.IdentifierDate) : ''), mode: 'text' },
         parties: { get: (p) => p.RelatedPartyNames, mode: 'text' },
         contact: { get: (p) => [p.PrimaryContactValue, p.PrimaryContactType, p.PrimaryContactExtension].filter(Boolean).join(' '), mode: 'text' },
+        province: { get: (p) => p.PrimaryAddressProvince, mode: 'text' },
+        mobile: { get: (p) => p.PrimaryMobile, mode: 'text' },
+        county: { get: (p) => p.PrimaryAddressCounty, mode: 'text' },
+        city: { get: (p) => p.PrimaryAddressCity, mode: 'text' },
         address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
         status: { get: (p) => (toBool(p.IsActive) ? '1' : '0'), mode: 'exact' },
     });
+    const setColSelection = (key: string, values: string[]) => {
+        colF.setSelection(key, values);
+        setPage((current) => ({ ...current, current: 1 }));
+    };
+
     const setColFilter = (key: string, value: string) => {
         colF.setValue(key, value);
         setPage((pg) => ({ ...pg, current: 1 }));
     };
-
-    // در نمایِ جدولی جست‌وجو فقط از فیلترِ ستون‌هاست؛ فیلترهایِ بالایِ صفحه (حالتِ کارتی) پاک می‌شوند تا همهٔ ردیف‌ها بیایند
-    useEffect(() => {
-        if (viewMode === 'grid' && (searchText || statusFilter !== null)) {
-            setSearchText('');
-            setStatusFilter(null);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewMode]);
 
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({
         open: false,
@@ -104,21 +107,21 @@ export default function CrmPersonsIndex() {
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isFirstRender = useRef(true);
 
+    const cardQuery = new URLSearchParams({
+        ...(searchText ? { search: searchText } : {}),
+        ...(statusFilter !== null ? { isActive: statusFilter } : {}),
+    }).toString();
+    const filterQuery = viewMode === 'cards' ? cardQuery : '';
+
     const reload = async () => {
-        const res = await crmApi(
-            '/crm/persons?' +
-                new URLSearchParams({
-                    ...(searchText ? { search: searchText } : {}),
-                    ...(statusFilter !== null ? { isActive: statusFilter } : {}),
-                }).toString()
-        );
+        const res = await crmApi('/crm/persons?' + filterQuery);
         if (res.ok && res.success) setItems(res.items || []);
     };
 
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
-            return;
+            if (viewMode === 'cards' || !cardQuery) return;
         }
         setSearching(true);
         setPage((pg) => ({ ...pg, current: 1 }));
@@ -131,7 +134,7 @@ export default function CrmPersonsIndex() {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchText, statusFilter]);
+    }, [filterQuery]);
 
     const handleReset = () => {
         colF.clear();
@@ -204,7 +207,7 @@ export default function CrmPersonsIndex() {
         );
     };
 
-    const columns: ColumnsType<PersonRow> = [
+    const columns: ColumnsType<PersonRow> = viewMode === 'cards' ? [] : [
         { title: 'ردیف', key: 'row', width: 64, align: 'center', render: (_, __, i) => (page.current - 1) * page.pageSize + i + 1 },
         {
             title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
@@ -238,6 +241,36 @@ export default function CrmPersonsIndex() {
             render: (_, p) => <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} />,
         },
         {
+            title: <FilterHeader label="استان"><MultiSelectFilterInput label="استان" value={colF.selections.province} onChange={(values) => setColSelection('province', values)} options={distinctOptions(items, (row) => row.PrimaryAddressProvince)} /></FilterHeader>,
+            key: 'province',
+            dataIndex: 'PrimaryAddressProvince',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressProvince ?? '').localeCompare(b.PrimaryAddressProvince ?? '', 'fa'),
+        },
+        {
+            title: <FilterHeader label="موبایل"><MultiSelectFilterInput label="موبایل" value={colF.selections.mobile} onChange={(values) => setColSelection('mobile', values)} options={distinctOptions(items, (row) => row.PrimaryMobile)} /></FilterHeader>,
+            key: 'mobile',
+            dataIndex: 'PrimaryMobile',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryMobile ?? '').localeCompare(b.PrimaryMobile ?? '', 'fa'),
+            render: (value: string | null) => value || <Text type="secondary">—</Text>,
+        },
+        {
+            title: <FilterHeader label="شهرستان"><MultiSelectFilterInput label="شهرستان" value={colF.selections.county} onChange={(values) => setColSelection('county', values)} options={distinctOptions(items, (row) => row.PrimaryAddressCounty)} /></FilterHeader>,
+            key: 'county',
+            dataIndex: 'PrimaryAddressCounty',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressCounty ?? '').localeCompare(b.PrimaryAddressCounty ?? '', 'fa'),
+            render: (value: string | null) => value || <Text type="secondary">—</Text>,
+        },
+        {
+            title: <FilterHeader label="شهر"><MultiSelectFilterInput label="شهر" value={colF.selections.city} onChange={(values) => setColSelection('city', values)} options={distinctOptions(items, (row) => row.PrimaryAddressCity)} /></FilterHeader>,
+            key: 'city',
+            dataIndex: 'PrimaryAddressCity',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressCity ?? '').localeCompare(b.PrimaryAddressCity ?? '', 'fa'),
+        },
+        {
             title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهر، آدرس…" /></FilterHeader>,
             key: 'address',
             width: 260,
@@ -248,7 +281,7 @@ export default function CrmPersonsIndex() {
         {
             title: (
                 <FilterHeader label="وضعیت">
-                    <SelectFilterInput value={colF.values.status} onChange={(v) => setColFilter('status', v)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
+                    <MultiSelectFilterInput label="وضعیت" value={colF.selections.status} onChange={(values) => setColSelection('status', values)} options={[{ value: '1', label: 'فعال' }, { value: '0', label: 'غیرفعال' }]} />
                 </FilterHeader>
             ),
             key: 'status',
@@ -297,10 +330,8 @@ export default function CrmPersonsIndex() {
                 }
             />
 
-            <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
-                <Row gutter={[16, 16]} align="middle" justify={viewMode === 'grid' ? 'end' : 'start'}>
-                    {viewMode === 'cards' ? (
-                    <>
+            {viewMode === 'cards' && <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
+                <Row gutter={[16, 16]} align="middle">
                     <Col xs={24} sm={12} md={10}>
                         <Input
                             placeholder="جستجو در نام، کدِ ملی..."
@@ -330,13 +361,9 @@ export default function CrmPersonsIndex() {
                             بازنشانی
                         </Button>
                     </Col>
-                    </>
-                    ) : null}
-                    <Col xs={24} sm={12} md={4} style={{ textAlign: 'center' }}>
-                        <ListViewToggle value={viewMode} onChange={setViewMode} />
-                    </Col>
                 </Row>
-            </Card>
+            </Card>}
+            <div style={{ marginBottom: 16 }}><ListViewToggle value={viewMode} onChange={setViewMode} /></div>
 
             <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
                 {searching ? (
@@ -373,8 +400,9 @@ export default function CrmPersonsIndex() {
                     />
                     </>
                 ) : (
+                    <>
                     <div className="person-cards-grid">
-                        {items.map((p) => {
+                        {cardPage.items.map((p) => {
                             const active = toBool(p.IsActive);
                             return (
                                 <div className="person-card" key={p.PersonID} onClick={() => router.visit(`/crm/persons/${p.PersonID}`)}>
@@ -415,6 +443,8 @@ export default function CrmPersonsIndex() {
                             );
                         })}
                     </div>
+                    {cardPage.pagination}
+                    </>
                 )}
             </Card>
 

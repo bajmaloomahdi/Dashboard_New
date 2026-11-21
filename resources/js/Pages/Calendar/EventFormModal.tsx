@@ -155,6 +155,7 @@ export default function EventFormModal({
     const canForOthers = permissions.includes('CALENDAR_CREATE_FOR_OTHERS');
     // ویرایشِ رویدادِ موجود بدونِ «برای دیگران»: مالک و شرکت‌کنندگانِ فعلی دست‌نخورده فرستاده شوند (حذفِ بی‌صدا نشوند)
     const [original, setOriginal] = useState<{ owner: number; attendees: number[]; unitId: number | null; unitName: string | null } | null>(null);
+    const [projectDeadlineId, setProjectDeadlineId] = useState<number | null>(null);
     const manageableUnits = units.filter((u) => Number(u.CanManageEvents) === 1 || u.CanManageEvents === true);
     const [form] = Form.useForm<FormValues>();
     const [saving, setSaving] = useState(false);
@@ -250,6 +251,7 @@ export default function EventFormModal({
                 IsPrivate: false,
             });
             setOriginal(null);
+            setProjectDeadlineId(null);
             setMultiDayTimed(false);
             setExistingFiles([]);
             setNewFiles([]);
@@ -312,6 +314,7 @@ export default function EventFormModal({
                     ),
                 });
                 setExistingFiles(data.attachments || []);
+                setProjectDeadlineId(data.projectDeadlineID ?? null);
                 setLoadedEventId(eventId);
                 setNewFiles([]);
                 setOriginal({
@@ -446,7 +449,7 @@ export default function EventFormModal({
                 Color: values.Color,
                 Status: values.Status,
                 RecurrenceType: values.RecurrenceType,
-                RecurrenceInterval: 1,
+                RecurrenceInterval: Number(form.getFieldValue('RecurrenceInterval')) || 1,
                 RecurrenceEndDate: values.RecurrenceType !== 'NONE' ? values.RecurrenceEndDate : null,
                 RecurrenceWeekDays: values.RecurrenceType !== 'NONE' ? parseWeekDays(values.RecurrenceWeekDays) : [],
                 OwnerUserID: canForOthers ? values.OwnerUserID || currentUserId : original ? original.owner : currentUserId,
@@ -521,9 +524,10 @@ export default function EventFormModal({
                             name="Title"
                             label="عنوان رویداد"
                             rules={[{ required: true, message: 'عنوان الزامی است' }]}
-                            extra={isEdit && !canEditContent ? 'موضوع و متن فقط با دسترسیِ «ویرایشِ موضوع و متنِ رویداد» قابلِ تغییر است.' : undefined}
+                            extra={isEdit && projectDeadlineId ? <a href={`/projects/${projectDeadlineId}`}>موضوع و زمان موعد پایان از صفحهٔ پروژه ویرایش می‌شود.</a>
+                                : isEdit && !canEditContent ? 'موضوع و متن فقط با دسترسیِ «ویرایشِ موضوع و متنِ رویداد» قابلِ تغییر است.' : undefined}
                         >
-                            <Input disabled={isEdit && !canEditContent} placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
+                            <Input disabled={isEdit && (!canEditContent || !!projectDeadlineId)} placeholder="مثلا: جلسه هماهنگی پروژه" maxLength={250} size="large" />
                         </Form.Item>
 
                         <Form.Item name="Description" label="توضیحات">
@@ -531,32 +535,32 @@ export default function EventFormModal({
                         </Form.Item>
 
                         <Form.Item name="IsAllDay" label="تمام‌روز" valuePropName="checked">
-                            <Switch />
+                            <Switch disabled={isEdit && !!projectDeadlineId} />
                         </Form.Item>
 
                         <Row gutter={12}>
                             <Col xs={24} sm={isAllDay ? 12 : 8}>
                                 <Form.Item name="StartDate" label="تاریخ شروع" rules={[{ required: true, message: 'الزامی است' }]}>
-                                    <PersianDateInput value={null as any} onChange={() => {}} />
+                                    <PersianDateInput disabled={isEdit && !!projectDeadlineId} value={null as any} onChange={() => {}} />
                                 </Form.Item>
                             </Col>
                             {!isAllDay && (
                                 <Col xs={24} sm={8}>
                                     <Form.Item name="StartTime" label="ساعت شروع" rules={[{ required: true, message: 'الزامی است' }]}>
-                                        <TimeInput />
+                                        <TimeInput disabled={isEdit && !!projectDeadlineId} />
                                     </Form.Item>
                                 </Col>
                             )}
                             {/* تاریخِ پایان فقط برایِ تمام‌روز؛ مقدارش در فرم می‌ماند (پنهان) */}
                             <Col xs={24} sm={isAllDay ? 12 : 8} style={showEndDate ? undefined : { display: 'none' }}>
                                 <Form.Item name="EndDate" label="تاریخ پایان" rules={[{ required: true, message: 'الزامی است' }]}>
-                                    <PersianDateInput value={null as any} onChange={() => {}} />
+                                    <PersianDateInput disabled={isEdit && !!projectDeadlineId} value={null as any} onChange={() => {}} />
                                 </Form.Item>
                             </Col>
                             {!isAllDay && (
                                 <Col xs={24} sm={8}>
                                     <Form.Item name="EndTime" label="ساعت پایان" rules={[{ required: true, message: 'الزامی است' }]}>
-                                        <TimeInput />
+                                        <TimeInput disabled={isEdit && !!projectDeadlineId} />
                                     </Form.Item>
                                 </Col>
                             )}
@@ -644,7 +648,6 @@ export default function EventFormModal({
 
                         {/* ضمیمه‌ها — هم در ثبت، هم در ویرایش */}
                         <Form.Item label={<><PaperClipOutlined /> فایل‌هایِ ضمیمه</>} extra="حداکثر ۱۰ فایل در هر بار، هر فایل تا ۱۰ مگابایت؛ پس از ذخیره ثبت می‌شوند.">
-                            {existingFiles.length > 0 && <EventAttachmentList items={existingFiles} />}
                             <Upload
                                 multiple
                                 beforeUpload={(file) => {
@@ -656,10 +659,9 @@ export default function EventFormModal({
                             >
                                 <Button icon={<UploadOutlined />}>انتخابِ فایل</Button>
                             </Upload>
+                            {existingFiles.length > 0 && <EventAttachmentList items={existingFiles} />}
                         </Form.Item>
 
-                        {!isEdit && (
-                        <>
                         {(manageableUnits.length > 0 || !!original?.unitId) && (
                             <Form.Item name="OrganizationalUnitID" label="تقویم" extra="رویدادِ تقویمِ واحد برایِ همهٔ اعضایِ مستقیمِ آن واحد دیده می‌شود.">
                                 <Select
@@ -680,13 +682,13 @@ export default function EventFormModal({
                             name="IsPrivate"
                             label="خصوصی"
                             valuePropName="checked"
-                            extra={isUnitEvent ? 'رویدادِ تقویمِ واحد نمی‌تواند خصوصی باشد.' : 'دیگران (حتی مدیرِ سیستم) فقط بازهٔ «مشغول» را می‌بینند؛ جزئیات فقط برایِ مالک و شرکت‌کنندگان.'}
+                            extra={isUnitEvent ? 'رویدادِ تقویمِ واحد نمی‌تواند خصوصی باشد.' : 'دیگران (حتی مدیرِ سیستم) فقط بازهٔ «مشغول» را می‌بینند؛ جزئیات فقط برایِ مسئول و شرکت‌کنندگان.'}
                         >
                             <Switch disabled={isUnitEvent} />
                         </Form.Item>
 
                         {canForOthers && (
-                            <Form.Item name="OwnerUserID" label="این رویداد برای چه کسی است؟ (مالک)">
+                            <Form.Item name="OwnerUserID" label="مسئول رویداد">
                                 <Select
                                     size="large"
                                     showSearch
@@ -759,14 +761,15 @@ export default function EventFormModal({
                         <Row gutter={12}>
                             <Col xs={24} sm={recurrenceType && recurrenceType !== 'NONE' ? 12 : 24}>
                                 <Form.Item name="RecurrenceType" label="نوع تکرار">
-                                    <Select options={RECURRENCE_OPTIONS} size="large" />
+                                    <Select disabled={isEdit && !!projectDeadlineId} options={RECURRENCE_OPTIONS} size="large" />
                                 </Form.Item>
                             </Col>
                             {recurrenceType && recurrenceType !== 'NONE' && (
                                 <>
                                     {/* «هر چند روز/هفته/ماه یک‌بار» برداشته شد — تکرارِ تازه همیشه هر بار (فاصلهٔ ۱) است */}
                                     <Col xs={24} sm={12}>
-                                        <Form.Item name="RecurrenceEndDate" label="پایان تکرار">
+                                        <Form.Item name="RecurrenceEndDate" label="پایان تکرار (الزامی)"
+                                            rules={[{ required: true, message: 'تاریخ پایان تکرار را انتخاب کنید.' }]}>
                                             <PersianDateInput value={null as any} onChange={() => {}} />
                                         </Form.Item>
                                     </Col>
@@ -785,14 +788,12 @@ export default function EventFormModal({
                                     <Col xs={24}>
                                         <div style={{ fontSize: 12, color: '#6B7280', marginTop: -8 }}>
                                             {recurrenceSummary(recurrenceType, recurrenceInterval, seriesStart, recurrenceWeekDays)} — بر اساسِ تقویمِ شمسی.
-                                            {eventId ? ' ویرایش روی همهٔ وقوع‌هایِ این سری اعمال می‌شود.' : ''}
+                                            {eventId ? ' هنگام ذخیره می‌توانید محدودهٔ ویرایش را انتخاب کنید.' : ''}
                                         </div>
                                     </Col>
                                 </>
                             )}
                         </Row>
-                        </>
-                        )}
                         <EventLinksFields open={open} canLinkCrm={canLinkCrm} links={links} />
                     </Form>
                 </Spin>

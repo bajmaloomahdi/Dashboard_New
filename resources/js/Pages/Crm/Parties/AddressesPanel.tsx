@@ -276,8 +276,12 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
     return (
         <div>
             {canManage ? (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>آدرسِ جدید</Button>
+                <div dir="rtl" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    <Button type={formOpen ? 'default' : 'primary'} icon={<PlusOutlined />} onClick={openCreate} disabled={saving}>آدرسِ جدید</Button>
+                    {formOpen && <>
+                        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>ثبت</Button>
+                        <Button icon={<CloseOutlined />} onClick={() => setFormOpen(false)} disabled={saving}>انصراف</Button>
+                    </>}
                 </div>
             ) : null}
 
@@ -393,10 +397,6 @@ export default function AddressesPanel({ partyId, personId, items: initialItems,
                             </Col>
                         ) : null}
                     </Row>
-                    <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
-                        <Button icon={<CloseOutlined />} onClick={() => setFormOpen(false)} disabled={saving}>انصراف</Button>
-                        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>ذخیره</Button>
-                    </Space>
                 </Space>
             ) : null}
 

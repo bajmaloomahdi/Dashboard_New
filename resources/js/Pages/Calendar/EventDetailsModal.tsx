@@ -33,6 +33,7 @@ import type { CalendarEventAttendee, CalendarPermission, ReminderOption } from '
 import { parseDT, previousResponseText, recurrenceSummary } from './calendarUtils';
 import EventAttachmentList, { EventAttachment, saveEventAttachmentDescription, uploadEventAttachments } from './EventAttachments';
 import { EventDetailTabs } from './EventComments';
+import RelatedAttachments from '../../Components/RelatedAttachments';
 import type { EventLink } from './EventLinksFields';
 
 const { Text, Paragraph } = Typography;
@@ -324,12 +325,13 @@ export default function EventDetailsModal({
             ) : pendingFiles.length ? null : (
                 <Text type="secondary" style={{ fontSize: 12 }}>ضمیمه‌ای ثبت نشده است.</Text>
             )}
+            {open && eventId && event && <RelatedAttachments key={eventId} kind="event" id={eventId} />}
         </div>
     );
 
     const footer: React.ReactNode[] = [];
     // حذف از این پنجره برداشته شد؛ ویرایش فقط برایِ تاریخ/ساعت و وضعیت است.
-    // تبِ «توضیحات»: دکمهٔ ویرایش نمایش داده نمی‌شود — دکمهٔ «ثبتِ توضیح» پایینِ همان تب است
+    // تبِ «توضیحات» فرم ثبت خودش را دارد.
     if (activeTab === 'comments') {
         // بدونِ دکمهٔ پایینِ پنجره
     } else if (event && (canEdit || canEditContent)) {
@@ -455,7 +457,7 @@ export default function EventDetailsModal({
                                     );
                                 })}
                                 <Descriptions.Item label={<><UserOutlined /> ایجادکننده</>}>{event.CreatorName}</Descriptions.Item>
-                                <Descriptions.Item label={<><CrownOutlined /> مالک</>}>
+                                <Descriptions.Item label={<><CrownOutlined /> مسئول</>}>
                                     {event.OwnerName}
                                     {event.OwnerUserID === currentUserId && <Tag color="blue" style={{ marginRight: 6, borderRadius: 6 }}>شما</Tag>}
                                 </Descriptions.Item>

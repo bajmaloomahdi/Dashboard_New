@@ -8,6 +8,7 @@ import {
     Progress,
     Descriptions,
     Select,
+    Popconfirm,
     message,
 } from 'antd';
 import {
@@ -57,6 +58,7 @@ interface Project {
     StartDate: string | null;
     PlannedEndDate: string | null;
     ActualEndDate: string | null;
+    HasParentProject?: boolean | number | string;
     ProjectStatusTitle: string;
     ProjectPriorityID: number | null;
     PriorityName: string | null;
@@ -159,27 +161,50 @@ export default function ProjectShow() {
     const [taskTargetMember, setTaskTargetMember] = useState<Member | null>(null);
     const [tasks, setTasks] = useState<ProjectTask[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'related' | 'members' | 'contractors' | 'tasks' | 'events' | 'comments'>('info');
+    const [selectedChild, setSelectedChild] = useState<string>();
+    const [selectedParent, setSelectedParent] = useState<string>();
+    const [savingRelation, setSavingRelation] = useState(false);
     const [eventCount, setEventCount] = useState<number | null>(null);
     const [commentsAndAttachmentsCount, setCommentsAndAttachmentsCount] = useState<number | null>(null);
     const [now, setNow] = useState(Date.now);
     const [statusFormOpen, setStatusFormOpen] = useState(false);
     const statusForm = useForm<{ ProjectStatusID: number | null }>({ ProjectStatusID: null });
     const [statusMessage, statusMessageHolder] = message.useMessage();
+    const changeProjectParent = (childId: number | string, parentId: number | string | null) => {
+        router.patch(`/projects/${childId}/parent`, {
+            RelatedPageID: project.ProjectID,
+            ParentProjectID: parentId,
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onStart: () => setSavingRelation(true),
+            onFinish: () => setSavingRelation(false),
+            onSuccess: () => {
+                setSelectedChild(undefined);
+                setSelectedParent(undefined);
+                statusMessage.success(parentId === null ? 'ارتباط پروژه قطع شد.' : 'ارتباط پروژه ذخیره شد.');
+            },
+            onError: (errors) => statusMessage.error(errors.ParentProjectID || 'ذخیرهٔ ارتباط پروژه انجام نشد.'),
+        });
+    };
     const plannedDate = project.PlannedEndDate?.slice(0, 10);
     const deadline = plannedDate ? Date.parse(`${plannedDate}T23:59:59+03:30`) : NaN;
     const remainingHours = Math.ceil(Math.max(0, deadline - now) / 3_600_000);
     const formatCount = (value: number) => value.toLocaleString('fa-IR');
-    const countdown = project.ActualEndDate ? 'پروژه پایان یافته'
-        : !Number.isFinite(deadline) ? '—'
+    const isInProgress = project.ProjectStatusTitle?.replace(/[\s\u200c]+/g, '') === 'درحالاجرا';
+    const hasEnded = Boolean(project.ActualEndDate) && !isInProgress;
+    const countdown = hasEnded ? 'پروژه پایان یافته'
+        : !plannedDate ? 'تاریخ پایان مشخص نشده'
+        : !Number.isFinite(deadline) ? 'تاریخ پایان نامعتبر است'
         : deadline <= now ? 'مهلت گذشته است'
         : `${formatCount(Math.floor(remainingHours / 24))} روز و ${formatCount(remainingHours % 24)} ساعت`;
 
     useEffect(() => {
-        if (!Number.isFinite(deadline) || project.ActualEndDate) return;
+        if (!Number.isFinite(deadline) || hasEnded) return;
         const timer = window.setInterval(() => setNow(Date.now()), 60_000);
         return () => window.clearInterval(timer);
-    }, [deadline, project.ActualEndDate]);
+    }, [deadline, hasEnded]);
 
     const activeMembers = (members || []).filter((m) => toBool(m.IsActive));
     const activeContractors = (contractors || []).filter((c) => toBool(c.IsActive));
@@ -353,6 +378,7 @@ export default function ProjectShow() {
     const tabDefs = [
         { key: 'info' as const, label: 'اطلاعات پروژه', icon: <InfoCircleOutlined />, count: null },
         { key: 'members' as const, label: 'اعضا', icon: <TeamOutlined />, count: activeMembers.length },
+        { key: 'related' as const, label: 'پروژه‌های مرتبط', icon: <ProjectOutlined />, count: (parentProject ? 1 : 0) + (childProjects?.length ?? 0) },
         { key: 'contractors' as const, label: 'پیمانکار', icon: <SolutionOutlined />, count: activeContractors.length },
         { key: 'tasks' as const, label: 'وظیفه‌ها', icon: <ThunderboltOutlined />, count: tasks.length },
         { key: 'events' as const, label: 'رویدادها', icon: <CalendarOutlined />, count: eventCount },
@@ -460,6 +486,7 @@ export default function ProjectShow() {
                     { label: project.ProjectStatusTitle },
                     ...(project.PriorityName ? [{ label: `اولویت ${project.PriorityName}`, color: project.PriorityColor || '#fff' }] : []),
                 ]}
+                roomyStats
                 stats={[
                     { icon: <CrownOutlined />, label: 'مسئول', value: project.ResponsibleName || '—' },
                     { icon: <TeamOutlined />, label: 'اعضا', value: `${activeMembers.length} نفر` },
@@ -536,6 +563,47 @@ export default function ProjectShow() {
                 </Card>
             )}
 
+            {activeTab === 'related' && (
+                <Card style={STYLES.card} title="پروژه‌های مرتبط">
+                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                        {parentProject && <div>پروژهٔ مادر · <a href={`/projects/${parentProject.ProjectID}`}>{parentProject.ProjectTitle}</a></div>}
+                        {isResponsible && <Space wrap>
+                            {!parentProject && !toBool(project.HasParentProject) && <>
+                            <Select allowClear placeholder="انتخاب پروژهٔ مادر" style={{ width: 250 }}
+                                value={selectedParent} onChange={setSelectedParent} disabled={savingRelation}
+                                showSearch={{ optionFilterProp: 'label' }}
+                                options={(parentOptions ?? []).filter(({ id }) => String(id) !== String(project.ProjectID)
+                                    && String(id) !== String(parentProject?.ProjectID))
+                                    .map(({ id, title }) => ({ value: String(id), label: title }))} />
+                            <Button disabled={savingRelation || !selectedParent}
+                                onClick={() => { if (selectedParent) changeProjectParent(project.ProjectID, selectedParent); }}>ذخیرهٔ پروژهٔ مادر</Button>
+                            </>}
+                            {(parentProject || toBool(project.HasParentProject)) && <Popconfirm title="ارتباط با پروژهٔ مادر قطع شود؟" okText="قطع ارتباط" cancelText="انصراف"
+                                onConfirm={() => changeProjectParent(project.ProjectID, null)}>
+                                <Button danger disabled={savingRelation}>قطع ارتباط با مادر</Button>
+                            </Popconfirm>}
+                        </Space>}
+                        {isResponsible && <Space wrap>
+                            <Select allowClear placeholder="انتخاب زیرپروژه" style={{ width: 250 }}
+                                value={selectedChild} onChange={setSelectedChild} disabled={savingRelation}
+                                showSearch={{ optionFilterProp: 'label' }}
+                                options={(parentOptions ?? []).filter((option) => option.parentId == null
+                                    && String(option.id) !== String(project.ProjectID)
+                                    && String(option.id) !== String(parentProject?.ProjectID))
+                                    .map((option) => ({ value: String(option.id), label: option.title }))} />
+                            <Button type="primary" loading={savingRelation} disabled={!selectedChild}
+                                onClick={() => { if (selectedChild) changeProjectParent(selectedChild, project.ProjectID); }}>افزودن زیرپروژه</Button>
+                        </Space>}
+                        {childProjects?.length ? childProjects.map((child) => <Space key={child.id} wrap>
+                            <a href={`/projects/${child.id}`}>{child.title}</a>
+                            {isResponsible && <Popconfirm title="ارتباط این زیرپروژه قطع شود؟" okText="قطع ارتباط" cancelText="انصراف"
+                                onConfirm={() => changeProjectParent(child.id, null)}>
+                                <Button size="small" danger disabled={savingRelation}>حذف ارتباط</Button>
+                            </Popconfirm>}
+                        </Space>) : <Typography.Text type="secondary">زیرپروژه‌ای ثبت نشده است.</Typography.Text>}
+                    </Space>
+                </Card>
+            )}
             {activeTab === 'members' && (
                 <Card
                     style={STYLES.card}
@@ -610,7 +678,7 @@ export default function ProjectShow() {
                 <ProjectEventsTab key={project.ProjectID} projectId={Number(project.ProjectID)} currentUserId={Number(currentUserId)} permissions={calendarPermissions || []} onCount={setEventCount} />
             </div>
             <div hidden={activeTab !== 'comments'}>
-                <ProjectComments key={project.ProjectID} projectId={project.ProjectID} onCount={setCommentsAndAttachmentsCount} />
+                <ProjectComments key={project.ProjectID} projectId={project.ProjectID} currentUserId={currentUserId} onCount={setCommentsAndAttachmentsCount} />
             </div>
 
             <ProjectMembersModal

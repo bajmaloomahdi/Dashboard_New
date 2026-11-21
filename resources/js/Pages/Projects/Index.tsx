@@ -29,7 +29,7 @@ import {
 } from '@ant-design/icons';
 import { Link, router, usePage } from '@inertiajs/react';
 import type { ColumnsType } from 'antd/es/table';
-import ListViewToggle, { useListViewMode } from '../../Components/Crm/ListViewToggle';
+import ListViewToggle, { useCardPage, useListViewMode } from '../../Components/Crm/ListViewToggle';
 import { normalizeForFilter } from '../../Components/Crm/tableFilters';
 import PreferenceTable from '../../Components/PreferenceTable';
 import MainLayout from '../../Layouts/MainLayout';
@@ -134,14 +134,9 @@ export default function ProjectsIndex() {
         setPriorityFilter(undefined);
     };
 
-    const gridSearch = normalizeForFilter(searchText);
-    const filteredProjects: Project[] = (projects || []).filter((p: Project) => {
-        const gridMatch = [p.ProjectTitle, p.ProjectCode, p.Description, p.ResponsibleName, p.CreatorName,
-            p.ProjectStatusTitle, p.PriorityName].some((value) => normalizeForFilter(value).includes(gridSearch));
-        const matchSearch = searchText
-            ? viewMode === 'grid' ? gridMatch : p.ProjectTitle?.toLowerCase().includes(searchText.toLowerCase()) ||
-              p.ProjectCode?.toLowerCase().includes(searchText.toLowerCase())
-            : true;
+    const filteredProjects: Project[] = viewMode === 'grid' ? (projects || []) : (projects || []).filter((p: Project) => {
+        const matchSearch = !searchText || p.ProjectTitle?.toLowerCase().includes(searchText.toLowerCase())
+            || p.ProjectCode?.toLowerCase().includes(searchText.toLowerCase());
         const matchStatus = statusFilter === undefined || p.ProjectStatusID === statusFilter;
         const matchActive =
             activeFilter === undefined || activeFilter === ''
@@ -150,6 +145,7 @@ export default function ProjectsIndex() {
         const matchPriority = priorityFilter === undefined || p.ProjectPriorityID === priorityFilter;
         return matchSearch && matchStatus && matchActive && matchPriority;
     });
+    const cardPage = useCardPage(filteredProjects);
 
     const [gridFilters, setGridFilters] = useState<Record<string, string | string[]>>({});
     const [gridPage, setGridPage] = useState({ current: 1, pageSize: 20 });
@@ -179,13 +175,13 @@ export default function ProjectsIndex() {
         CreatedAt: createdDate,
     };
     const hasGridFilters = Object.values(gridFilters).some((value) => value.length > 0);
-    const gridRows = filteredProjects.filter((project) => Object.entries(gridFilters).every(([key, value]) => {
+    const gridRows = viewMode === 'grid' && hasGridFilters ? filteredProjects.filter((project) => Object.entries(gridFilters).every(([key, value]) => {
         const field = fields[key as keyof typeof fields](project);
         if (key === 'MemberCount' && Array.isArray(value)) {
             return !value.length || (project.MemberNames?.length ? project.MemberNames : ['—']).some((name) => value.includes(name));
         }
         return Array.isArray(value) ? !value.length || value.includes(field) : normalizeForFilter(field).includes(normalizeForFilter(value));
-    }));
+    })) : filteredProjects;
     const currentGridPage = Math.min(gridPage.current, Math.max(1, Math.ceil(gridRows.length / gridPage.pageSize)));
     const columnFilter = (label: string, key: keyof typeof fields, text = false): ColumnsType<Project>[number] => {
         const get = fields[key];
@@ -260,7 +256,7 @@ export default function ProjectsIndex() {
         );
     };
 
-    const gridColumns: ColumnsType<Project> = [
+    const gridColumns: ColumnsType<Project> = viewMode === 'cards' ? [] : [
         { title: 'ردیف', key: '__rowNumber', width: 64, align: 'center', render: (_, __, index) => (currentGridPage - 1) * gridPage.pageSize + index + 1 },
         { title: 'نام پروژه', key: 'ProjectTitle', width: 220, ...columnFilter('نام پروژه', 'ProjectTitle', true), sorter: (a, b) => a.ProjectTitle.localeCompare(b.ProjectTitle, 'fa'),
             render: (_, p) => <Link href={`/projects/${p.ProjectID}`}>{p.ProjectTitle}</Link> },
@@ -303,11 +299,11 @@ export default function ProjectsIndex() {
                 }
             />
 
-            <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
+            {viewMode === 'cards' && <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle">
                     <Col xs={24} sm={10} md={10}>
                         <Input
-                            placeholder={viewMode === 'grid' ? 'جستجو در اطلاعات پروژه...' : 'جستجو در کد یا عنوان پروژه...'}
+                            placeholder="جستجو در کد یا عنوان پروژه..."
                             prefix={<SearchOutlined />}
                             value={searchText}
                             onChange={(e) => setSearchText(e.target.value)}
@@ -341,17 +337,14 @@ export default function ProjectsIndex() {
                         />
                     </Col>
                     <Col xs={24} sm={3} md={3}>
-                        <Button icon={<ReloadOutlined />} onClick={() => {
-                            handleReset();
-                            if (viewMode === 'grid') resetGridFilters();
-                        }} size="large" block>
+                        <Button icon={<ReloadOutlined />} onClick={handleReset} size="large" block>
                             بازنشانی
                         </Button>
                     </Col>
                 </Row>
-            </Card>
+            </Card>}
 
-            {(priorities || []).length > 0 && (
+            {viewMode === 'cards' && (priorities || []).length > 0 && (
                 <div className="priority-filter-bar">
                     <span
                         className={`priority-chip ${priorityFilter === undefined ? 'active' : ''}`}
@@ -421,7 +414,7 @@ export default function ProjectsIndex() {
                     </div>
                 ) : (
                     <div className="project-cards-grid">
-                        {filteredProjects.map((rec: Project) => {
+                        {cardPage.items.map((rec: Project) => {
                             const isActive = columnHelpers.toBool(rec.IsActive);
                             return (
                                 <div
@@ -509,6 +502,7 @@ export default function ProjectsIndex() {
                         })}
                     </div>
                 )}
+                {cardPage.pagination}
             </Card>
             )}
 

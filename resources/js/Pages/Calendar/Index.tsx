@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Badge, Button, Card, Col, Drawer, FloatButton, Grid, Input, Row, Segmented, Select, Space, Spin, Tooltip, message } from 'antd';
+import { Alert, Badge, Button, Card, Col, Drawer, FloatButton, Grid, Input, Popover, Row, Segmented, Select, Space, Spin, Tooltip, message } from 'antd';
 import {
     MailOutlined,
     CalendarOutlined,
@@ -32,6 +32,7 @@ import {
     jalaliFullDayTitle,
     jalaliMonthBounds,
     jalaliMonthTitle,
+    jalaliParts,
     toApiDate,
 } from '../../Utils/jalaliCalendar';
 import { toEnglishDigits } from '../../Utils/jalali';
@@ -77,6 +78,10 @@ const AGENDA_FUTURE_MONTHS = 12;
 /** بازهٔ جست‌وجو: شش ماهِ گذشته تا یک سالِ آینده */
 const SEARCH_PAST_DAYS = 180;
 const SEARCH_FUTURE_DAYS = 365;
+const CALENDAR_YEAR_OPTIONS = Array.from({ length: 201 }, (_, index) => {
+    const year = 1300 + index;
+    return { value: year, label: String(year) };
+});
 
 function computeRange(view: ViewMode, referenceDate: Date, workWeek: WorkWeekSettings, agendaFrom: string | null = null): { from: Date; to: Date } {
     if (view === 'month') {
@@ -288,7 +293,9 @@ export default function CalendarIndex() {
         const editEventId = url.searchParams.get('editEventId');
         if (!canEditEvents || !editEventId || !/^[1-9]\d*$/.test(editEventId)) return;
         const eventId = Number(editEventId);
-        if (Number.isSafeInteger(eventId)) handleEditFromDetails(eventId);
+        const start = url.searchParams.get('occurrenceStart');
+        const end = url.searchParams.get('occurrenceEnd');
+        if (Number.isSafeInteger(eventId)) handleEditFromDetails(eventId, start && end ? { start, end } : null);
     }, [pageUrl, canEditEvents, handleEditFromDetails]);
 
     useEffect(() => {
@@ -356,6 +363,7 @@ export default function CalendarIndex() {
 
     // دستورکار: «از تاریخ» و جست‌وجو در موضوع و متن
     const [agendaFrom, setAgendaFrom] = useState<string | null>(null);
+    const [yearPickerOpen, setYearPickerOpen] = useState(false);
     const [agendaQuery, setAgendaQuery] = useState('');
     const range = useMemo(() => computeRange(view, referenceDate, workWeek, agendaFrom), [view, referenceDate, workWeek, agendaFrom]);
     const requestSeq = useRef(0);
@@ -420,9 +428,9 @@ export default function CalendarIndex() {
     }, [searchInput]);
 
     const searchRange = useMemo(() => {
-        const today = startOfDay(new Date());
-        return { from: addDays(today, -SEARCH_PAST_DAYS), to: addDays(today, SEARCH_FUTURE_DAYS) };
-    }, []);
+        const anchor = startOfDay(referenceDate);
+        return { from: addDays(anchor, -SEARCH_PAST_DAYS), to: addDays(anchor, SEARCH_FUTURE_DAYS) };
+    }, [referenceDate]);
 
     const loadSearchEvents = useCallback(async () => {
         setSearchLoading(true);
@@ -548,6 +556,8 @@ export default function CalendarIndex() {
         const url = new URL(window.location.href);
         if (url.searchParams.has('editEventId')) {
             url.searchParams.delete('editEventId');
+            url.searchParams.delete('occurrenceStart');
+            url.searchParams.delete('occurrenceEnd');
             window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
         }
         if (changed) refreshAll();
@@ -600,6 +610,7 @@ export default function CalendarIndex() {
             : view === 'day'
               ? jalaliFullDayTitle(referenceDate)
               : `${jalaliFullDayTitle(range.from)} — ${jalaliFullDayTitle(range.to)}`;
+    const referenceYear = jalaliParts(referenceDate).year;
     const filterCount = activeFilterCount(filters);
 
     const sidebar = (
@@ -711,7 +722,19 @@ export default function CalendarIndex() {
                                 <Button icon={<RightOutlined />} onClick={goPrev} aria-label="قبلی" />
                                 <Button onClick={goToday}>امروز</Button>
                                 <Button icon={<LeftOutlined />} onClick={goNext} aria-label="بعدی" />
-                                <span className="cal-toolbar-title">{toEnglishDigits(rangeTitle)}</span>
+                                <Popover trigger="click" placement="bottom" open={yearPickerOpen} onOpenChange={setYearPickerOpen}
+                                    content={<Select aria-label="سال شمسی" value={referenceYear} options={CALENDAR_YEAR_OPTIONS}
+                                        style={{ width: 145 }} showSearch={{ filterOption: (input, option) => Boolean(option?.label.includes(toEnglishDigits(input))) }}
+                                        onChange={(year) => {
+                                            const target = addJalaliMonths(referenceDate, (year - referenceYear) * 12);
+                                            setReferenceDate(startOfDay(target));
+                                            setAgendaFrom(null);
+                                            setYearPickerOpen(false);
+                                        }} />}>
+                                    <Button type="text" className="cal-toolbar-title" aria-label={`انتخاب سال · ${toEnglishDigits(rangeTitle)}`}>
+                                        {toEnglishDigits(rangeTitle)}
+                                    </Button>
+                                </Popover>
                             </Space>
                             {isMobile ? (
                                 <div className="cal-toolbar-mobile">

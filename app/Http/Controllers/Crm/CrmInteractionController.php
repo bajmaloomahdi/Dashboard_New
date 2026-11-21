@@ -7,6 +7,7 @@ use App\Services\Crm\Exceptions\CrmValidationException;
 use App\Services\Crm\Support\CrmInteractionAttachmentFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 /**
  * تعاملاتِ یک طرف‌حساب یا مستقیماً یک مخاطب (CrmInteractions؛ PartyID یا PersonID): تماس/جلسه/یادداشت/پیگیری + پیوست‌هایِ هر تعامل
@@ -15,6 +16,21 @@ use Illuminate\Support\Facades\Storage;
 class CrmInteractionController extends CrmApiController
 {
     private const PERM_MANAGE = 'CRM_MANAGE_PARTIES';
+
+    public function updateAttachmentDescription(Request $request, int $interactionId, int $attachmentId)
+    {
+        $this->authorizeCrm(self::PERM_MANAGE);
+        $input = $request->validate(['description' => 'nullable|string|max:1000']);
+        $result = DB::selectOne('EXEC dbo.sp_Crm_UpdateInteractionAttachmentDescription ?, ?, ?, ?', [
+            $interactionId, $attachmentId, $input['description'] ?? null, $this->actorId(),
+        ]);
+        $updated = (int) ($result->Updated ?? 0) === 1;
+
+        return response()->json([
+            'success' => $updated,
+            'message' => $updated ? 'توضیح پیوست ویرایش شد.' : 'پیوست این تعامل یافت نشد.',
+        ], $updated ? 200 : 404);
+    }
 
     public function __construct(private CrmPartyService $parties)
     {

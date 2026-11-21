@@ -253,7 +253,7 @@ export function dragBlockReason(ev: CalendarEvent, permissions: CalendarPermissi
     if (ev.IsBusyOnly) return 'فقط وضعیتِ «مشغول» دیده می‌شود.';
     if (isReadOnly) return 'تقویمِ کاربرِ دیگر فقط‌خواندنی است.';
     if (!permissions.includes('CALENDAR_EDIT')) return 'اجازهٔ ویرایشِ رویداد را ندارید.';
-    if (!(ev.CanManage === true || Number(ev.CanManage) === 1)) return 'فقط ایجادکننده یا مالکِ رویداد می‌تواند زمان آن را تغییر دهد.';
+    if (!(ev.CanManage === true || Number(ev.CanManage) === 1)) return 'فقط ایجادکننده یا مسئول رویداد می‌تواند زمان آن را تغییر دهد.';
     if (isRecurring(ev)) return 'زمانِ رویدادِ تکرارشونده را از فرمِ ویرایش تغییر دهید.';
     return null;
 }

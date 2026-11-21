@@ -179,6 +179,12 @@ export default function AgendaView({
                                             {Number(ev.IsBusyOnly) !== 1 && !!ev.AttendeeNames?.length && (
                                                 <span><UserOutlined /> کاربران مرتبط: {ev.AttendeeNames.join('، ')}</span>
                                             )}
+                                            {Number(ev.IsBusyOnly) !== 1 && !!ev.LinkedPartyNames?.length && (
+                                                <span>طرف‌حساب: {ev.LinkedPartyNames.join('، ')}</span>
+                                            )}
+                                            {Number(ev.IsBusyOnly) !== 1 && !!ev.LinkedProjectNames?.length && (
+                                                <span>پروژه: {ev.LinkedProjectNames.join('، ')}</span>
+                                            )}
                                             {ev.SourceLabel && <span style={{ color: ev.Color }}>● {ev.SourceLabel}</span>}
                                             {Number(ev.IsPrivate) === 1 && <span><LockOutlined /> خصوصی</span>}
                                             {isRecurring(ev) && <span><SyncOutlined /> تکرارشونده</span>}

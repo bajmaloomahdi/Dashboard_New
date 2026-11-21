@@ -175,7 +175,7 @@ export default function PartyFormModal({
     }, [open, editingParty]);
 
     const isIndividual = values.partyNature === 'INDIVIDUAL';
-    // حقوقی: شناسهٔ ملیِ الزامی (۱۱ رقم)؛ حقیقی: کدِ ملیِ اختیاری (۱۰ رقم — پچِ ۱۲۳)
+    // شناسهٔ حقوقی و کد ملی حقیقی اختیاری‌اند.
     const identifierLabel = isIndividual ? 'کدِ ملی' : 'شناسهٔ ملی';
     const identifierMaxLen = isIndividual ? 10 : 11;
     const dateLabel = isIndividual ? 'تاریخِ افتتاح' : 'تاریخِ ثبت';
@@ -195,8 +195,8 @@ export default function PartyFormModal({
             setFormError('نام الزامی است.');
             return;
         }
-        if (!isIndividual && !values.identifierNumber.trim()) {
-            setFormError(`${identifierLabel} الزامی است.`);
+        if (!isIndividual && values.identifierNumber.trim() && values.identifierNumber.trim().length !== 11) {
+            setFormError('شناسه ملی باید دقیقاً ۱۱ رقم باشد.');
             return;
         }
         if (isIndividual && values.identifierNumber.trim() && values.identifierNumber.trim().length !== 10) {
@@ -334,14 +334,14 @@ export default function PartyFormModal({
 
                 <Row gutter={16}>
                     <Col xs={24} md={12}>
-                        <Form.Item label={identifierLabel} required={!isIndividual} validateStatus={fieldErrors.identifierNumber ? 'error' : ''} help={fieldErrors.identifierNumber}>
+                        <Form.Item label={identifierLabel} validateStatus={fieldErrors.identifierNumber ? 'error' : ''} help={fieldErrors.identifierNumber}>
                             <Input
                                 dir="ltr"
                                 maxLength={identifierMaxLen}
                                 value={values.identifierNumber}
                                 onChange={(e) => setValues((s) => ({ ...s, identifierNumber: e.target.value.replace(/\D/g, '') }))}
                                 size="large"
-                                placeholder={isIndividual ? '۱۰ رقم (اختیاری)' : '۱۱ رقم'}
+                                placeholder={isIndividual ? '۱۰ رقم (اختیاری)' : '۱۱ رقم (اختیاری)'}
                             />
                         </Form.Item>
                     </Col>

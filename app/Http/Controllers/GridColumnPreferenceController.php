@@ -18,7 +18,7 @@ class GridColumnPreferenceController extends CrmApiController
             'columns' => [
                 'row' => 'ردیف', 'name' => 'نام', 'nature' => 'ماهیت', 'identifier' => 'شناسه / کد ملی',
                 'type' => 'گروه', 'activity' => 'زیرگروه', 'person' => 'فرد مرتبط', 'contact' => 'تماس اصلی',
-                'address' => 'آدرس اصلی', 'status' => 'وضعیت رکورد', 'cooperationStatus' => 'وضعیت همکاری', 'actions' => 'عملیات',
+                'province' => 'استان', 'county' => 'شهرستان', 'city' => 'شهر', 'mobile' => 'موبایل', 'address' => 'آدرس اصلی', 'status' => 'وضعیت رکورد', 'cooperationStatus' => 'وضعیت همکاری', 'actions' => 'عملیات',
             ],
         ],
         // Mirrors the authenticated access of the existing Users list route.
@@ -117,7 +117,7 @@ class GridColumnPreferenceController extends CrmApiController
         ],
         'crm.persons.list' => [
             'permission' => 'CRM_VIEW', 'required' => ['name'],
-            'columns' => ['row' => 'ردیف', 'name' => 'نام', 'identifier' => 'شناسه', 'birth' => 'تولد', 'parties' => 'طرف‌حساب', 'contact' => 'تماس', 'address' => 'آدرس', 'status' => 'وضعیت', 'actions' => 'عملیات'],
+            'columns' => ['row' => 'ردیف', 'name' => 'نام', 'identifier' => 'شناسه', 'birth' => 'تولد', 'parties' => 'طرف‌حساب', 'contact' => 'تماس', 'province' => 'استان', 'county' => 'شهرستان', 'city' => 'شهر', 'mobile' => 'موبایل', 'address' => 'آدرس', 'status' => 'وضعیت', 'actions' => 'عملیات'],
         ],
         'crm.persons.parties' => [
             'permission' => 'CRM_VIEW', 'required' => ['party'],
@@ -322,15 +322,31 @@ class GridColumnPreferenceController extends CrmApiController
                     DB::selectOne('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Reset ?, ?, @v;', [$version, $userId, $gridKey]);
                     $row = null;
                 } else {
-                    $visibility = $request->validate(['visibility' => ['present', 'array']])['visibility'];
+                    $settings = $request->validate([
+                        'visibility' => ['present', 'array'],
+                        'order' => ['sometimes', 'list', 'max:100'],
+                        'order.*' => ['required', 'string', 'distinct', \Illuminate\Validation\Rule::in(array_keys($grid['columns']))],
+                        'widths' => ['sometimes', 'array:'.implode(',', array_keys($grid['columns']))],
+                        'widths.*' => ['required', 'integer', 'between:60,800'],
+                    ]);
+                    $visibility = $settings['visibility'];
                     foreach ($visibility as $key => $visible) {
                         if (! array_key_exists($key, $grid['columns']) || ! is_bool($visible)
                             || (! $visible && in_array($key, $grid['required'], true))) {
                             throw ValidationException::withMessages(['visibility' => 'تنظیم ستون معتبر نیست.']);
                         }
                     }
-                    $row = DB::selectOne('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, 1, @v;', [
-                        $version, $userId, $gridKey, json_encode((object) $visibility, JSON_THROW_ON_ERROR),
+                    $order = $settings['order'] ?? [];
+                    // Version 2 stores presentation order in the serialized order of the boolean keys.
+                    $orderedVisibility = array_fill_keys($order, true);
+                    $columnSettings = array_replace($orderedVisibility, $visibility);
+                    $widths = $settings['widths'] ?? [];
+                    foreach ($widths as $key => $width) {
+                        $columnSettings[$key] = ['visible' => $columnSettings[$key] ?? true, 'width' => (int) $width];
+                    }
+                    $row = DB::selectOne('DECLARE @v binary(8) = CONVERT(binary(8), ?, 2); EXEC dbo.sp_UserGridColumnPreferences_Save ?, ?, ?, ?, @v;', [
+                        $version, $userId, $gridKey, json_encode((object) $columnSettings, JSON_THROW_ON_ERROR),
+                        $widths ? 3 : ($order ? 2 : 1),
                     ]);
                 }
             }
@@ -341,7 +357,14 @@ class GridColumnPreferenceController extends CrmApiController
             throw $e;
         }
 
-        $visibility = array_intersect_key(json_decode($row->VisibilityJson ?? '{}', true), $grid['columns']);
+        $saved = array_intersect_key(json_decode($row->VisibilityJson ?? '{}', true), $grid['columns']);
+        $order = (int) ($row->SchemaVersion ?? 1) >= 2 ? array_map('strval', array_keys($saved)) : [];
+        $visibility = [];
+        $widths = [];
+        foreach ($saved as $key => $column) {
+            $visibility[$key] = is_array($column) ? $column['visible'] : $column;
+            if (is_array($column)) $widths[$key] = $column['width'];
+        }
         foreach ($grid['required'] as $key) {
             unset($visibility[$key]);
         }
@@ -350,6 +373,8 @@ class GridColumnPreferenceController extends CrmApiController
             'columns' => (object) $grid['columns'],
             'required' => $grid['required'],
             'visibility' => (object) $visibility,
+            'order' => $order,
+            'widths' => (object) $widths,
             'version' => $row->VersionToken ?? null,
         ])->header('Cache-Control', 'private, no-store');
     }

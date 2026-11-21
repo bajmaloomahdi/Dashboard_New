@@ -22,16 +22,21 @@ export const normalizeForFilter = (value: unknown): string =>
 export type ColumnFilterSpec<T> = { get: (row: T) => unknown; mode: 'text' | 'exact' | 'any' };
 
 /**
- * فیلترِ ستونیِ شبیهِ اکسل: هر ستون یک مقدار؛ ردیف‌ها همان لحظهٔ تایپ فیلتر می‌شوند (سمتِ مرورگر، رویِ فهرستِ بارگذاری‌شده).
+ * فیلترهای ستون‌ها با AND و انتخاب‌های داخل هر ستون با OR ترکیب می‌شوند.
  */
 export function useColumnFilters<T>(rows: T[], specs: Record<string, ColumnFilterSpec<T>>) {
     const [values, setValues] = useState<Record<string, string>>({});
+    const [selections, setSelections] = useState<Record<string, string[]>>({});
 
     const filtered = useMemo(() => {
         const active = Object.entries(values).filter(([key, v]) => v && specs[key]);
-        if (!active.length) return rows;
+        const selected = Object.entries(selections).filter(([key, options]) => options.length && specs[key]);
+        if (!active.length && !selected.length) return rows;
         return rows.filter((row) =>
-            active.every(([key, v]) => {
+            selected.every(([key, options]) => {
+                const cell = String(specs[key].get(row) ?? '').trim();
+                return options.includes(cell || '\u0000');
+            }) && active.every(([key, v]) => {
                 const spec = specs[key];
                 const cell = spec.get(row);
                 if (spec.mode === 'any') {
@@ -42,18 +47,29 @@ export function useColumnFilters<T>(rows: T[], specs: Record<string, ColumnFilte
                     const c = String(cell ?? '').trim();
                     return v === '\u0000' ? c === '' : c === v;
                 }
-                return normalizeForFilter(cell).includes(normalizeForFilter(v));
+                const text = normalizeForFilter(cell);
+                return normalizeForFilter(v).split(' ').every((term) => text.includes(term));
             })
         );
         // specs در هر رندر از نو ساخته می‌شود ولی منطقش ثابت است
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [rows, values]);
+    }, [rows, values, selections]);
 
     const setValue = (key: string, value: string) => setValues((cur) => ({ ...cur, [key]: value }));
-    const clear = () => setValues({});
-    const hasAny = Object.values(values).some(Boolean);
+    const setSelection = (key: string, options: string[]) => setSelections((current) => ({ ...current, [key]: options }));
+    const clear = () => { setValues({}); setSelections({}); };
+    const hasAny = Object.values(values).some(Boolean) || Object.values(selections).some((options) => options.length);
 
-    return { values, setValue, clear, hasAny, filtered };
+    return { values, setValue, selections, setSelection, clear, hasAny, filtered };
+}
+
+export function MultiSelectFilterInput({ label, value, onChange, options }: {
+    label: string; value?: string[]; onChange: (values: string[]) => void; options: { value: string; label: string }[];
+}) {
+    return <Select size="small" mode="multiple" allowClear aria-label={label} placeholder="همه"
+        maxTagCount={1} style={{ width: '100%' }} value={value ?? []} onChange={onChange} options={options}
+        showSearch={{ filterOption: (input, option) => normalizeForFilter(option?.label).includes(normalizeForFilter(input)) }}
+        popupMatchSelectWidth={false} />;
 }
 
 /** سرستون: عنوان + کنترلِ فیلتر زیرِ آن (کلیک رویِ کنترل به ردیف/جدول نمی‌رسد) */

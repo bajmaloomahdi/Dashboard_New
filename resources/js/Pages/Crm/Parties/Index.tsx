@@ -21,7 +21,7 @@ import {
     ApartmentOutlined,
 } from '@ant-design/icons';
 import { router, usePage } from '@inertiajs/react';
-import { useGridColumnSettings } from '../../../Components/GridColumnSettings';
+import { applyGridColumnSettings, useGridColumnSettings } from '../../../Components/GridColumnSettings';
 import MainLayout from '../../../Layouts/MainLayout';
 import PageHeader from '../../../Components/PageHeader';
 import NotificationModal, { NotificationType } from '../../../Components/NotificationModal';
@@ -32,8 +32,8 @@ import { toBool } from '../../../Utils/bool';
 import CrmDeleteButton from '../../../Components/Crm/CrmDeleteButton';
 import PrimaryContactLine from '../../../Components/Crm/PrimaryContactLine';
 import PrimaryAddressCell from '../../../Components/Crm/PrimaryAddressCell';
-import ListViewToggle, { useListViewMode } from '../../../Components/Crm/ListViewToggle';
-import { useColumnFilters, FilterHeader, TextFilterInput, distinctListOptions, filterHeaderCss, normalizeForFilter } from '../../../Components/Crm/tableFilters';
+import ListViewToggle, { useCardPage, useListViewMode } from '../../../Components/Crm/ListViewToggle';
+import { useColumnFilters, FilterHeader, TextFilterInput, MultiSelectFilterInput, distinctOptions, distinctListOptions, filterHeaderCss, normalizeForFilter } from '../../../Components/Crm/tableFilters';
 import { emptyCategory, emptySelections, filterPartyCategories, type CategorySelections } from './categoryFilters';
 import FirstWithTooltipCell, { parseNameList } from '../../../Components/Crm/FirstWithTooltipCell';
 import { CooperationEndedTag } from '../../../Components/Crm/CooperationEnded';
@@ -59,6 +59,7 @@ interface PartyRow extends Party {
     ActiveContactCount: number;
     ClassificationCount: number;
     /** تماسِ اصلی (sp_Crm_GetParties) */
+    PrimaryMobile?: string | null;
     PrimaryContactValue?: string | null;
     PrimaryContactType?: string | null;
     PrimaryContactExtension?: string | null;
@@ -109,7 +110,6 @@ function CategoryFilter({ label, value, onChange, options, testId }: {
 }
 
 export default function CrmPartiesIndex() {
-    const columnSettings = useGridColumnSettings('crm.parties.list');
     const { parties, filters, canManage, canDelete = false, positions, contactRoles, partyTypes, activities } = usePage().props as unknown as {
         parties: PartyRow[];
         filters: { search: string | null; isActive: boolean | null; partyNature: string | null; cooperationEnded?: boolean | null };
@@ -147,6 +147,10 @@ export default function CrmPartiesIndex() {
         identifier: { get: (p) => p.IdentifierNumber, mode: 'text' },
         person: { get: (p) => p.PrimaryContactPersonName, mode: 'text' },
         contact: { get: (p) => [p.PrimaryContactValue, p.PrimaryContactType, p.PrimaryContactExtension].filter(Boolean).join(' '), mode: 'text' },
+        province: { get: (p) => p.PrimaryAddressProvince, mode: 'text' },
+        county: { get: (p) => p.PrimaryAddressCounty, mode: 'text' },
+        mobile: { get: (p) => p.PrimaryMobile, mode: 'text' },
+        city: { get: (p) => p.PrimaryAddressCity, mode: 'text' },
         address: { get: (p) => [p.PrimaryAddressTitle, p.PrimaryAddressProvince, p.PrimaryAddressCounty, p.PrimaryAddressCity, p.PrimaryAddressText].filter(Boolean).join(' '), mode: 'text' },
     });
     const filteredRows = useMemo(
@@ -170,6 +174,11 @@ export default function CrmPartiesIndex() {
             ? current : { ...current, [key]: value });
         setPage((pg) => pg.current === 1 ? pg : { ...pg, current: 1 });
     };
+    const setColSelection = (key: string, values: string[]) => {
+        colF.setSelection(key, values);
+        setPage((current) => ({ ...current, current: 1 }));
+    };
+
     const setColFilter = (key: string, value: string) => {
         colF.setValue(key, value);
         setPage((pg) => ({ ...pg, current: 1 }));
@@ -185,15 +194,17 @@ export default function CrmPartiesIndex() {
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isFirstRender = useRef(true);
 
+    const cardQuery = new URLSearchParams({
+        ...(searchText ? { search: searchText } : {}),
+        ...(statusFilter !== null ? { isActive: statusFilter } : {}),
+        ...(natureFilter ? { partyNature: natureFilter } : {}),
+        ...(cooperationFilter !== 'all' ? { cooperationEnded: cooperationFilter } : {}),
+    }).toString();
+    const filterQuery = viewMode === 'cards' ? cardQuery : '';
+
     const reload = async () => {
         const res = await crmApi(
-            '/crm/parties-list?' +
-                new URLSearchParams({
-                    ...(searchText ? { search: searchText } : {}),
-                    ...(statusFilter !== null ? { isActive: statusFilter } : {}),
-                    ...(natureFilter ? { partyNature: natureFilter } : {}),
-                    ...(cooperationFilter !== 'all' ? { cooperationEnded: cooperationFilter } : {}),
-                }).toString()
+            '/crm/parties-list?' + filterQuery
         );
         if (res.ok && res.success) setItems(res.items || []);
     };
@@ -201,7 +212,7 @@ export default function CrmPartiesIndex() {
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;
-            return;
+            if (viewMode === 'cards' || !cardQuery) return;
         }
         setSearching(true);
         setPage((pg) => ({ ...pg, current: 1 }));
@@ -214,7 +225,7 @@ export default function CrmPartiesIndex() {
             if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchText, statusFilter, natureFilter, cooperationFilter]);
+    }, [filterQuery]);
 
     const handleReset = () => {
         clearGridFilters();
@@ -307,7 +318,8 @@ export default function CrmPartiesIndex() {
         );
     };
 
-    const columns: ColumnsType<PartyRow> = [
+    const cardPage = useCardPage(items || []);
+    const columns: ColumnsType<PartyRow> = viewMode === 'cards' ? [] : [
         { title: 'ردیف', key: 'row', width: 64, align: 'center', render: (_, __, i) => (page.current - 1) * page.pageSize + i + 1 },
         {
             title: <FilterHeader label="نام"><TextFilterInput value={colF.values.name} onChange={(v) => setColFilter('name', v)} /></FilterHeader>,
@@ -359,7 +371,8 @@ export default function CrmPartiesIndex() {
             render: (_, p) => <FirstWithTooltipCell items={activityList(p)} />,
         },
         {
-            title: <FilterHeader label="فرد مرتبط"><TextFilterInput value={colF.values.person} onChange={(v) => setColFilter('person', v)} /></FilterHeader>,
+            title: <FilterHeader label="فرد مرتبط"><MultiSelectFilterInput label="فرد مرتبط" value={colF.selections.person}
+                onChange={(values) => setColSelection('person', values)} options={distinctOptions(items, (row) => row.PrimaryContactPersonName)} /></FilterHeader>,
             key: 'person',
             sorter: (a, b) => compareGridValues(a.PrimaryContactPersonName, b.PrimaryContactPersonName),
             render: (_, p) => p.PrimaryContactPersonName || <Text type="secondary">—</Text>,
@@ -369,6 +382,35 @@ export default function CrmPartiesIndex() {
             key: 'contact',
             sorter: (a, b) => compareGridValues(a.PrimaryContactValue, b.PrimaryContactValue),
             render: (_, p) => <PrimaryContactLine value={p.PrimaryContactValue} type={p.PrimaryContactType} extension={p.PrimaryContactExtension} />,
+        },
+        {
+            title: <FilterHeader label="استان"><MultiSelectFilterInput label="استان" value={colF.selections.province} onChange={(values) => setColSelection('province', values)} options={distinctOptions(items, (row) => row.PrimaryAddressProvince)} /></FilterHeader>,
+            key: 'province',
+            dataIndex: 'PrimaryAddressProvince',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressProvince ?? '').localeCompare(b.PrimaryAddressProvince ?? '', 'fa'),
+        },
+        {
+            title: <FilterHeader label="شهرستان"><MultiSelectFilterInput label="شهرستان" value={colF.selections.county} onChange={(values) => setColSelection('county', values)} options={distinctOptions(items, (row) => row.PrimaryAddressCounty)} /></FilterHeader>,
+            key: 'county',
+            dataIndex: 'PrimaryAddressCounty',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressCounty ?? '').localeCompare(b.PrimaryAddressCounty ?? '', 'fa'),
+        },
+        {
+            title: <FilterHeader label="موبایل"><MultiSelectFilterInput label="موبایل" value={colF.selections.mobile} onChange={(values) => setColSelection('mobile', values)} options={distinctOptions(items, (row) => row.PrimaryMobile)} /></FilterHeader>,
+            key: 'mobile',
+            dataIndex: 'PrimaryMobile',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryMobile ?? '').localeCompare(b.PrimaryMobile ?? '', 'fa'),
+            render: (value: string | null) => value || <Text type="secondary">—</Text>,
+        },
+        {
+            title: <FilterHeader label="شهر"><MultiSelectFilterInput label="شهر" value={colF.selections.city} onChange={(values) => setColSelection('city', values)} options={distinctOptions(items, (row) => row.PrimaryAddressCity)} /></FilterHeader>,
+            key: 'city',
+            dataIndex: 'PrimaryAddressCity',
+            width: 145,
+            sorter: (a, b) => (a.PrimaryAddressCity ?? '').localeCompare(b.PrimaryAddressCity ?? '', 'fa'),
         },
         {
             title: <FilterHeader label="آدرسِ اصلی"><TextFilterInput value={colF.values.address} onChange={(v) => setColFilter('address', v)} placeholder="استان، شهرستان، شهر، آدرس…" /></FilterHeader>,
@@ -423,6 +465,7 @@ export default function CrmPartiesIndex() {
         },
     ];
 
+    const columnSettings = useGridColumnSettings('crm.parties.list', columns.map((column) => String(column.key)));
     const totalCount = items?.length || 0;
     const activeCount = items?.filter((p) => toBool(p.IsActive)).length || 0;
 
@@ -445,7 +488,7 @@ export default function CrmPartiesIndex() {
                 }
             />
 
-            <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
+            {viewMode === 'cards' && <Card style={{ marginBottom: 16, ...STYLES.filterCard }}>
                 <Row gutter={[16, 16]} align="middle" justify="start">
                     <Col xs={24} sm={12} md={6}>
                         <Input
@@ -506,11 +549,9 @@ export default function CrmPartiesIndex() {
                             بازنشانیِ همهٔ فیلترها
                         </Button>
                     </Col>
-                    <Col xs={24} sm={12} md={3} style={{ textAlign: 'center' }}>
-                        <ListViewToggle value={viewMode} onChange={setViewMode} />
-                    </Col>
                 </Row>
-            </Card>
+            </Card>}
+            <div style={{ marginBottom: 16 }}><ListViewToggle value={viewMode} onChange={setViewMode} /></div>
 
             <Card style={STYLES.card} bodyStyle={{ padding: 20 }}>
                 {searching && viewMode !== 'grid' ? (
@@ -529,15 +570,12 @@ export default function CrmPartiesIndex() {
                     <Table
                         rowKey="PartyID"
                         loading={searching}
-                        columns={columnSettings.visibility ? columns.map((column) => ({
-                            ...column,
-                            hidden: column.hidden || columnSettings.visibility?.[String(column.key)] === false,
-                        })) : columns}
+                        columns={applyGridColumnSettings(columns, columnSettings)}
                         dataSource={filteredRows}
                         size="middle"
                         locale={{ emptyText: 'ردیفی با این فیلترها یافت نشد' }}
                         tableLayout="fixed"
-                        scroll={{ x: 2200 }}
+                        scroll={{ x: 2800 }}
                         rowClassName={(p) => (toBool(p.IsActive) ? 'party-grid-row' : 'party-grid-row is-inactive')}
                         onRow={(p) => ({ onClick: () => router.visit(`/crm/parties/${p.PartyID}`) })}
                         onChange={(pg) => setPage({ current: pg.current ?? 1, pageSize: pg.pageSize ?? 20 })}
@@ -551,8 +589,9 @@ export default function CrmPartiesIndex() {
                     />
                     </>
                 ) : (
+                    <>
                     <div className="party-cards-grid">
-                        {items.map((p) => {
+                        {cardPage.items.map((p) => {
                             const isActive = toBool(p.IsActive);
                             const isLegal = p.PartyNature === 'LEGAL';
                             return (
@@ -616,6 +655,8 @@ export default function CrmPartiesIndex() {
                             );
                         })}
                     </div>
+                    {cardPage.pagination}
+                    </>
                 )}
             </Card>
 

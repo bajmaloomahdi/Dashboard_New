@@ -1,3 +1,4 @@
+import ProjectEventsTab from '../../Projects/ProjectEventsTab';
 import RecordHistoryPanel from '../../../Components/Crm/RecordHistoryPanel';
 import { useState } from 'react';
 import { Card, Typography, Button, Descriptions, Tag, Space } from 'antd';
@@ -84,7 +85,7 @@ export default function CrmPartyShow() {
 
     const [editOpen, setEditOpen] = useState(false);
     const [notification, setNotification] = useState<{ open: boolean; type: NotificationType; message: string }>({ open: false, type: 'success', message: '' });
-    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'classifications' | 'interactions' | 'brands' | 'addresses' | 'contacts' | 'relations' | 'attachments' | 'projects' | 'events'>(() => new URLSearchParams(page.url.split('?')[1] ?? '').get('tab') === 'interactions' ? 'interactions' : 'profile');
 
     const isActive = toBool(currentParty.IsActive);
 
@@ -92,7 +93,9 @@ export default function CrmPartyShow() {
         new Map((relations || []).filter((r: any) => toBool(r.IsActive)).map((r: any) => [r.PersonID, { PersonID: r.PersonID, DisplayName: r.PersonName }])).values()
     );
 
+    const [eventCount, setEventCount] = useState<number | null>(null);
     const tabDefs = [
+        { key: 'events' as const, label: 'رویدادها', count: eventCount },
         { key: 'profile' as const, label: 'پروفایل', icon: <IdcardOutlined /> },
         { key: 'history' as const, label: 'تاریخچه' },
         { key: 'classifications' as const, label: 'دسته‌بندی‌ها', icon: <ApartmentOutlined />, count: (classifications || []).length },
@@ -265,6 +268,9 @@ export default function CrmPartyShow() {
                 </Card>
             )}
 
+            {activeTab === 'events' && (
+                <ProjectEventsTab key={currentParty.PartyID} endpoint={`/calendar/crm-events/party/${currentParty.PartyID}`} onCount={setEventCount} />
+            )}
             {activeTab === 'projects' && (
                 <Card style={STYLES.card}>
                     <PartyProjectsPanel items={partyProjects?.items || []} hiddenCount={Number(partyProjects?.hiddenCount) || 0} />
